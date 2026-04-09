@@ -32,7 +32,7 @@ Allowed exceptions:
 
 ## Project Overview
 
-CheapBugs v2 is a static Vite + TypeScript application for Base-native bug reporting and review.
+CheapBugs is a static Vite + TypeScript application for Base-native bug reporting and review.
 
 Current architecture:
 

@@ -1,6 +1,6 @@
-# CheapBugs v2
+# CheapBugs
 
-CheapBugs v2 is a static Vite + TypeScript app for Base-native bug intake and review.
+CheapBugs is a static Vite + TypeScript app for Base-native bug intake and review.
 
 The current MVP stores public-safe report records onchain in `CheapBugsBugIndex` on Base, keeps the private dossier encrypted client-side before uploading it to IPFS, and uses EAS on Base for reviewer verdict attestations and payout-record placeholders.
 

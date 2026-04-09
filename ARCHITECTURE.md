@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document is a living system map for CheapBugs v2. It is intended to help agents and contributors understand where major responsibilities live, how data moves through the app, and which boundaries should remain stable as the project evolves.
+This document is a living system map for CheapBugs. It is intended to help agents and contributors understand where major responsibilities live, how data moves through the app, and which boundaries should remain stable as the project evolves.
 
 Update this file whenever the codebase's architecture, deployment assumptions, integrations, or navigation map materially change.
 
@@ -55,7 +55,7 @@ System boundaries:
 
 ### 3.1. Frontend Application
 
-Name: CheapBugs v2 static web app
+Name: CheapBugs static web app
 
 Description: A narrow-layout, milw0rm-inspired frontend for login, report submission, public browsing, report review, and local decryption of private dossiers.
 
@@ -237,7 +237,7 @@ Code Quality Tools:
 
 ## 10. Project Identification
 
-Project Name: CheapBugs v2
+Project Name: CheapBugs
 
 Repository URL: `git@github.com:pierce403/cheapbugs.git`
 

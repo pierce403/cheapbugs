@@ -47,12 +47,12 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
     : `<tr><td colspan="6" class="muted-cell">No onchain bug reports resolved yet.</td></tr>`;
 
   return {
-    title: "CheapBugs v2",
+    title: "CheapBugs",
     html: `
       <section class="panel intro-panel">
         <div class="panel-title">[ recent exploit archive ]</div>
         <p class="lede">
-          CheapBugs v2 is a static Base-native report board. Public report metadata is filed onchain through the bug index contract,
+          CheapBugs is a static Base-native report board. Public report metadata is filed onchain through the bug index contract,
           reviewer verdicts live on EAS, and private dossier material is encrypted client-side before upload.
         </p>
         ${

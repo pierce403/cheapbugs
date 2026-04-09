@@ -140,7 +140,7 @@ export class CheapBugsApp {
         <header class="header panel">
           <div class="banner">
             <div>
-              <div class="brand">cheapbugs v2</div>
+              <div class="brand">cheapbugs</div>
               <div class="subtitle">static bug archive / thirdweb auth / ipfs / eas</div>
             </div>
             <div class="status-block">
