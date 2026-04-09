@@ -141,7 +141,7 @@ export class CheapBugsApp {
           <div class="banner">
             <div>
               <div class="brand">cheapbugs</div>
-              <div class="subtitle">static bug archive / thirdweb auth / ipfs / eas</div>
+              <div class="subtitle">shitty bugs, competitive prices</div>
             </div>
             <div class="status-block">
               ${renderIdentityBlock(session)}
