@@ -6,7 +6,7 @@ const optionalCsv = (value: string | undefined): string[] =>
 
 export const env = {
   appName: import.meta.env.VITE_APP_NAME || "CheapBugs v2",
-  thirdwebClientId: import.meta.env.VITE_THIRDWEB_CLIENT_ID || "",
+  thirdwebClientId: import.meta.env.VITE_THIRDWEB_CLIENT_ID || "fabb9529082a9638fe2636bac941fb29",
   chainId: Number(import.meta.env.VITE_CHAIN_ID || 8453),
   chainName: import.meta.env.VITE_CHAIN_NAME || "Base Mainnet",
   chainRpcUrl: import.meta.env.VITE_CHAIN_RPC_URL || "https://mainnet.base.org",

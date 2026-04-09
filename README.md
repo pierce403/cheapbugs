@@ -38,10 +38,11 @@ cp .env.example .env.local
 
 3. Fill the required values in `.env.local`:
 
-- `VITE_THIRDWEB_CLIENT_ID`
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
+
+`VITE_THIRDWEB_CLIENT_ID` already defaults to the current public thirdweb client ID in source and can be overridden if needed.
 
 4. Dry-run the contract launcher:
 
@@ -73,13 +74,13 @@ This repo is intended to deploy through GitHub Actions to GitHub Pages.
 
 Set these repository variables before relying on the Pages deploy:
 
-- `VITE_THIRDWEB_CLIENT_ID`
 - `VITE_BUG_INDEX_ADDRESS` when the Base bug index is deployed
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` when the verdict schema is registered
 - optional chain and storage overrides from [.env.example](/home/pierce/projects/cheapbugs/.env.example)
 
 The workflow lives at [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml).
 It builds with repo-aware base paths and `hash` routing so GitHub Pages can serve SPA routes without a custom origin server.
+The build defaults to the current public thirdweb client ID and can still be overridden with `VITE_THIRDWEB_CLIENT_ID`.
 
 ## How Reports Work
 

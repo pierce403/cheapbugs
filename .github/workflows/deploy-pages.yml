@@ -34,15 +34,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate thirdweb client ID
-        env:
-          VITE_THIRDWEB_CLIENT_ID: ${{ vars.VITE_THIRDWEB_CLIENT_ID }}
-        run: |
-          if [ -z "$VITE_THIRDWEB_CLIENT_ID" ]; then
-            echo "Repository variable VITE_THIRDWEB_CLIENT_ID must be set for GitHub Pages deploys." >&2
-            exit 1
-          fi
-
       - name: Build site
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/

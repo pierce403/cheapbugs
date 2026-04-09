@@ -141,6 +141,7 @@ thirdweb:
 
 - Purpose: Email login, in-app wallet creation, external wallet connectivity, and default IPFS upload/download
 - Integration Method: SDK in [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts) and [src/storage/thirdweb.ts](/home/pierce/projects/cheapbugs/src/storage/thirdweb.ts)
+- Configuration: the app ships with a committed public `clientId` default and still allows `VITE_THIRDWEB_CLIENT_ID` overrides
 
 EAS:
 
@@ -170,7 +171,7 @@ Key Services Used:
 - EAS contracts and indexing
 - IPFS storage/gateway infrastructure
 
-CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`
+CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`, using a committed public thirdweb `clientId` by default
 
 Monitoring & Logging: Browser console and wallet/provider errors only in the current MVP
 

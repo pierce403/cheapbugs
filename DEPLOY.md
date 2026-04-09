@@ -6,11 +6,12 @@ Create `.env.local` from [.env.example](/home/pierce/projects/cheapbugs/.env.exa
 
 Frontend values:
 
-- `VITE_THIRDWEB_CLIENT_ID`
 - `VITE_BUG_INDEX_ADDRESS`
 - `VITE_REVIEW_VERDICT_SCHEMA_UID`
 - `VITE_PAYOUT_RECORD_SCHEMA_UID` if you want the placeholder schema pinned now
 - `VITE_REVIEWER_ADDRESSES`
+
+`VITE_THIRDWEB_CLIENT_ID` already defaults to the current public client ID and only needs to be set if you want to override it.
 
 Launcher values:
 
@@ -67,10 +68,6 @@ The site outputs to `dist/`.
 
 The repo now includes a GitHub Actions workflow at [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml).
 
-Required repository variable:
-
-- `VITE_THIRDWEB_CLIENT_ID`
-
 Recommended repository variables:
 
 - `VITE_BUG_INDEX_ADDRESS`
@@ -86,6 +83,7 @@ The Pages workflow builds with:
 - `.nojekyll` enabled through [public/.nojekyll](/home/pierce/projects/cheapbugs/public/.nojekyll)
 
 That combination keeps asset URLs correct under the repository subpath and avoids SPA route breakage on GitHub Pages.
+The build uses the committed public thirdweb client ID by default, with `VITE_THIRDWEB_CLIENT_ID` available as an override.
 
 ### Other Static Hosts
 
