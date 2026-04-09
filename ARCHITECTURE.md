@@ -164,12 +164,13 @@ Cloud Provider: Not fixed. The app is designed for generic static hosting.
 Key Services Used:
 
 - static asset host for `dist/`
+- GitHub Pages
 - Base RPC endpoint
 - thirdweb client infrastructure
 - EAS contracts and indexing
 - IPFS storage/gateway infrastructure
 
-CI/CD Pipeline: None committed yet
+CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`
 
 Monitoring & Logging: Browser console and wallet/provider errors only in the current MVP
 
@@ -211,6 +212,7 @@ Testing / Verification Commands:
 - `npm run dev`
 - `npm run build`
 - `npm run launch:bug-index:dry-run`
+- GitHub Actions Pages workflow in `.github/workflows/deploy-pages.yml`
 
 Code Quality Tools:
 

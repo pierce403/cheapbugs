@@ -1,0 +1,279 @@
+:root {
+  color-scheme: dark;
+  font-family: "IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  background: #050505;
+  color: #ded6ca;
+  --bg: #050505;
+  --panel: #101010;
+  --panel-2: #0a0a0a;
+  --line: #ff6a00;
+  --line-soft: rgba(255, 106, 0, 0.45);
+  --text: #ded6ca;
+  --muted: #8f857c;
+  --warning: #ff9a47;
+  --danger: #ff715b;
+  --success: #a0f08c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top, rgba(255, 102, 0, 0.12), transparent 30%),
+    linear-gradient(180deg, #050505 0%, #090909 35%, #040404 100%);
+}
+
+body {
+  min-width: 320px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+a {
+  color: #ff8b3d;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.shell {
+  width: min(1120px, calc(100vw - 24px));
+  margin: 0 auto;
+  padding: 16px 0 28px;
+}
+
+.main-column {
+  display: grid;
+  gap: 10px;
+}
+
+.panel {
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 106, 0, 0.04), transparent 16px),
+    linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  padding: 10px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.panel-title {
+  color: #ff8b3d;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.header,
+.footer {
+  margin-bottom: 10px;
+}
+
+.banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.brand {
+  font-size: 26px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #ff8b3d;
+}
+
+.subtitle,
+.helper-copy,
+.session-copy,
+.muted-copy,
+.muted-cell {
+  color: var(--muted);
+}
+
+.status-block {
+  text-align: right;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nav-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.nav-link,
+.button {
+  border: 1px solid var(--line-soft);
+  background: #120d0a;
+  color: var(--text);
+  padding: 5px 8px;
+  text-transform: lowercase;
+}
+
+.button.secondary {
+  background: #0c0c0c;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notice-stack {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.notice {
+  border: 1px solid var(--line-soft);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #0f0a08;
+}
+
+.notice-success {
+  border-color: rgba(160, 240, 140, 0.5);
+}
+
+.notice-error {
+  border-color: rgba(255, 113, 91, 0.55);
+}
+
+.notice-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 6px 7px;
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table thead th {
+  color: #ff8b3d;
+  background: rgba(255, 106, 0, 0.07);
+  font-weight: 600;
+}
+
+.compact-table th,
+.compact-table td {
+  padding: 4px 6px;
+}
+
+.stack-form {
+  display: grid;
+  gap: 10px;
+}
+
+.stack-form label {
+  display: grid;
+  gap: 4px;
+}
+
+.stack-form input,
+.stack-form select,
+.stack-form textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 106, 0, 0.32);
+  background: #070707;
+  color: var(--text);
+  padding: 8px;
+  resize: vertical;
+}
+
+.two-column,
+.auth-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inline-input {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+}
+
+.warning-copy {
+  color: var(--warning);
+}
+
+.lede {
+  margin: 0;
+}
+
+.intro-panel .lede {
+  max-width: 80ch;
+}
+
+.narrow-form {
+  max-width: 720px;
+}
+
+.private-view {
+  margin-top: 10px;
+}
+
+@media (max-width: 760px) {
+  .shell {
+    width: min(100vw - 14px, 1120px);
+    padding-top: 8px;
+  }
+
+  .banner,
+  .two-column,
+  .auth-grid,
+  .inline-input {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .status-block {
+    text-align: left;
+  }
+
+  .brand {
+    font-size: 22px;
+    letter-spacing: 0.14em;
+  }
+}

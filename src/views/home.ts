@@ -1,0 +1,118 @@
+import { loadRecentBundles } from "../lib/reports";
+import { chainConfig } from "../config/chains";
+import { getFeaturedReportHashes } from "../lib/eas";
+import { escapeHtml, formatDate, shortHash, textOrDash } from "../lib/utils";
+
+import type { AppViewContext, ViewResult } from "./types";
+
+export const renderHomeView = async (context: AppViewContext): Promise<ViewResult> => {
+  const bundles = await loadRecentBundles(12);
+  const featuredHashes = new Set(getFeaturedReportHashes());
+  const featured = bundles.filter((bundle) => featuredHashes.has(bundle.publicSubmission.reportHash));
+  const featuredBundles = featured.length ? featured : bundles.slice(0, 4);
+
+  const featuredRows = featuredBundles.length
+    ? featuredBundles
+        .map((bundle) => {
+          const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
+          return `
+            <tr>
+              <td><a href="${href}" data-nav>${escapeHtml(bundle.publicSubmission.reportId)}</a></td>
+              <td>${escapeHtml(bundle.publicSubmission.targetKind)}</td>
+              <td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td>
+              <td>${escapeHtml(textOrDash(bundle.publicSubmission.tags.join(", ")))}</td>
+              <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="5" class="muted-cell">No featured items configured yet.</td></tr>`;
+
+  const recentRows = bundles.length
+    ? bundles
+        .map((bundle) => {
+          const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
+          return `
+            <tr>
+              <td><a href="${href}" data-nav>${escapeHtml(bundle.publicSubmission.reportId)}</a></td>
+              <td>${escapeHtml(shortHash(bundle.publicSubmission.reporterAddress))}</td>
+              <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
+              <td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td>
+              <td>${escapeHtml(bundle.publicSubmission.targetKind)}</td>
+              <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="6" class="muted-cell">No onchain bug reports resolved yet.</td></tr>`;
+
+  return {
+    title: "CheapBugs v2",
+    html: `
+      <section class="panel intro-panel">
+        <div class="panel-title">[ recent exploit archive ]</div>
+        <p class="lede">
+          CheapBugs v2 is a static Base-native report board. Public report metadata is filed onchain through the bug index contract,
+          reviewer verdicts live on EAS, and private dossier material is encrypted client-side before upload.
+        </p>
+        ${
+          chainConfig.bugIndexAddress
+            ? `<p class="helper-copy">bug index: ${escapeHtml(chainConfig.bugIndexAddress)}</p>`
+            : `<p class="warning-copy">bug index contract address is not configured yet. Public onchain browsing will stay empty until deployment.</p>`
+        }
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">[ featured items ]</div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>report</th>
+              <th>target</th>
+              <th>mode</th>
+              <th>tags</th>
+              <th>summary</th>
+            </tr>
+          </thead>
+          <tbody>${featuredRows}</tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">[ recent reports ]</div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>reporter</th>
+              <th>created</th>
+              <th>mode</th>
+              <th>target</th>
+              <th>public summary</th>
+            </tr>
+          </thead>
+          <tbody>${recentRows}</tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">[ patrons of the arts ]</div>
+        <table class="data-table compact-table">
+          <thead>
+            <tr>
+              <th>rank</th>
+              <th>handle</th>
+              <th>status</th>
+              <th>placeholder</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>01</td><td>zero-day librarian</td><td>queued</td><td>leaderboard extension point</td></tr>
+            <tr><td>02</td><td>packet ghoul</td><td>queued</td><td>token gating later</td></tr>
+            <tr><td>03</td><td>heap oracle</td><td>queued</td><td>patron receipts later</td></tr>
+          </tbody>
+        </table>
+      </section>
+    `
+  };
+};

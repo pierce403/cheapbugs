@@ -1,0 +1,24 @@
+{
+  "name": "cheapbugs-v2",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "launch:bug-index": "node scripts/launch-bug-index.mjs",
+    "launch:bug-index:dry-run": "node scripts/launch-bug-index.mjs --dry-run"
+  },
+  "dependencies": {
+    "@ethereum-attestation-service/eas-sdk": "^2.9.0",
+    "ethers": "^6.16.0",
+    "thirdweb": "^5.119.4",
+    "viem": "^2.47.10"
+  },
+  "devDependencies": {
+    "solc": "^0.8.30",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.7"
+  }
+}

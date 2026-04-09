@@ -83,6 +83,7 @@ npm run launch:bug-index
 - EAS is currently used for `ReviewVerdict` and a `PayoutRecord` placeholder only.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
 - The launcher script refreshes the frontend ABI file after compilation so the app stays aligned with the contract.
+- GitHub Pages deployment uses a GitHub Actions workflow, repo-aware Vite base paths, and hash routing for SPA compatibility.
 
 ## Known Issues And Practical Tips
 

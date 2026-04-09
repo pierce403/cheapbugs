@@ -1,0 +1,7 @@
+dist
+artifacts
+node_modules
+.env.local
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
