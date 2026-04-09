@@ -98,6 +98,7 @@ The build defaults to the current public thirdweb client ID and can still be ove
 - Do not place any thirdweb `secretKey` in client code.
 - Do not place Pinata API keys in browser code.
 - Pinata is supported only through a presigned upload endpoint.
+- ENS identity lookups use Ethereum mainnet RPC and can be overridden with `VITE_ENS_RPC_URL`.
 - Base-specific values are isolated in [src/config/chains.ts](/home/pierce/projects/cheapbugs/src/config/chains.ts) and [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts).
 
 ## Contract Launcher

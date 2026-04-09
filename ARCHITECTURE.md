@@ -143,6 +143,12 @@ thirdweb:
 - Integration Method: SDK in [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts) and [src/storage/thirdweb.ts](/home/pierce/projects/cheapbugs/src/storage/thirdweb.ts)
 - Configuration: the app ships with a committed public `clientId` default and still allows `VITE_THIRDWEB_CLIENT_ID` overrides
 
+ENS:
+
+- Purpose: Resolve connected wallet ENS name and avatar for the session UI
+- Integration Method: Browser-side Ethereum mainnet RPC reads in [src/lib/ens.ts](/home/pierce/projects/cheapbugs/src/lib/ens.ts), surfaced through [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
+- Configuration: defaults to a public Ethereum mainnet RPC and allows `VITE_ENS_RPC_URL` overrides
+
 EAS:
 
 - Purpose: Onchain reviewer verdicts and placeholder payout attestations
@@ -205,7 +211,7 @@ Local Setup Instructions:
 
 - install dependencies with `npm install`
 - copy `.env.example` to `.env.local`
-- set `VITE_THIRDWEB_CLIENT_ID`
+- optionally override `VITE_THIRDWEB_CLIENT_ID` or `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
 
 Testing / Verification Commands:
@@ -237,7 +243,7 @@ Repository URL: `git@github.com:pierce403/cheapbugs.git`
 
 Primary Contact/Team: `pierce403`
 
-Date of Last Update: 2026-04-08
+Date of Last Update: 2026-04-09
 
 ## 11. Glossary / Acronyms
 

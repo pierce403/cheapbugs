@@ -114,9 +114,52 @@ button {
 }
 
 .status-block {
+  display: grid;
+  gap: 4px;
   text-align: right;
   font-size: 11px;
   color: var(--muted);
+}
+
+.identity-chip {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.identity-avatar {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-soft);
+  object-fit: cover;
+  background: #0a0a0a;
+}
+
+.identity-avatar-fallback {
+  display: grid;
+  place-items: center;
+  color: #ff8b3d;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.identity-copy {
+  min-width: 0;
+}
+
+.identity-primary,
+.identity-secondary {
+  overflow-wrap: anywhere;
+}
+
+.identity-primary {
+  color: var(--text);
+}
+
+.identity-secondary a {
+  color: var(--warning);
 }
 
 .nav-row {

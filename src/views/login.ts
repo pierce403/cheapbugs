@@ -1,5 +1,6 @@
 import { authController } from "../services";
 import { escapeHtml, shortHash } from "../lib/utils";
+import { ENS_APP_URL } from "../lib/ens";
 
 import type { AppViewContext, ViewResult } from "./types";
 
@@ -58,11 +59,25 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
 
     <section class="panel">
       <div class="panel-title">[ session ]</div>
+      ${
+        context.session.address
+          ? context.session.ensName
+            ? `<p class="session-copy">resolved ENS identity: ${escapeHtml(context.session.ensName)}${context.session.ensAvatarUrl ? " / avatar loaded" : ""}</p>`
+            : context.session.ensLookupStatus === "loading"
+              ? `<p class="session-copy">resolving ENS profile for ${escapeHtml(shortHash(context.session.address, 14, 8))}...</p>`
+              : context.session.ensLookupStatus === "missing"
+                ? `<p class="warning-copy">No ENS name found for this wallet. <a href="${ENS_APP_URL}" target="_blank" rel="noreferrer">Create one on ENS</a>.</p>`
+                : `<p class="warning-copy">ENS lookup is unavailable right now. Try again later.</p>`
+          : `<p class="session-copy">Connect a wallet to resolve ENS name and avatar.</p>`
+      }
       <table class="data-table compact-table">
         <tbody>
           <tr><th>status</th><td>${escapeHtml(context.session.status)}</td></tr>
           <tr><th>mode</th><td>${escapeHtml(context.session.mode ?? "-")}</td></tr>
           <tr><th>address</th><td>${escapeHtml(context.session.address ? shortHash(context.session.address, 14, 8) : "-")}</td></tr>
+          <tr><th>ens status</th><td>${escapeHtml(context.session.ensLookupStatus)}</td></tr>
+          <tr><th>ens</th><td>${escapeHtml(context.session.ensName ?? "-")}</td></tr>
+          <tr><th>avatar</th><td>${context.session.ensAvatarUrl ? `<a href="${escapeHtml(context.session.ensAvatarUrl)}" target="_blank" rel="noreferrer">loaded</a>` : "-"}</td></tr>
           <tr><th>email</th><td>${escapeHtml(context.session.email ?? "-")}</td></tr>
           <tr><th>reviewer</th><td>${context.session.isReviewer ? "trusted" : "no"}</td></tr>
           <tr><th>error</th><td>${escapeHtml(context.session.lastError ?? "-")}</td></tr>

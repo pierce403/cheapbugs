@@ -6,13 +6,53 @@ import { renderLoginView } from "./views/login";
 import { renderReportView } from "./views/report";
 import { renderReviewView } from "./views/review";
 import { renderSubmitView } from "./views/submit";
-import { escapeHtml } from "./lib/utils";
+import { ENS_APP_URL } from "./lib/ens";
+import { escapeHtml, shortHash } from "./lib/utils";
 import { env } from "./config/env";
 import { chainConfig } from "./config/chains";
 import type { AppNotice } from "./types/domain";
+import type { SessionState } from "./types/app";
 import type { AppViewContext, ViewResult } from "./views/types";
 
 const noticeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const renderIdentityBlock = (session: SessionState): string => {
+  if (!session.address) {
+    return `
+      <div class="identity-chip">
+        <div class="identity-avatar identity-avatar-fallback">?</div>
+        <div class="identity-copy">
+          <div class="identity-primary">anonymous</div>
+          <div class="identity-secondary">connect a wallet to claim an ENS name and avatar</div>
+        </div>
+      </div>
+    `;
+  }
+
+  const primary = session.ensName ?? shortHash(session.address, 14, 6);
+  const secondary =
+    session.ensLookupStatus === "loading"
+      ? "resolving ENS profile..."
+      : session.ensName
+        ? shortHash(session.address, 12, 6)
+        : session.ensLookupStatus === "error"
+          ? "ENS lookup unavailable right now"
+          : `no ENS name yet / <a href="${ENS_APP_URL}" target="_blank" rel="noreferrer">create one</a>`;
+
+  const avatar = session.ensAvatarUrl
+    ? `<img class="identity-avatar" src="${escapeHtml(session.ensAvatarUrl)}" alt="${escapeHtml(primary)} avatar" />`
+    : `<div class="identity-avatar identity-avatar-fallback">${escapeHtml(primary.slice(0, 1).toUpperCase())}</div>`;
+
+  return `
+    <div class="identity-chip">
+      ${avatar}
+      <div class="identity-copy">
+        <div class="identity-primary">${escapeHtml(primary)}</div>
+        <div class="identity-secondary">${secondary}</div>
+      </div>
+    </div>
+  `;
+};
 
 export class CheapBugsApp {
   private readonly router = new AppRouter();
@@ -104,9 +144,10 @@ export class CheapBugsApp {
               <div class="subtitle">static bug archive / thirdweb auth / ipfs / eas</div>
             </div>
             <div class="status-block">
+              ${renderIdentityBlock(session)}
               <div>chain: ${escapeHtml(chainConfig.name)} (${chainConfig.id})</div>
               <div>storage: ${escapeHtml(context.storage.id)}</div>
-              <div>wallet: ${escapeHtml(session.address ?? "anonymous")}</div>
+              <div>wallet: ${escapeHtml(session.address ? shortHash(session.address, 12, 6) : "anonymous")}</div>
               <div>reviewer: ${session.isReviewer ? "trusted" : "no"}</div>
             </div>
           </div>

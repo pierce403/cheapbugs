@@ -88,12 +88,13 @@ npm run launch:bug-index
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
 - The default public thirdweb client ID is committed in config; deployments may override it with `VITE_THIRDWEB_CLIENT_ID`.
+- Connected wallet UI now resolves ENS name/avatar from Ethereum mainnet and should prompt users to create an ENS name when none is found.
 
 ## Known Issues And Practical Tips
 
 - `npm run build` currently succeeds but emits large-chunk warnings because of the thirdweb dependency graph.
 - GitHub Actions run pages show top-level status and annotations publicly, but step logs require GitHub sign-in.
-- The Pages workflow currently sets `VITE_BASE_PATH=/${{ github.event.repository.name }}/`, so app assets resolve under `/cheapbugs/` even when a custom domain is configured.
+- ENS avatar URLs are untrusted input. Only render sanitized HTTPS URLs or a local fallback badge.
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
 - The contract launcher needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` for a real deployment.

@@ -10,6 +10,7 @@ Frontend values:
 - `VITE_REVIEW_VERDICT_SCHEMA_UID`
 - `VITE_PAYOUT_RECORD_SCHEMA_UID` if you want the placeholder schema pinned now
 - `VITE_REVIEWER_ADDRESSES`
+- `VITE_ENS_RPC_URL` only if you want to override the default Ethereum mainnet ENS RPC endpoint
 
 `VITE_THIRDWEB_CLIENT_ID` already defaults to the current public client ID and only needs to be set if you want to override it.
 

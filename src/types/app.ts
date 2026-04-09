@@ -14,6 +14,9 @@ export type SessionState = {
   address: `0x${string}` | null;
   email: string | null;
   mode: "email" | "external" | null;
+  ensName: string | null;
+  ensAvatarUrl: string | null;
+  ensLookupStatus: "idle" | "loading" | "resolved" | "missing" | "error";
   isReviewer: boolean;
   lastError: string | null;
 };

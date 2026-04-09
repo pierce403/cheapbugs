@@ -6,6 +6,7 @@ import type { Wallet } from "thirdweb/wallets";
 import { appChain } from "../config/chains";
 import { env } from "../config/env";
 import { isTrustedReviewer } from "../config/reviewers";
+import { emptyEnsProfile, resolveEnsProfile } from "../lib/ens";
 import { APP_METADATA } from "../lib/constants";
 import { normalizeAddress } from "../lib/utils";
 import type { SessionState } from "../types/app";
@@ -46,6 +47,7 @@ const defaultSessionState = (): SessionState => ({
   address: null,
   email: null,
   mode: null,
+  ...emptyEnsProfile(),
   isReviewer: false,
   lastError: null
 });
@@ -55,6 +57,7 @@ export class ThirdwebAuthController {
   private session: SessionState = defaultSessionState();
   private listeners = new Set<SessionListener>();
   private activeWallet: Wallet | null = null;
+  private ensLookupToken = 0;
 
   isConfigured(): boolean {
     return Boolean(thirdwebClient);
@@ -78,6 +81,25 @@ export class ThirdwebAuthController {
     this.listeners.forEach((listener) => listener(this.session));
   }
 
+  private nextEnsState(address: `0x${string}` | null) {
+    return emptyEnsProfile(address ? "loading" : "idle");
+  }
+
+  private async hydrateEnsProfile(address: `0x${string}`): Promise<void> {
+    const lookupToken = ++this.ensLookupToken;
+    const profile = await resolveEnsProfile(address);
+
+    if (lookupToken !== this.ensLookupToken || this.session.address !== address) {
+      return;
+    }
+
+    this.session = {
+      ...this.session,
+      ...profile
+    };
+    this.emit();
+  }
+
   private async setWallet(
     wallet: Wallet,
     mode: SessionState["mode"]
@@ -93,12 +115,17 @@ export class ThirdwebAuthController {
       address,
       email,
       mode,
+      ...this.nextEnsState(address),
       isReviewer: isTrustedReviewer(address),
       lastError: null
     };
 
     this.watchWallet(wallet, mode);
     this.emit();
+
+    if (address) {
+      void this.hydrateEnsProfile(address);
+    }
   }
 
   private watchWallet(
@@ -106,16 +133,25 @@ export class ThirdwebAuthController {
     mode: SessionState["mode"]
   ): void {
     wallet.subscribe("accountChanged", async (account) => {
+      const address = account ? normalizeAddress(account.address) : null;
       this.session = {
         ...this.session,
-        address: account ? normalizeAddress(account.address) : null,
+        address,
         isReviewer: isTrustedReviewer(account?.address),
-        mode
+        mode,
+        ...this.nextEnsState(address)
       };
       this.emit();
+
+      if (address) {
+        void this.hydrateEnsProfile(address);
+      } else {
+        this.ensLookupToken += 1;
+      }
     });
 
     wallet.subscribe("disconnect", () => {
+      this.ensLookupToken += 1;
       this.activeWallet = null;
       this.session = defaultSessionState();
       this.emit();
@@ -328,6 +364,7 @@ export class ThirdwebAuthController {
 
   async disconnect(): Promise<void> {
     await this.activeWallet?.disconnect();
+    this.ensLookupToken += 1;
     this.activeWallet = null;
     this.session = defaultSessionState();
     this.emit();

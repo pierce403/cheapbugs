@@ -10,6 +10,7 @@ export const env = {
   chainId: Number(import.meta.env.VITE_CHAIN_ID || 8453),
   chainName: import.meta.env.VITE_CHAIN_NAME || "Base Mainnet",
   chainRpcUrl: import.meta.env.VITE_CHAIN_RPC_URL || "https://mainnet.base.org",
+  ensRpcUrl: import.meta.env.VITE_ENS_RPC_URL || "https://ethereum-rpc.publicnode.com",
   nativeSymbol: import.meta.env.VITE_CHAIN_NATIVE_SYMBOL || "ETH",
   blockExplorerUrl: import.meta.env.VITE_CHAIN_BLOCK_EXPLORER_URL || "https://base.blockscout.com",
   easContractAddress:
