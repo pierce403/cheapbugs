@@ -4,6 +4,8 @@
 
 Read this file at the start of every task. Update it before you finish whenever you learn something important about this codebase, its workflow, or the collaborator's preferences.
 
+Also read `ARCHITECTURE.md` at the start of every task that touches system design, data flow, deployment shape, contracts, storage, auth, or vendor integrations.
+
 Record both wins to repeat and mistakes to avoid. Prefer exact commands, concrete file paths, and specific implementation notes over vague summaries.
 
 This file is intentionally inspired by the recurse.bot idea: each agent should leave the project easier for the next one.
@@ -14,9 +16,10 @@ After every completed task:
 
 1. Run the relevant verification commands.
 2. Update `AGENTS.md` if you learned anything useful.
-3. Stage the completed work.
-4. Commit it with a clear message.
-5. Push it to the current branch on `origin`.
+3. Update `ARCHITECTURE.md` if the task changed architecture, system boundaries, integrations, deployment assumptions, or the recommended code-navigation map.
+4. Stage the completed work.
+5. Commit it with a clear message.
+6. Push it to the current branch on `origin`.
 
 Default rule: do not leave completed work uncommitted or unpushed.
 
@@ -99,3 +102,5 @@ npm run launch:bug-index
 ## Update Guidance
 
 When updating this file, keep it compact and high-signal. Replace stale guidance instead of only appending new notes.
+
+When architecture changes, do not leave `ARCHITECTURE.md` stale. Treat it as a living system map for future agents.
