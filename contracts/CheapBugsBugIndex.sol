@@ -17,6 +17,28 @@ contract CheapBugsBugIndex {
         Other
     }
 
+    enum Validity {
+        Confirmed,
+        Unconfirmed,
+        Invalid,
+        Duplicate,
+        Spam
+    }
+
+    enum Impact {
+        None,
+        Low,
+        Medium,
+        High,
+        Critical
+    }
+
+    enum RewardClass {
+        None,
+        Points,
+        Paid
+    }
+
     struct Submission {
         bytes32 reportHash;
         string reportId;
@@ -44,12 +66,33 @@ contract CheapBugsBugIndex {
         bytes32 contentHash;
     }
 
+    struct ReviewVote {
+        bytes32 reportHash;
+        address reviewer;
+        uint64 createdAt;
+        Validity validity;
+        Impact impact;
+        RewardClass rewardClass;
+        uint8 confidence;
+    }
+
+    struct ReviewVoteInput {
+        bytes32 reportHash;
+        Validity validity;
+        Impact impact;
+        RewardClass rewardClass;
+        uint8 confidence;
+    }
+
     address public owner;
 
     mapping(bytes32 => Submission) private submissions;
     mapping(bytes32 => bool) public exists;
     mapping(address => bool) public reviewers;
+    mapping(bytes32 => mapping(address => ReviewVote)) private reviewVotes;
+    mapping(bytes32 => mapping(address => bool)) public hasReviewVote;
     bytes32[] private reportHashes;
+    mapping(bytes32 => address[]) private reviewVoteReviewers;
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event ReviewerSet(address indexed reviewer, bool allowed);
@@ -66,15 +109,32 @@ contract CheapBugsBugIndex {
         string tags,
         bytes32 contentHash
     );
+    event ReviewVoteSubmitted(
+        bytes32 indexed reportHash,
+        address indexed reviewer,
+        uint64 createdAt,
+        Validity validity,
+        Impact impact,
+        RewardClass rewardClass,
+        uint8 confidence
+    );
 
     error NotOwner();
+    error NotReviewer();
     error InvalidOwner();
     error SubmissionExists(bytes32 reportHash);
     error MissingReport(bytes32 reportHash);
+    error MissingReviewVote(bytes32 reportHash, address reviewer);
     error EmptyField(string field);
+    error InvalidConfidence(uint8 confidence);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    modifier onlyReviewer() {
+        if (!reviewers[msg.sender]) revert NotReviewer();
         _;
     }
 
@@ -140,6 +200,38 @@ contract CheapBugsBugIndex {
         );
     }
 
+    function submitReviewVote(ReviewVoteInput calldata input) external onlyReviewer {
+        if (!exists[input.reportHash]) revert MissingReport(input.reportHash);
+        if (input.confidence > 100) revert InvalidConfidence(input.confidence);
+
+        if (!hasReviewVote[input.reportHash][msg.sender]) {
+            hasReviewVote[input.reportHash][msg.sender] = true;
+            reviewVoteReviewers[input.reportHash].push(msg.sender);
+        }
+
+        ReviewVote memory vote = ReviewVote({
+            reportHash: input.reportHash,
+            reviewer: msg.sender,
+            createdAt: uint64(block.timestamp),
+            validity: input.validity,
+            impact: input.impact,
+            rewardClass: input.rewardClass,
+            confidence: input.confidence
+        });
+
+        reviewVotes[input.reportHash][msg.sender] = vote;
+
+        emit ReviewVoteSubmitted(
+            input.reportHash,
+            msg.sender,
+            vote.createdAt,
+            input.validity,
+            input.impact,
+            input.rewardClass,
+            input.confidence
+        );
+    }
+
     function reportCount() external view returns (uint256) {
         return reportHashes.length;
     }
@@ -164,5 +256,34 @@ contract CheapBugsBugIndex {
     function getReport(bytes32 reportHash) external view returns (Submission memory) {
         if (!exists[reportHash]) revert MissingReport(reportHash);
         return submissions[reportHash];
+    }
+
+    function reviewVoteCount(bytes32 reportHash) external view returns (uint256) {
+        if (!exists[reportHash]) revert MissingReport(reportHash);
+        return reviewVoteReviewers[reportHash].length;
+    }
+
+    function reviewVoteReviewerAt(bytes32 reportHash, uint256 index) external view returns (address) {
+        if (!exists[reportHash]) revert MissingReport(reportHash);
+        return reviewVoteReviewers[reportHash][index];
+    }
+
+    function getReviewVote(bytes32 reportHash, address reviewer) external view returns (ReviewVote memory) {
+        if (!exists[reportHash]) revert MissingReport(reportHash);
+        if (!hasReviewVote[reportHash][reviewer]) revert MissingReviewVote(reportHash, reviewer);
+        return reviewVotes[reportHash][reviewer];
+    }
+
+    function getReviewVotes(bytes32 reportHash) external view returns (ReviewVote[] memory) {
+        if (!exists[reportHash]) revert MissingReport(reportHash);
+
+        address[] storage reviewersForReport = reviewVoteReviewers[reportHash];
+        ReviewVote[] memory votes = new ReviewVote[](reviewersForReport.length);
+
+        for (uint256 i = 0; i < reviewersForReport.length; i++) {
+            votes[i] = reviewVotes[reportHash][reviewersForReport[i]];
+        }
+
+        return votes;
     }
 }

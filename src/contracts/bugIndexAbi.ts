@@ -27,6 +27,17 @@ export const bugIndexAbi = [
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "confidence",
+        "type": "uint8"
+      }
+    ],
+    "name": "InvalidConfidence",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "InvalidOwner",
     "type": "error"
@@ -43,8 +54,29 @@ export const bugIndexAbi = [
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "reportHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "reviewer",
+        "type": "address"
+      }
+    ],
+    "name": "MissingReviewVote",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "NotOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotReviewer",
     "type": "error"
   },
   {
@@ -148,6 +180,55 @@ export const bugIndexAbi = [
       }
     ],
     "name": "ReportSubmitted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "reportHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "reviewer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "createdAt",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum CheapBugsBugIndex.Validity",
+        "name": "validity",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum CheapBugsBugIndex.Impact",
+        "name": "impact",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum CheapBugsBugIndex.RewardClass",
+        "name": "rewardClass",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "confidence",
+        "type": "uint8"
+      }
+    ],
+    "name": "ReviewVoteSubmitted",
     "type": "event"
   },
   {
@@ -267,6 +348,147 @@ export const bugIndexAbi = [
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "reportHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "reviewer",
+        "type": "address"
+      }
+    ],
+    "name": "getReviewVote",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "reportHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "reviewer",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "createdAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.Validity",
+            "name": "validity",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.Impact",
+            "name": "impact",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.RewardClass",
+            "name": "rewardClass",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "confidence",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct CheapBugsBugIndex.ReviewVote",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "reportHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getReviewVotes",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "reportHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "reviewer",
+            "type": "address"
+          },
+          {
+            "internalType": "uint64",
+            "name": "createdAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.Validity",
+            "name": "validity",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.Impact",
+            "name": "impact",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.RewardClass",
+            "name": "rewardClass",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "confidence",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct CheapBugsBugIndex.ReviewVote[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "hasReviewVote",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint256",
         "name": "limit",
         "type": "uint256"
@@ -323,6 +545,49 @@ export const bugIndexAbi = [
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "reportHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "reviewVoteCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "reportHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
+    ],
+    "name": "reviewVoteReviewerAt",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -426,6 +691,46 @@ export const bugIndexAbi = [
       }
     ],
     "name": "submitReport",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "reportHash",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.Validity",
+            "name": "validity",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.Impact",
+            "name": "impact",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CheapBugsBugIndex.RewardClass",
+            "name": "rewardClass",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "confidence",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct CheapBugsBugIndex.ReviewVoteInput",
+        "name": "input",
+        "type": "tuple"
+      }
+    ],
+    "name": "submitReviewVote",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

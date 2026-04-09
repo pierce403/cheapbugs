@@ -6,6 +6,8 @@ The current MVP stores public-safe report records onchain in `CheapBugsBugIndex`
 
 The repo also includes a standalone `BUGZ` ERC20 contract and Base launcher as a clean extension point for future token-gated or reward features, but the live app does not depend on that token yet.
 
+For contract development, the repo now also includes a Foundry workspace with a deploy script and scenario tests for bug submission and reviewer vote flows.
+
 ## What Is In Scope
 
 - thirdweb login with email verification code flow and in-app wallet
@@ -30,7 +32,10 @@ The repo also includes a standalone `BUGZ` ERC20 contract and Base launcher as a
 
 ```bash
 npm install
+git submodule update --init --recursive
 ```
+
+If you want the Solidity toolchain locally, make sure `forge` is installed and on your `PATH`.
 
 2. Create local env config:
 
@@ -51,6 +56,8 @@ cp .env.example .env.local
 ```bash
 npm run launch:bug-index:dry-run
 npm run launch:token:dry-run
+npm run launch:bug-index:forge:dry-run
+npm run contracts:test
 ```
 
 5. Deploy the Base bug index contract when ready:
@@ -114,11 +121,14 @@ The build defaults to the current public thirdweb client ID and can still be ove
 
 The launcher scripts are [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs) and [scripts/launch-token.mjs](/home/pierce/projects/cheapbugs/scripts/launch-token.mjs).
 
+For Solidity-native deployment and testing, the repo also includes [foundry.toml](/home/pierce/projects/cheapbugs/foundry.toml), [script/LaunchBugIndex.s.sol](/home/pierce/projects/cheapbugs/script/LaunchBugIndex.s.sol), and [test/CheapBugsBugIndex.t.sol](/home/pierce/projects/cheapbugs/test/CheapBugsBugIndex.t.sol).
+
 The bug index launcher:
 
 - compiles [contracts/CheapBugsBugIndex.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsBugIndex.sol)
 - writes `artifacts/CheapBugsBugIndex.json`
 - refreshes [src/contracts/bugIndexAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndexAbi.ts) so the frontend ABI stays aligned with the deployed contract
+- the contract now also exposes reviewer-only `submitReviewVote` and vote query helpers so Foundry tests can cover report-rating scenarios onchain
 
 The token launcher:
 
@@ -133,6 +143,9 @@ The token launcher:
 - [contracts/CheapBugsToken.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsToken.sol)
 - [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs)
 - [scripts/launch-token.mjs](/home/pierce/projects/cheapbugs/scripts/launch-token.mjs)
+- [scripts/launch-bug-index-forge.sh](/home/pierce/projects/cheapbugs/scripts/launch-bug-index-forge.sh)
+- [script/LaunchBugIndex.s.sol](/home/pierce/projects/cheapbugs/script/LaunchBugIndex.s.sol)
+- [test/CheapBugsBugIndex.t.sol](/home/pierce/projects/cheapbugs/test/CheapBugsBugIndex.t.sol)
 - [src/contracts/bugIndex.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndex.ts)
 - [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
 - [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)

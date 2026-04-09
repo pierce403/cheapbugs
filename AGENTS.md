@@ -49,7 +49,10 @@ Use these first when validating work:
 npm install
 npm run dev
 npm run build
+npm run contracts:build
+npm run contracts:test
 npm run launch:bug-index:dry-run
+npm run launch:bug-index:forge:dry-run
 npm run launch:bug-index
 npm run launch:token:dry-run
 npm run launch:token
@@ -59,7 +62,10 @@ npm run launch:token
 
 - `contracts/CheapBugsBugIndex.sol`: Base bug index contract
 - `contracts/CheapBugsToken.sol`: BUGZ ERC20 extension contract
+- `script/LaunchBugIndex.s.sol`: Foundry deploy script for the bug index contract
+- `test/CheapBugsBugIndex.t.sol`: Foundry scenario tests for report submission and reviewer votes
 - `scripts/launch-bug-index.mjs`: compile/deploy launcher for the bug index contract
+- `scripts/launch-bug-index-forge.sh`: shell wrapper for the Forge bug index launcher
 - `scripts/launch-token.mjs`: compile/deploy launcher for the BUGZ token contract
 - `src/contracts/bugIndex.ts`: frontend read/write adapter for the bug index contract
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
@@ -87,9 +93,12 @@ npm run launch:token
 - Base mainnet is the default chain configuration.
 - The submit path writes public reports to the Base bug index contract, not to an EAS submission-pointer schema.
 - EAS is currently used for `ReviewVerdict` and a `PayoutRecord` placeholder only.
+- The bug index contract now includes reviewer-only onchain vote functions for contract-level testing and future extensions. The current frontend review state still comes from EAS.
 - The repo now includes a standalone `CheapBugsToken` ERC20 contract using OpenZeppelin. It mints 10,000,000 `BUGZ` to `BUGZ_INITIAL_HOLDER` or the deployer at launch time, but the live app does not depend on it yet.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
 - The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes.
+- Foundry is now configured with `contracts/` as the source directory, `script/` for deploy scripts, and `test/` for scenario coverage.
+- `forge-std` is tracked as the `lib/forge-std` git submodule, so fresh clones need `git submodule update --init --recursive` before `forge build` or `forge test`.
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.

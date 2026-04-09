@@ -6,12 +6,15 @@ Update this file whenever the codebase's architecture, deployment assumptions, i
 
 ## 1. Project Structure
 
-The repository is a static Vite application with two Solidity contracts, two deployment scripts, and a modular TypeScript frontend.
+The repository is a static Vite application with two Solidity contracts, both Node and Foundry deployment scripts, a Foundry test suite, and a modular TypeScript frontend.
 
 ```text
 cheapbugs/
 ├── contracts/              # Solidity contracts, currently the Base bug index and BUGZ token contracts
+├── script/                 # Foundry deployment scripts
 ├── scripts/                # Deployment and maintenance scripts
+├── test/                   # Foundry contract tests
+├── lib/                    # Foundry libraries
 ├── public/                 # Static assets and SPA hosting helpers
 ├── src/
 │   ├── attest/             # EAS write adapters
@@ -71,7 +74,9 @@ Description: The canonical onchain index for public-safe report records on Base.
 
 Technologies: Solidity 0.8.24, Base, ethers/viem integration from the frontend
 
-Deployment: Deployed with [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs)
+Deployment: Deployed with [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs) or [script/LaunchBugIndex.s.sol](/home/pierce/projects/cheapbugs/script/LaunchBugIndex.s.sol)
+
+Additional Notes: The contract now also includes reviewer-only onchain review-vote storage and query helpers for contract-level validation and future extensions, while the current frontend still treats EAS as the source of truth for public review state.
 
 ### 3.3. Optional Token Contract
 
@@ -174,6 +179,11 @@ Base RPC:
 - Purpose: Contract reads, writes, and deployment
 - Integration Method: Configured in [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts) and consumed by the frontend and launchers
 
+Foundry:
+
+- Purpose: Contract builds, scenario tests, and Solidity-native deployment
+- Integration Method: [foundry.toml](/home/pierce/projects/cheapbugs/foundry.toml), [script/LaunchBugIndex.s.sol](/home/pierce/projects/cheapbugs/script/LaunchBugIndex.s.sol), and [test/CheapBugsBugIndex.t.sol](/home/pierce/projects/cheapbugs/test/CheapBugsBugIndex.t.sol)
+
 ## 6. Deployment & Infrastructure
 
 Cloud Provider: Not fixed. The app is designed for generic static hosting.
@@ -220,6 +230,8 @@ Key Security Practices:
 Local Setup Instructions:
 
 - install dependencies with `npm install`
+- sync the Foundry library submodule with `git submodule update --init --recursive`
+- install `forge` if you want the Solidity-native build, test, or launch path
 - copy `.env.example` to `.env.local`
 - optionally override `VITE_THIRDWEB_CLIENT_ID` or `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
@@ -229,7 +241,10 @@ Testing / Verification Commands:
 
 - `npm run dev`
 - `npm run build`
+- `npm run contracts:build`
+- `npm run contracts:test`
 - `npm run launch:bug-index:dry-run`
+- `npm run launch:bug-index:forge:dry-run`
 - `npm run launch:token:dry-run`
 - GitHub Actions Pages workflow in `.github/workflows/deploy-pages.yml`
 
@@ -256,7 +271,7 @@ Repository URL: `git@github.com:pierce403/cheapbugs.git`
 
 Primary Contact/Team: `pierce403`
 
-Date of Last Update: 2026-04-08
+Date of Last Update: 2026-04-09
 
 ## 11. Glossary / Acronyms
 

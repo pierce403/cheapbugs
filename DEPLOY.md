@@ -28,16 +28,25 @@ Launcher values:
 
 ```bash
 npm run launch:bug-index:dry-run
+npm run launch:bug-index:forge:dry-run
 npm run launch:token:dry-run
 ```
 
-This compiles the contracts, writes artifacts, and refreshes the frontend ABI modules.
+This compiles the contracts, writes artifacts, refreshes the frontend ABI modules, and lets you simulate the Foundry deployment path without broadcasting.
 
 ## 3. Deploy The Bug Index Contract To Base
 
 ```bash
 npm run launch:bug-index
 ```
+
+Foundry-based launch:
+
+```bash
+npm run launch:bug-index:forge
+```
+
+The Forge launcher uses [script/LaunchBugIndex.s.sol](/home/pierce/projects/cheapbugs/script/LaunchBugIndex.s.sol) through [scripts/launch-bug-index-forge.sh](/home/pierce/projects/cheapbugs/scripts/launch-bug-index-forge.sh) and reads the same `BUG_INDEX_*` environment values.
 
 The script prints the deployed contract address as:
 
@@ -128,5 +137,6 @@ If you publish the app itself to IPFS, validate your gateway and asset-path beha
 - Public report metadata is immutable once written onchain.
 - Private report details stay encrypted, but the encrypted blob CID is public because it is stored onchain.
 - Review trust is currently driven by the configured reviewer allowlist.
+- The bug index contract now also supports reviewer-only onchain vote records for contract-level testing and future extensions, but the current frontend still computes live review state from EAS.
 - Pinata should only be enabled when `VITE_PINATA_PRESIGN_ENDPOINT` points to a helper that returns presigned upload URLs.
 - The BUGZ token contract is not part of the current app runtime and exists as an extension point for later token features.
