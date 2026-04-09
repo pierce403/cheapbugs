@@ -20,8 +20,9 @@ After every completed task:
 4. Stage the completed work.
 5. Commit it with a clear message.
 6. Push it to the current branch on `origin`.
+7. Only then send the final completion message to the user, including the commit SHA or a clear push failure note.
 
-Default rule: do not leave completed work uncommitted or unpushed.
+Default rule: do not leave completed work uncommitted or unpushed, and do not report a task as done before the push attempt has happened.
 
 Allowed exceptions:
 
@@ -100,7 +101,7 @@ npm run launch:bug-index
 - Keep communication direct and concise.
 - Prefer implementation over long planning when the task is actionable.
 - Maintain clean extension points for future product areas instead of premature feature sprawl.
-- Commit and push after each completed task.
+- Commit and push after each completed task, before the final response.
 
 ## Update Guidance
 
