@@ -8,6 +8,9 @@ Frontend values:
 
 - `VITE_BUG_INDEX_ADDRESS`
 - `VITE_BUGZ_TOKEN_ADDRESS` only if and when token-aware frontend features are added
+- `VITE_BUGZ_TREASURY_ADDRESS` when the token manager should report treasury size
+- `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` when the patrons leaderboard should reconstruct holder balances from Transfer logs
+- `VITE_BUGZ_BUY_URL` when the token manager should hand off to an external buy flow
 - `VITE_REVIEW_VERDICT_SCHEMA_UID`
 - `VITE_PAYOUT_RECORD_SCHEMA_UID` if you want the placeholder schema pinned now
 - `VITE_REVIEWER_ADDRESSES`
@@ -138,5 +141,6 @@ If you publish the app itself to IPFS, validate your gateway and asset-path beha
 - Private report details stay encrypted, but the encrypted blob CID is public because it is stored onchain.
 - Review trust is currently driven by the configured reviewer allowlist.
 - The bug index contract now also supports reviewer-only onchain vote records for contract-level testing and future extensions, but the current frontend still computes live review state from EAS.
+- The token manager and patrons leaderboard are safe to deploy before BUGZ exists, but they only become live once the relevant `VITE_BUGZ_*` values are configured.
 - Pinata should only be enabled when `VITE_PINATA_PRESIGN_ENDPOINT` points to a helper that returns presigned upload URLs.
 - The BUGZ token contract is not part of the current app runtime and exists as an extension point for later token features.

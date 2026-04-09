@@ -60,7 +60,7 @@ System boundaries:
 
 Name: CheapBugs static web app
 
-Description: A narrow-layout, milw0rm-inspired frontend for login, report submission, public browsing, report review, and local decryption of private dossiers.
+Description: A narrow-layout, milw0rm-inspired frontend for login, report submission, public browsing, report review, a placeholder BUGZ token manager, a patrons leaderboard, and local decryption of private dossiers.
 
 Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, thirdweb SDK, ethers, viem
 
@@ -179,6 +179,12 @@ Base RPC:
 - Purpose: Contract reads, writes, and deployment
 - Integration Method: Configured in [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts) and consumed by the frontend and launchers
 
+BUGZ Read Layer:
+
+- Purpose: Read ERC20 metadata, balances, treasury state, and patron balances without requiring backend infrastructure
+- Integration Method: [src/contracts/bugzToken.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzToken.ts) and [src/lib/token.ts](/home/pierce/projects/cheapbugs/src/lib/token.ts)
+- Constraint: Full patron enumeration depends on reconstructing balances from `Transfer` logs and therefore needs `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` after deployment
+
 Foundry:
 
 - Purpose: Contract builds, scenario tests, and Solidity-native deployment
@@ -236,6 +242,7 @@ Local Setup Instructions:
 - optionally override `VITE_THIRDWEB_CLIENT_ID` or `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
 - optionally deploy the BUGZ token contract if you want the extension address recorded in env
+- optionally configure the BUGZ treasury address, deployment block, and external buy URL when the `/token` and `/patrons` routes should become live
 
 Testing / Verification Commands:
 

@@ -4,6 +4,11 @@ const optionalCsv = (value: string | undefined): string[] =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
+const optionalNumber = (value: string | undefined, fallback = 0): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 export const env = {
   appName: import.meta.env.VITE_APP_NAME || "CheapBugs",
   thirdwebClientId: import.meta.env.VITE_THIRDWEB_CLIENT_ID || "fabb9529082a9638fe2636bac941fb29",
@@ -27,6 +32,9 @@ export const env = {
     (import.meta.env.VITE_PAYOUT_RECORD_SCHEMA_UID as `0x${string}` | undefined) || "",
   bugIndexAddress: (import.meta.env.VITE_BUG_INDEX_ADDRESS as `0x${string}` | undefined) || "",
   bugzTokenAddress: (import.meta.env.VITE_BUGZ_TOKEN_ADDRESS as `0x${string}` | undefined) || "",
+  bugzTreasuryAddress: (import.meta.env.VITE_BUGZ_TREASURY_ADDRESS as `0x${string}` | undefined) || "",
+  bugzTokenDeploymentBlock: optionalNumber(import.meta.env.VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK, 0),
+  bugzBuyUrl: import.meta.env.VITE_BUGZ_BUY_URL || "",
   routerMode: import.meta.env.VITE_ROUTER_MODE === "hash" ? "hash" : "history",
   storageProvider: import.meta.env.VITE_STORAGE_PROVIDER === "pinata" ? "pinata" : "thirdweb",
   pinataPresignEndpoint: import.meta.env.VITE_PINATA_PRESIGN_ENDPOINT || "",

@@ -1,3 +1,4 @@
+import { formatUnits } from "ethers";
 import { keccak256, toBytes } from "viem";
 
 import {
@@ -56,6 +57,13 @@ export const formatDate = (isoDate: string): string =>
 
 export const formatNumber = (value: number): string =>
   new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+
+export const formatTokenAmount = (value: bigint, decimals = 18, maxFractionDigits = 4): string => {
+  const [wholeRaw, fractionalRaw = ""] = formatUnits(value, decimals).split(".");
+  const whole = new Intl.NumberFormat("en-US").format(BigInt(wholeRaw || "0"));
+  const fractional = fractionalRaw.slice(0, maxFractionDigits).replace(/0+$/, "");
+  return fractional ? `${whole}.${fractional}` : whole;
+};
 
 export const parseTags = (raw: string): string[] =>
   raw

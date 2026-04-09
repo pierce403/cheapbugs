@@ -1,12 +1,14 @@
 import { loadRecentBundles } from "../lib/reports";
+import { loadPatronLeaderboard } from "../lib/token";
 import { chainConfig } from "../config/chains";
 import { getFeaturedReportHashes } from "../lib/eas";
-import { escapeHtml, formatDate, shortHash, textOrDash } from "../lib/utils";
+import { escapeHtml, formatDate, formatTokenAmount, shortHash, textOrDash } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
 
 export const renderHomeView = async (context: AppViewContext): Promise<ViewResult> => {
   const bundles = await loadRecentBundles(12);
+  const patronPreview = await loadPatronLeaderboard(3);
   const featuredHashes = new Set(getFeaturedReportHashes());
   const featured = bundles.filter((bundle) => featuredHashes.has(bundle.publicSubmission.reportHash));
   const featuredBundles = featured.length ? featured : bundles.slice(0, 4);
@@ -45,6 +47,25 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
         })
         .join("")
     : `<tr><td colspan="6" class="muted-cell">No onchain bug reports resolved yet.</td></tr>`;
+
+  const patronRows = patronPreview.entries.length
+    ? patronPreview.entries
+        .map(
+          (entry, index) => `
+            <tr>
+              <td>${escapeHtml(String(index + 1).padStart(2, "0"))}</td>
+              <td>${entry.ensName ? escapeHtml(entry.ensName) : escapeHtml(shortHash(entry.address, 12, 6))}</td>
+              <td>${escapeHtml(formatTokenAmount(entry.balance))} BUGZ</td>
+              <td>${escapeHtml(entry.ensLookupStatus)}</td>
+            </tr>
+          `
+        )
+        .join("")
+    : `
+      <tr><td>01</td><td><a href="${context.router.href("/token")}" data-nav>token manager</a></td><td>-</td><td>deploy BUGZ first</td></tr>
+      <tr><td>02</td><td><a href="${context.router.href("/patrons")}" data-nav>patrons board</a></td><td>-</td><td>holder scan later</td></tr>
+      <tr><td>03</td><td>ens preferred</td><td>-</td><td>leaderboard placeholder</td></tr>
+    `;
 
   return {
     title: "CheapBugs",
@@ -102,15 +123,11 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
             <tr>
               <th>rank</th>
               <th>handle</th>
+              <th>holdings</th>
               <th>status</th>
-              <th>placeholder</th>
             </tr>
           </thead>
-          <tbody>
-            <tr><td>01</td><td>zero-day librarian</td><td>queued</td><td>leaderboard extension point</td></tr>
-            <tr><td>02</td><td>packet ghoul</td><td>queued</td><td>token gating later</td></tr>
-            <tr><td>03</td><td>heap oracle</td><td>queued</td><td>patron receipts later</td></tr>
-          </tbody>
+          <tbody>${patronRows}</tbody>
         </table>
       </section>
     `

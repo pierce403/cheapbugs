@@ -121,6 +121,24 @@ button {
   color: var(--muted);
 }
 
+.auth-panel {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  min-width: min(360px, 100%);
+}
+
+.auth-panel-guest {
+  align-content: start;
+}
+
+.auth-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .identity-chip {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
@@ -297,6 +315,13 @@ button {
   margin-top: 10px;
 }
 
+.buy-preview {
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  background: #070707;
+  color: var(--muted);
+  padding: 8px;
+}
+
 @media (max-width: 760px) {
   .shell {
     width: min(100vw - 14px, 1120px);
@@ -313,6 +338,12 @@ button {
 
   .status-block {
     text-align: left;
+  }
+
+  .auth-panel,
+  .auth-actions {
+    justify-items: start;
+    justify-content: flex-start;
   }
 
   .brand {

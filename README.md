@@ -6,6 +6,8 @@ The current MVP stores public-safe report records onchain in `CheapBugsBugIndex`
 
 The repo also includes a standalone `BUGZ` ERC20 contract and Base launcher as a clean extension point for future token-gated or reward features, but the live app does not depend on that token yet.
 
+The frontend now reserves first-class routes for `index`, `submit`, `review`, `token`, and `patrons`. The token and patrons screens are safe to ship before BUGZ is deployed and fall back to placeholder mode until token config is present.
+
 For contract development, the repo now also includes a Foundry workspace with a deploy script and scenario tests for bug submission and reviewer vote flows.
 
 ## What Is In Scope
@@ -46,6 +48,7 @@ cp .env.example .env.local
 3. Fill the required values in `.env.local`:
 
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
+- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TREASURY_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, and `VITE_BUGZ_BUY_URL` when the token dashboard should go live
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
 

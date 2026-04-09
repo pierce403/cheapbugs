@@ -3,9 +3,11 @@ import { authController } from "./services";
 import { AppRouter } from "./router";
 import { renderHomeView } from "./views/home";
 import { renderLoginView } from "./views/login";
+import { renderPatronsView } from "./views/patrons";
 import { renderReportView } from "./views/report";
 import { renderReviewView } from "./views/review";
 import { renderSubmitView } from "./views/submit";
+import { renderTokenView } from "./views/token";
 import { ENS_APP_URL } from "./lib/ens";
 import { escapeHtml, shortHash } from "./lib/utils";
 import { env } from "./config/env";
@@ -102,6 +104,10 @@ export class CheapBugsApp {
         return renderReportView(context);
       case "review":
         return renderReviewView(context);
+      case "token":
+        return renderTokenView(context);
+      case "patrons":
+        return renderPatronsView(context);
       case "login":
         return renderLoginView(context);
       case "home":
@@ -127,13 +133,44 @@ export class CheapBugsApp {
       ["/", "index"],
       ["/submit", "submit"],
       ["/review", "review"],
-      ["/login", session.address ? "session" : "login"]
+      ["/token", "token"],
+      ["/patrons", "patrons"]
     ]
       .map(
         ([path, label]) =>
           `<a href="${context.router.href(path)}" data-nav class="nav-link">${escapeHtml(label)}</a>`
       )
       .join("");
+
+    const authControls = session.address
+      ? `
+        <div class="auth-panel">
+          ${renderIdentityBlock(session)}
+          <div class="auth-actions">
+            <a href="${context.router.href("/login")}" data-nav class="button secondary">session</a>
+            <button id="disconnect-wallet" class="button secondary" type="button">disconnect</button>
+          </div>
+          <div class="status-block">
+            <div>chain: ${escapeHtml(chainConfig.name)} (${chainConfig.id})</div>
+            <div>storage: ${escapeHtml(context.storage.id)}</div>
+            <div>wallet: ${escapeHtml(shortHash(session.address, 12, 6))}</div>
+            <div>reviewer: ${session.isReviewer ? "trusted" : "no"}</div>
+          </div>
+        </div>
+      `
+      : `
+        <div class="auth-panel auth-panel-guest">
+          <div class="auth-actions">
+            <a href="${context.router.href("/login")}" data-nav class="button">login</a>
+          </div>
+          <div class="status-block">
+            <div>chain: ${escapeHtml(chainConfig.name)} (${chainConfig.id})</div>
+            <div>storage: ${escapeHtml(context.storage.id)}</div>
+            <div>wallet: anonymous</div>
+            <div>reviewer: no</div>
+          </div>
+        </div>
+      `;
 
     return `
       <div class="shell">
@@ -143,20 +180,9 @@ export class CheapBugsApp {
               <div class="brand">cheapbugs</div>
               <div class="subtitle">shitty bugs, competitive prices</div>
             </div>
-            <div class="status-block">
-              ${renderIdentityBlock(session)}
-              <div>chain: ${escapeHtml(chainConfig.name)} (${chainConfig.id})</div>
-              <div>storage: ${escapeHtml(context.storage.id)}</div>
-              <div>wallet: ${escapeHtml(session.address ? shortHash(session.address, 12, 6) : "anonymous")}</div>
-              <div>reviewer: ${session.isReviewer ? "trusted" : "no"}</div>
-            </div>
+            ${authControls}
           </div>
           <nav class="nav-row">${nav}</nav>
-          ${
-            session.address
-              ? `<button id="disconnect-wallet" class="button secondary" type="button">disconnect</button>`
-              : ""
-          }
         </header>
         <section class="notice-stack">${notices}</section>
         <main class="main-column" data-view-root>${view.html}</main>

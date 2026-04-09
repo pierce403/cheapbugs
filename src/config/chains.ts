@@ -29,5 +29,9 @@ export const chainConfig = {
   easSchemaRegistryAddress: env.easSchemaRegistryAddress,
   easGraphqlUrl: env.easGraphqlUrl,
   easScanUrl: env.easScanUrl,
-  bugIndexAddress: env.bugIndexAddress
+  bugIndexAddress: env.bugIndexAddress,
+  bugzTokenAddress: env.bugzTokenAddress,
+  bugzTreasuryAddress: env.bugzTreasuryAddress,
+  bugzTokenDeploymentBlock: env.bugzTokenDeploymentBlock,
+  bugzBuyUrl: env.bugzBuyUrl
 } as const;

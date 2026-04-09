@@ -24,6 +24,14 @@ const matchRoute = (path: string): RouteMatch => {
     return { name: "review", path: normalized, params: {} };
   }
 
+  if (normalized === "/token") {
+    return { name: "token", path: normalized, params: {} };
+  }
+
+  if (normalized === "/patrons") {
+    return { name: "patrons", path: normalized, params: {} };
+  }
+
   if (normalized === "/login") {
     return { name: "login", path: normalized, params: {} };
   }
