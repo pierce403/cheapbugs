@@ -171,7 +171,7 @@ Key Services Used:
 - EAS contracts and indexing
 - IPFS storage/gateway infrastructure
 
-CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`, using a committed public thirdweb `clientId` by default
+CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`, with GitHub Pages configured for workflow-based publishing and a committed public thirdweb `clientId` by default
 
 Monitoring & Logging: Browser console and wallet/provider errors only in the current MVP
 

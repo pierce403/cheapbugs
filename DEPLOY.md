@@ -67,6 +67,7 @@ The site outputs to `dist/`.
 ### GitHub Pages
 
 The repo now includes a GitHub Actions workflow at [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml).
+In GitHub repository settings, Pages should be configured to deploy from `GitHub Actions`, not from a branch.
 
 Recommended repository variables:
 
