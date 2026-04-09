@@ -91,6 +91,8 @@ npm run launch:bug-index
 ## Known Issues And Practical Tips
 
 - `npm run build` currently succeeds but emits large-chunk warnings because of the thirdweb dependency graph.
+- GitHub Actions run pages show top-level status and annotations publicly, but step logs require GitHub sign-in.
+- The Pages workflow currently sets `VITE_BASE_PATH=/${{ github.event.repository.name }}/`, so app assets resolve under `/cheapbugs/` even when a custom domain is configured.
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
 - The contract launcher needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` for a real deployment.
