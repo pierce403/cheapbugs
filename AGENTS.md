@@ -84,8 +84,9 @@ npm run launch:bug-index
 - EAS is currently used for `ReviewVerdict` and a `PayoutRecord` placeholder only.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
 - The launcher script refreshes the frontend ABI file after compilation so the app stays aligned with the contract.
-- GitHub Pages deployment uses a GitHub Actions workflow, repo-aware Vite base paths, and hash routing for SPA compatibility.
+- GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
+- Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
 - The default public thirdweb client ID is committed in config; deployments may override it with `VITE_THIRDWEB_CLIENT_ID`.
 
 ## Known Issues And Practical Tips

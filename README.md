@@ -79,7 +79,7 @@ Set these repository variables before relying on the Pages deploy:
 - optional chain and storage overrides from [.env.example](/home/pierce/projects/cheapbugs/.env.example)
 
 The workflow lives at [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml).
-It builds with repo-aware base paths and `hash` routing so GitHub Pages can serve SPA routes without a custom origin server.
+It builds with `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain and `hash` routing so GitHub Pages can serve SPA routes without a custom origin server.
 The build defaults to the current public thirdweb client ID and can still be overridden with `VITE_THIRDWEB_CLIENT_ID`.
 
 ## How Reports Work

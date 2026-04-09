@@ -79,12 +79,14 @@ Recommended repository variables:
 
 The Pages workflow builds with:
 
-- repo-aware `VITE_BASE_PATH`
+- `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain
 - `VITE_ROUTER_MODE=hash`
 - `.nojekyll` enabled through [public/.nojekyll](/home/pierce/projects/cheapbugs/public/.nojekyll)
 
-That combination keeps asset URLs correct under the repository subpath and avoids SPA route breakage on GitHub Pages.
+That combination keeps asset URLs correct at the domain root and avoids SPA route breakage on GitHub Pages.
 The build uses the committed public thirdweb client ID by default, with `VITE_THIRDWEB_CLIENT_ID` available as an override.
+
+If you ever deploy the same app under a repository subpath instead of the custom domain, override `VITE_BASE_PATH` for that environment explicitly.
 
 ### Other Static Hosts
 
