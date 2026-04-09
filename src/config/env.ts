@@ -26,6 +26,7 @@ export const env = {
   payoutRecordSchemaUid:
     (import.meta.env.VITE_PAYOUT_RECORD_SCHEMA_UID as `0x${string}` | undefined) || "",
   bugIndexAddress: (import.meta.env.VITE_BUG_INDEX_ADDRESS as `0x${string}` | undefined) || "",
+  bugzTokenAddress: (import.meta.env.VITE_BUGZ_TOKEN_ADDRESS as `0x${string}` | undefined) || "",
   routerMode: import.meta.env.VITE_ROUTER_MODE === "hash" ? "hash" : "history",
   storageProvider: import.meta.env.VITE_STORAGE_PROVIDER === "pinata" ? "pinata" : "thirdweb",
   pinataPresignEndpoint: import.meta.env.VITE_PINATA_PRESIGN_ENDPOINT || "",

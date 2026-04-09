@@ -6,11 +6,11 @@ Update this file whenever the codebase's architecture, deployment assumptions, i
 
 ## 1. Project Structure
 
-The repository is a static Vite application with one Solidity contract, one deployment script, and a modular TypeScript frontend.
+The repository is a static Vite application with two Solidity contracts, two deployment scripts, and a modular TypeScript frontend.
 
 ```text
 cheapbugs/
-├── contracts/              # Solidity contracts, currently the Base bug index contract
+├── contracts/              # Solidity contracts, currently the Base bug index and BUGZ token contracts
 ├── scripts/                # Deployment and maintenance scripts
 ├── public/                 # Static assets and SPA hosting helpers
 ├── src/
@@ -73,7 +73,17 @@ Technologies: Solidity 0.8.24, Base, ethers/viem integration from the frontend
 
 Deployment: Deployed with [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs)
 
-### 3.3. Attestation Layer
+### 3.3. Optional Token Contract
+
+Name: `CheapBugsToken`
+
+Description: A standalone ERC20 extension contract for future token-gated or reward flows. It is not required by the current report submission or review runtime.
+
+Technologies: Solidity 0.8.24, OpenZeppelin ERC20, Base, viem deployment tooling
+
+Deployment: Deployed with [scripts/launch-token.mjs](/home/pierce/projects/cheapbugs/scripts/launch-token.mjs)
+
+### 3.4. Attestation Layer
 
 Name: EAS integration
 
@@ -83,7 +93,7 @@ Technologies: `@ethereum-attestation-service/eas-sdk`, Base EAS contracts, EAS G
 
 Deployment: External network dependency on Base EAS contracts and EAS Scan indexing infrastructure
 
-### 3.4. Storage Layer
+### 3.5. Storage Layer
 
 Name: StorageProvider abstraction
 
@@ -162,7 +172,7 @@ Pinata:
 Base RPC:
 
 - Purpose: Contract reads, writes, and deployment
-- Integration Method: Configured in [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts) and consumed by the frontend and launcher
+- Integration Method: Configured in [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts) and consumed by the frontend and launchers
 
 ## 6. Deployment & Infrastructure
 
@@ -213,12 +223,14 @@ Local Setup Instructions:
 - copy `.env.example` to `.env.local`
 - optionally override `VITE_THIRDWEB_CLIENT_ID` or `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
+- optionally deploy the BUGZ token contract if you want the extension address recorded in env
 
 Testing / Verification Commands:
 
 - `npm run dev`
 - `npm run build`
 - `npm run launch:bug-index:dry-run`
+- `npm run launch:token:dry-run`
 - GitHub Actions Pages workflow in `.github/workflows/deploy-pages.yml`
 
 Code Quality Tools:
@@ -231,7 +243,8 @@ Code Quality Tools:
 
 - Replace the frontend reviewer allowlist with an onchain reviewer registry or resolver-backed trust model.
 - Add payout execution while keeping `PayoutRecord` as the public record layer.
-- Add patron leaderboard, token gating, treasury logic, and governance as separate extensions.
+- Wire the deployed BUGZ token into token gating, treasury logic, or reward flows only when those product areas are intentionally scoped.
+- Add patron leaderboard and governance as separate extensions.
 - Reduce thirdweb-driven bundle size with route or adapter-level code splitting.
 - Add automated CI and ABI drift checks.
 
@@ -243,7 +256,7 @@ Repository URL: `git@github.com:pierce403/cheapbugs.git`
 
 Primary Contact/Team: `pierce403`
 
-Date of Last Update: 2026-04-09
+Date of Last Update: 2026-04-08
 
 ## 11. Glossary / Acronyms
 

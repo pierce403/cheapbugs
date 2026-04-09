@@ -51,13 +51,18 @@ npm run dev
 npm run build
 npm run launch:bug-index:dry-run
 npm run launch:bug-index
+npm run launch:token:dry-run
+npm run launch:token
 ```
 
 ## Key Paths
 
 - `contracts/CheapBugsBugIndex.sol`: Base bug index contract
+- `contracts/CheapBugsToken.sol`: BUGZ ERC20 extension contract
 - `scripts/launch-bug-index.mjs`: compile/deploy launcher for the bug index contract
+- `scripts/launch-token.mjs`: compile/deploy launcher for the BUGZ token contract
 - `src/contracts/bugIndex.ts`: frontend read/write adapter for the bug index contract
+- `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
 - `src/auth/thirdweb.ts`: email login and external wallet connectivity
 - `src/storage/thirdweb.ts`: default static-friendly IPFS storage provider
 - `src/storage/pinata.ts`: presigned-upload Pinata adapter
@@ -82,8 +87,9 @@ npm run launch:bug-index
 - Base mainnet is the default chain configuration.
 - The submit path writes public reports to the Base bug index contract, not to an EAS submission-pointer schema.
 - EAS is currently used for `ReviewVerdict` and a `PayoutRecord` placeholder only.
+- The repo now includes a standalone `CheapBugsToken` ERC20 contract using OpenZeppelin. It mints 10,000,000 `BUGZ` to `BUGZ_INITIAL_HOLDER` or the deployer at launch time, but the live app does not depend on it yet.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
-- The launcher script refreshes the frontend ABI file after compilation so the app stays aligned with the contract.
+- The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes.
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
@@ -98,6 +104,7 @@ npm run launch:bug-index
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
 - The contract launcher needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` for a real deployment.
+- The token launcher needs `BUGZ_DEPLOYER_PRIVATE_KEY` for a real deployment.
 - `artifacts/` and `dist/` are generated outputs and should not be committed unless the user explicitly asks.
 
 ## Collaborator Preferences

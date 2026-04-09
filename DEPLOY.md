@@ -7,6 +7,7 @@ Create `.env.local` from [.env.example](/home/pierce/projects/cheapbugs/.env.exa
 Frontend values:
 
 - `VITE_BUG_INDEX_ADDRESS`
+- `VITE_BUGZ_TOKEN_ADDRESS` only if and when token-aware frontend features are added
 - `VITE_REVIEW_VERDICT_SCHEMA_UID`
 - `VITE_PAYOUT_RECORD_SCHEMA_UID` if you want the placeholder schema pinned now
 - `VITE_REVIEWER_ADDRESSES`
@@ -20,14 +21,17 @@ Launcher values:
 - `BUG_INDEX_DEPLOYER_PRIVATE_KEY`
 - `BUG_INDEX_OWNER`
 - `BUG_INDEX_INITIAL_REVIEWERS`
+- `BUGZ_DEPLOYER_PRIVATE_KEY` for token deployment
+- `BUGZ_INITIAL_HOLDER` if the 10,000,000 BUGZ supply should mint somewhere other than the deployer
 
 ## 2. Dry Run The Contract Build
 
 ```bash
 npm run launch:bug-index:dry-run
+npm run launch:token:dry-run
 ```
 
-This compiles the contract, writes an artifact, and refreshes the frontend ABI module.
+This compiles the contracts, writes artifacts, and refreshes the frontend ABI modules.
 
 ## 3. Deploy The Bug Index Contract To Base
 
@@ -43,7 +47,23 @@ VITE_BUG_INDEX_ADDRESS=0x...
 
 Copy that value into `.env.local`.
 
-## 4. Register EAS Schemas On Base
+## 4. Optional Deploy The BUGZ Token To Base
+
+```bash
+npm run launch:token
+```
+
+The launcher deploys `CheapBugs Token` with symbol `BUGZ` and mints 10,000,000 tokens to `BUGZ_INITIAL_HOLDER` or the deployer if no holder override is set.
+
+It prints the deployed contract address as:
+
+```bash
+VITE_BUGZ_TOKEN_ADDRESS=0x...
+```
+
+Only copy that into `.env.local` when the frontend actually needs to reference the token.
+
+## 5. Register EAS Schemas On Base
 
 Required now:
 
@@ -55,7 +75,7 @@ Optional placeholder now:
 
 You can register from the reviewer UI, but for a real deployment you should pin the returned schema UIDs in `.env.local` so every client reads and writes the same schema IDs.
 
-## 5. Build Static Assets
+## 6. Build Static Assets
 
 ```bash
 npm run build
@@ -63,7 +83,7 @@ npm run build
 
 The site outputs to `dist/`.
 
-## 6. Publish Static Assets
+## 7. Publish Static Assets
 
 ### GitHub Pages
 
@@ -99,7 +119,7 @@ You can still deploy `dist/` to other static hosts, for example:
 
 The repo already includes `public/_redirects` for Netlify-style SPA routing.
 
-## 7. Optional IPFS Publishing
+## 8. Optional IPFS Publishing
 
 If you publish the app itself to IPFS, validate your gateway and asset-path behavior against the IPFS docs before treating it as the primary production origin.
 
@@ -109,3 +129,4 @@ If you publish the app itself to IPFS, validate your gateway and asset-path beha
 - Private report details stay encrypted, but the encrypted blob CID is public because it is stored onchain.
 - Review trust is currently driven by the configured reviewer allowlist.
 - Pinata should only be enabled when `VITE_PINATA_PRESIGN_ENDPOINT` points to a helper that returns presigned upload URLs.
+- The BUGZ token contract is not part of the current app runtime and exists as an extension point for later token features.

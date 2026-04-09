@@ -4,6 +4,8 @@ CheapBugs is a static Vite + TypeScript app for Base-native bug intake and revie
 
 The current MVP stores public-safe report records onchain in `CheapBugsBugIndex` on Base, keeps the private dossier encrypted client-side before uploading it to IPFS, and uses EAS on Base for reviewer verdict attestations and payout-record placeholders.
 
+The repo also includes a standalone `BUGZ` ERC20 contract and Base launcher as a clean extension point for future token-gated or reward features, but the live app does not depend on that token yet.
+
 ## What Is In Scope
 
 - thirdweb login with email verification code flow and in-app wallet
@@ -48,12 +50,19 @@ cp .env.example .env.local
 
 ```bash
 npm run launch:bug-index:dry-run
+npm run launch:token:dry-run
 ```
 
 5. Deploy the Base bug index contract when ready:
 
 ```bash
 npm run launch:bug-index
+```
+
+Optional future-token deployment:
+
+```bash
+npm run launch:token
 ```
 
 6. Start the app:
@@ -101,21 +110,31 @@ The build defaults to the current public thirdweb client ID and can still be ove
 - ENS identity lookups use Ethereum mainnet RPC and can be overridden with `VITE_ENS_RPC_URL`.
 - Base-specific values are isolated in [src/config/chains.ts](/home/pierce/projects/cheapbugs/src/config/chains.ts) and [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts).
 
-## Contract Launcher
+## Contract Launchers
 
-The launcher script is [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs).
+The launcher scripts are [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs) and [scripts/launch-token.mjs](/home/pierce/projects/cheapbugs/scripts/launch-token.mjs).
 
-It does three things:
+The bug index launcher:
 
 - compiles [contracts/CheapBugsBugIndex.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsBugIndex.sol)
 - writes `artifacts/CheapBugsBugIndex.json`
 - refreshes [src/contracts/bugIndexAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndexAbi.ts) so the frontend ABI stays aligned with the deployed contract
 
+The token launcher:
+
+- compiles [contracts/CheapBugsToken.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsToken.sol)
+- writes `artifacts/CheapBugsToken.json`
+- refreshes [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
+- deploys `CheapBugs Token` with symbol `BUGZ` and an initial supply of 10,000,000 tokens minted to `BUGZ_INITIAL_HOLDER` or the deployer by default
+
 ## Key Paths
 
 - [contracts/CheapBugsBugIndex.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsBugIndex.sol)
+- [contracts/CheapBugsToken.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsToken.sol)
 - [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs)
+- [scripts/launch-token.mjs](/home/pierce/projects/cheapbugs/scripts/launch-token.mjs)
 - [src/contracts/bugIndex.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndex.ts)
+- [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
 - [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
 - [src/storage/thirdweb.ts](/home/pierce/projects/cheapbugs/src/storage/thirdweb.ts)
 - [src/storage/pinata.ts](/home/pierce/projects/cheapbugs/src/storage/pinata.ts)
