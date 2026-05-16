@@ -1,8 +1,10 @@
 import { authController } from "../services";
 import { chainConfig } from "../config/chains";
+import { env } from "../config/env";
 import { createAccessKey } from "../lib/crypto";
 import { submitReport } from "../lib/reports";
 import { escapeHtml } from "../lib/utils";
+import { isBouncerConfigured, sendBouncerSubmission } from "../xmtp/bouncer";
 
 import type { AppViewContext, ViewResult } from "./types";
 
@@ -13,10 +15,12 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       <div class="panel-title">[ submit report ]</div>
       <p class="warning-copy">
         Never place sensitive bug details in the public summary unless you intentionally want them public. Private details are encrypted
-        in the browser before IPFS upload, but the public summary, tags, and reviewer notes are public by design and will be filed on Base.
+        in the browser before IPFS upload on the legacy path. XMTP submissions are sent directly to the bouncer inbox.
       </p>
       ${
-        chainConfig.bugIndexAddress
+        isBouncerConfigured()
+          ? `<p class="helper-copy">xmtp bouncer wallet: ${escapeHtml(env.bouncerXmtpAddress)}</p>`
+          : chainConfig.bugIndexAddress
           ? `<p class="helper-copy">bug index contract: ${escapeHtml(chainConfig.bugIndexAddress)}</p>`
           : `<p class="warning-copy">Deploy and configure VITE_BUG_INDEX_ADDRESS before submitting onchain reports.</p>`
       }
@@ -35,6 +39,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       <label>repro steps<textarea name="reproSteps" rows="6" required placeholder="Minimal reproduction path."></textarea></label>
       <label>evidence<textarea name="evidence" rows="5" placeholder="Logs, tx hashes, screenshots, traces, PoC notes."></textarea></label>
       <label>suggested severity<input name="suggestedSeverity" required placeholder="high" /></label>
+      <label>signal recipient<input name="signalRecipient" ${isBouncerConfigured() ? "required" : ""} placeholder="+15551234567 or u:researcher.01" /></label>
       <label>contact hints<textarea name="contactHints" rows="3" placeholder="Preferred disclosure or coordination notes."></textarea></label>
       <div class="two-column">
         <label>
@@ -59,17 +64,23 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       </div>
       <label>target reference<input name="targetRef" required placeholder="repo URL, package name, contract, domain, protocol ref" /></label>
       <label>tags<input name="tags" placeholder="solidity, mev, auth-bypass" /></label>
-      <label>
-        review access key
-        <div class="inline-input">
-          <input id="access-key-input" name="accessKey" required value="${escapeHtml(createAccessKey())}" />
-          <button id="regen-access-key" type="button" class="button secondary">regen</button>
-        </div>
-      </label>
-      <p class="helper-copy">
-        This key is required to decrypt the private dossier later. Share it out of band with trusted reviewers. The app cannot recover it for you.
-      </p>
-      <button class="button" type="submit" ${context.session.address ? "" : "disabled"}>encrypt, upload, and file on base</button>
+      ${
+        isBouncerConfigured()
+          ? ""
+          : `<label>
+              review access key
+              <div class="inline-input">
+                <input id="access-key-input" name="accessKey" required value="${escapeHtml(createAccessKey())}" />
+                <button id="regen-access-key" type="button" class="button secondary">regen</button>
+              </div>
+            </label>
+            <p class="helper-copy">
+              This key is required to decrypt the private dossier later. Share it out of band with trusted reviewers. The app cannot recover it for you.
+            </p>`
+      }
+      <button class="button" type="submit" ${context.session.address ? "" : "disabled"}>
+        ${isBouncerConfigured() ? "send xmtp dm to bouncer" : "encrypt, upload, and file on base"}
+      </button>
     </form>
   `,
   afterRender: (root, appContext) => {
@@ -94,23 +105,36 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
 
       const formData = new FormData(form);
       try {
-        const result = await submitReport(
-          {
-            title: String(formData.get("title") || ""),
-            publicSummary: String(formData.get("publicSummary") || ""),
-            details: String(formData.get("details") || ""),
-            reproSteps: String(formData.get("reproSteps") || ""),
-            evidence: String(formData.get("evidence") || ""),
-            suggestedSeverity: String(formData.get("suggestedSeverity") || ""),
-            contactHints: String(formData.get("contactHints") || ""),
-            targetKind: String(formData.get("targetKind") || "repo") as never,
-            targetRef: String(formData.get("targetRef") || ""),
-            tags: String(formData.get("tags") || ""),
-            disclosureMode: String(formData.get("disclosureMode") || "private") as never
-          },
-          address,
-          String(formData.get("accessKey") || "")
-        );
+        const input = {
+          title: String(formData.get("title") || ""),
+          publicSummary: String(formData.get("publicSummary") || ""),
+          details: String(formData.get("details") || ""),
+          reproSteps: String(formData.get("reproSteps") || ""),
+          evidence: String(formData.get("evidence") || ""),
+          suggestedSeverity: String(formData.get("suggestedSeverity") || ""),
+          contactHints: String(formData.get("contactHints") || ""),
+          targetKind: String(formData.get("targetKind") || "repo") as never,
+          targetRef: String(formData.get("targetRef") || ""),
+          tags: String(formData.get("tags") || ""),
+          disclosureMode: String(formData.get("disclosureMode") || "private") as never
+        };
+
+        if (isBouncerConfigured()) {
+          const xmtpIdentity = authController.getXmtpIdentity();
+          if (!xmtpIdentity) {
+            throw new Error("Connect with a local XMTP wallet or a wallet that can sign XMTP messages.");
+          }
+          const signalRecipient = String(formData.get("signalRecipient") || "").trim();
+          if (!signalRecipient) {
+            throw new Error("Signal recipient is required for bouncer submissions.");
+          }
+          const result = await sendBouncerSubmission(xmtpIdentity, input, signalRecipient);
+          appContext.notify("success", `Submission sent over XMTP to the bouncer. Message ${result.messageId}.`);
+          appContext.router.navigate("/");
+          return;
+        }
+
+        const result = await submitReport(input, address, String(formData.get("accessKey") || ""));
 
         appContext.notify(
           "success",

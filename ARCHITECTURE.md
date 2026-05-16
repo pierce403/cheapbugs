@@ -6,10 +6,11 @@ Update this file whenever the codebase's architecture, deployment assumptions, i
 
 ## 1. Project Structure
 
-The repository is a static Vite application with two Solidity contracts, both Node and Foundry deployment scripts, a Foundry test suite, and a modular TypeScript frontend.
+The repository is a static Vite application with two Solidity contracts, both Node and Foundry deployment scripts, a Foundry test suite, a modular TypeScript frontend, and an optional Python bouncer bot for XMTP-to-Signal private review.
 
 ```text
 cheapbugs/
+├── bots/                   # Python bouncer bot package and tests
 ├── contracts/              # Solidity contracts, currently the Base bug index and BUGZ token contracts
 ├── script/                 # Foundry deployment scripts
 ├── scripts/                # Deployment and maintenance scripts
@@ -24,6 +25,7 @@ cheapbugs/
 │   ├── lib/                # core domain logic, crypto, IPFS, caching, utilities
 │   ├── storage/            # storage-provider implementations
 │   ├── types/              # domain and integration types
+│   ├── xmtp/               # browser XMTP identity and bouncer DM helpers
 │   └── views/              # route-level UI rendering
 ├── README.md               # setup and high-level overview
 ├── DEPLOY.md               # deployment workflow
@@ -45,6 +47,10 @@ cheapbugs/
   |        +--------------> [IPFS via thirdweb Storage or Pinata presigned upload]
   |
   +-----------------------> [CheapBugsBugIndex on Base]
+
+[Reporter Browser] --XMTP DM--> [Bouncer Bot] --signal-cli--> [Private Signal Group]
+                                      |
+                                      +--> [BUGZ ERC20 on Base]
 ```
 
 System boundaries:
@@ -53,6 +59,8 @@ System boundaries:
 - Public-safe report metadata is stored onchain in the bug index contract.
 - Sensitive report details are encrypted client-side before they leave the browser.
 - Reviewer verdicts are onchain EAS attestations but are read via the EAS GraphQL API in the frontend.
+- When `VITE_BOUNCER_XMTP_ADDRESS` is configured, report submission uses browser XMTP DMs to the bouncer instead of the legacy onchain/IPFS filing path.
+- The bouncer bot is an optional off-static runtime with its own SQLite state; it does not add a backend database to the hosted frontend.
 
 ## 3. Core Components
 
@@ -62,7 +70,7 @@ Name: CheapBugs static web app
 
 Description: A narrow-layout, milw0rm-inspired frontend for login, report submission, public browsing, report review, a placeholder BUGZ token manager, a patrons leaderboard, and local decryption of private dossiers.
 
-Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, thirdweb SDK, ethers, viem
+Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, thirdweb SDK, ethers, viem, optional `@xmtp/browser-sdk`
 
 Deployment: Static assets from `dist/`, suitable for Netlify, Cloudflare Pages, Vercel static hosting, GitHub Pages, or IPFS-aware static hosting
 
@@ -108,6 +116,16 @@ Technologies: thirdweb storage SDK, Pinata presigned uploads, IPFS gateways
 
 Deployment: Browser-side integration; no app-owned storage server in the MVP
 
+### 3.6. XMTP Bouncer Bot
+
+Name: CheapBugs bouncer
+
+Description: Optional Python runtime that receives XMTP DMs at a static bouncer wallet, relays structured submissions into a private Signal group with `signal-cli`, records relayed Signal message timestamps and reactions in SQLite, token-gates channel access by BUGZ balance, and transfers BUGZ rewards from a funded payout wallet after the review window.
+
+Technologies: Python 3.10+, `xmtp==0.1.5`, `web3.py`, `signal-cli`, SQLite
+
+Deployment: Long-running worker or cron-friendly process outside the static site. The bouncer wallet uses `XMTP_WALLET_KEY`; live payouts require `BUGZ_PAYOUT_PRIVATE_KEY` and a funded BUGZ holder wallet.
+
 ## 4. Data Stores
 
 ### 4.1. Onchain Report Store
@@ -150,6 +168,20 @@ Key Schemas:
 - `ReviewVerdict`
 - `PayoutRecord`
 
+### 4.4. Bouncer SQLite Store
+
+Name: Bouncer ledger
+
+Type: Local SQLite database
+
+Purpose: Tracks processed XMTP message IDs, relayed submissions, Signal message timestamps, active Signal emoji reactions, settlement status, reward amounts, and payout transaction hashes.
+
+Key Records:
+
+- `submissions` keyed by bot-generated submission id
+- `processed_xmtp_messages` for idempotency
+- `signal_reactions` keyed by Signal group, target message timestamp, reactor, and emoji
+
 ## 5. External Integrations / APIs
 
 thirdweb:
@@ -185,6 +217,18 @@ BUGZ Read Layer:
 - Integration Method: [src/contracts/bugzToken.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzToken.ts) and [src/lib/token.ts](/home/pierce/projects/cheapbugs/src/lib/token.ts)
 - Constraint: Full patron enumeration depends on reconstructing balances from `Transfer` logs and therefore needs `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` after deployment
 
+XMTP:
+
+- Purpose: Browser-to-bouncer report submission and bouncer DM replies
+- Integration Method: Browser sender in [src/xmtp/browser.ts](/home/pierce/projects/cheapbugs/src/xmtp/browser.ts) and Python bot runner in [bots/cheapbugs_bouncer/xmtp_runner.py](/home/pierce/projects/cheapbugs/bots/cheapbugs_bouncer/xmtp_runner.py)
+- Configuration: `VITE_BOUNCER_XMTP_ADDRESS` for the frontend and `XMTP_WALLET_KEY`, `BOUNCER_XMTP_ENV`, and `BOUNCER_XMTP_DB_PATH` for the bot
+
+Signal:
+
+- Purpose: Private reviewer channel relay and reaction source for BUGZ reward scoring
+- Integration Method: `signal-cli` subprocess adapter in [bots/cheapbugs_bouncer/signal_cli.py](/home/pierce/projects/cheapbugs/bots/cheapbugs_bouncer/signal_cli.py)
+- Configuration: `BOUNCER_SIGNAL_ACCOUNT`, `BOUNCER_SIGNAL_GROUP_ID`, and `BOUNCER_SIGNAL_CLI`
+
 Foundry:
 
 - Purpose: Contract builds, scenario tests, and Solidity-native deployment
@@ -198,10 +242,13 @@ Key Services Used:
 
 - static asset host for `dist/`
 - GitHub Pages
+- optional worker host for `scripts/bouncer-bot.py`
 - Base RPC endpoint
 - thirdweb client infrastructure
 - EAS contracts and indexing
 - IPFS storage/gateway infrastructure
+- XMTP network
+- Signal account and group reachable by `signal-cli`
 
 CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`, with GitHub Pages configured for workflow-based publishing, a root `/` asset base for the `cheapbugs.net` custom domain, and a committed public thirdweb `clientId` by default
 
@@ -213,16 +260,20 @@ Authentication:
 
 - thirdweb email verification flow with in-app wallet support
 - external wallet connect for advanced users
+- site-generated local XMTP wallet using a browser-stored EVM private key
 
 Authorization:
 
 - reviewer UI trust is currently determined by a frontend allowlist in [src/config/reviewers.ts](/home/pierce/projects/cheapbugs/src/config/reviewers.ts)
 - report submission requires a connected wallet on Base
+- bouncer submissions require an XMTP-capable identity
+- private Signal access requests require the requested wallet to hold at least `BOUNCER_ACCESS_MIN_BUGZ`
 
 Data Encryption:
 
 - private dossier content is encrypted in the browser before IPFS upload
 - transport security depends on HTTPS and wallet/provider infrastructure
+- XMTP bouncer submissions are private to the XMTP DM and then relayed to Signal; they are not encrypted into IPFS by the static app path
 
 Key Security Practices:
 
@@ -230,6 +281,9 @@ Key Security Practices:
 - never place Pinata API credentials in browser code
 - treat all IPFS and EAS note content as untrusted input
 - store only redacted/public-safe metadata onchain
+- treat Signal reaction counts as social support signals, not sybil-resistant votes
+- do not run live bouncer payouts without a funded wallet whose loss exposure is intentionally capped
+- browser-generated local XMTP wallet keys are recoverable only from the same browser unless the user copies the recovery key
 
 ## 8. Development & Testing Environment
 
@@ -243,6 +297,7 @@ Local Setup Instructions:
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
 - optionally deploy the BUGZ token contract if you want the extension address recorded in env
 - optionally configure the BUGZ treasury address, deployment block, and external buy URL when the `/token` and `/patrons` routes should become live
+- optionally set `VITE_BOUNCER_XMTP_ADDRESS` and run `python scripts/bouncer-bot.py run` when the XMTP/Signal submission path should be live
 
 Testing / Verification Commands:
 
@@ -253,6 +308,8 @@ Testing / Verification Commands:
 - `npm run launch:bug-index:dry-run`
 - `npm run launch:bug-index:forge:dry-run`
 - `npm run launch:token:dry-run`
+- `python3 -m unittest discover -s bots/tests -t bots`
+- `python3 -m compileall bots scripts/bouncer-bot.py`
 - GitHub Actions Pages workflow in `.github/workflows/deploy-pages.yml`
 
 Code Quality Tools:
@@ -264,8 +321,8 @@ Code Quality Tools:
 ## 9. Future Considerations / Roadmap
 
 - Replace the frontend reviewer allowlist with an onchain reviewer registry or resolver-backed trust model.
-- Add payout execution while keeping `PayoutRecord` as the public record layer.
-- Wire the deployed BUGZ token into token gating, treasury logic, or reward flows only when those product areas are intentionally scoped.
+- Add public payout records for bouncer settlements while keeping `PayoutRecord` as the public record layer.
+- Wire the deployed BUGZ token into treasury logic or governance only when those product areas are intentionally scoped.
 - Add patron leaderboard and governance as separate extensions.
 - Reduce thirdweb-driven bundle size with route or adapter-level code splitting.
 - Add automated CI and ABI drift checks.
@@ -278,7 +335,7 @@ Repository URL: `git@github.com:pierce403/cheapbugs.git`
 
 Primary Contact/Team: `pierce403`
 
-Date of Last Update: 2026-04-09
+Date of Last Update: 2026-05-16
 
 ## 11. Glossary / Acronyms
 

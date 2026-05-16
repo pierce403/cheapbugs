@@ -10,6 +10,15 @@ import { emptyEnsProfile, resolveEnsProfile } from "../lib/ens";
 import { APP_METADATA } from "../lib/constants";
 import { normalizeAddress } from "../lib/utils";
 import type { SessionState } from "../types/app";
+import type { BrowserXmtpIdentity } from "../xmtp/browser";
+
+import {
+  clearLocalXmtpIdentity,
+  createLocalXmtpIdentity,
+  loadLocalXmtpIdentity,
+  saveLocalXmtpIdentity,
+  type LocalXmtpIdentity
+} from "./localIdentity";
 
 type SessionListener = (session: SessionState) => void;
 
@@ -57,6 +66,7 @@ export class ThirdwebAuthController {
   private session: SessionState = defaultSessionState();
   private listeners = new Set<SessionListener>();
   private activeWallet: Wallet | null = null;
+  private localIdentity: LocalXmtpIdentity | null = loadLocalXmtpIdentity();
   private ensLookupToken = 0;
 
   isConfigured(): boolean {
@@ -105,6 +115,7 @@ export class ThirdwebAuthController {
     mode: SessionState["mode"]
   ): Promise<void> {
     this.activeWallet = wallet;
+    this.localIdentity = null;
     const account = wallet.getAccount();
     const email = mode === "email" ? (await getUserEmail({ client: requireThirdwebClient() })) ?? null : null;
     const address = account ? normalizeAddress(account.address) : null;
@@ -126,6 +137,23 @@ export class ThirdwebAuthController {
     if (address) {
       void this.hydrateEnsProfile(address);
     }
+  }
+
+  private setLocalIdentity(identity: LocalXmtpIdentity): void {
+    this.activeWallet = null;
+    this.localIdentity = identity;
+    this.session = {
+      status: "connected",
+      walletId: "local-xmtp",
+      address: identity.address,
+      email: null,
+      mode: "local",
+      ...this.nextEnsState(identity.address),
+      isReviewer: isTrustedReviewer(identity.address),
+      lastError: null
+    };
+    this.emit();
+    void this.hydrateEnsProfile(identity.address);
   }
 
   private watchWallet(
@@ -159,6 +187,12 @@ export class ThirdwebAuthController {
   }
 
   async initialize(): Promise<void> {
+    const localIdentity = loadLocalXmtpIdentity();
+    if (localIdentity) {
+      this.setLocalIdentity(localIdentity);
+      return;
+    }
+
     if (!thirdwebClient) {
       this.session = {
         ...defaultSessionState(),
@@ -189,8 +223,13 @@ export class ThirdwebAuthController {
       });
 
       if (!this.activeWallet) {
-        this.session = defaultSessionState();
-        this.emit();
+        const fallbackLocalIdentity = loadLocalXmtpIdentity();
+        if (fallbackLocalIdentity) {
+          this.setLocalIdentity(fallbackLocalIdentity);
+        } else {
+          this.session = defaultSessionState();
+          this.emit();
+        }
       }
     } catch (error) {
       this.session = {
@@ -360,6 +399,62 @@ export class ThirdwebAuthController {
 
   getActiveWallet() {
     return this.activeWallet;
+  }
+
+  hasLocalIdentity(): boolean {
+    return Boolean(loadLocalXmtpIdentity());
+  }
+
+  getLocalIdentity(): LocalXmtpIdentity | null {
+    return this.localIdentity ?? loadLocalXmtpIdentity();
+  }
+
+  async createLocalIdentity(): Promise<LocalXmtpIdentity> {
+    if (loadLocalXmtpIdentity()) {
+      throw new Error("A local XMTP wallet already exists in this browser. Use it or forget it before creating a new one.");
+    }
+    const identity = createLocalXmtpIdentity();
+    this.setLocalIdentity(identity);
+    return identity;
+  }
+
+  async useLocalIdentity(): Promise<LocalXmtpIdentity> {
+    const identity = loadLocalXmtpIdentity() ?? createLocalXmtpIdentity();
+    saveLocalXmtpIdentity(identity);
+    this.setLocalIdentity(identity);
+    return identity;
+  }
+
+  forgetLocalIdentity(): void {
+    clearLocalXmtpIdentity();
+    if (this.session.mode === "local") {
+      this.ensLookupToken += 1;
+      this.localIdentity = null;
+      this.session = defaultSessionState();
+      this.emit();
+    }
+  }
+
+  getXmtpIdentity(): BrowserXmtpIdentity | null {
+    if (this.localIdentity && this.session.address === this.localIdentity.address) {
+      return {
+        address: this.localIdentity.address,
+        privateKey: this.localIdentity.privateKey
+      };
+    }
+
+    const account = this.activeWallet?.getAccount();
+    const address = account ? normalizeAddress(account.address) : null;
+    const signMessage = (account as { signMessage?: (args: { message: string }) => Promise<string> } | undefined)
+      ?.signMessage;
+    if (!address || !signMessage) {
+      return null;
+    }
+
+    return {
+      address,
+      signMessage: async (message: string) => signMessage({ message })
+    };
   }
 
   async disconnect(): Promise<void> {

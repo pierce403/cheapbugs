@@ -71,12 +71,17 @@ npm run launch:token
 - `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, balances, treasury state, and patron scans
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
 - `src/auth/thirdweb.ts`: email login and external wallet connectivity
+- `src/auth/localIdentity.ts`: browser-stored generated XMTP wallet identity helper
+- `src/xmtp/browser.ts`: browser XMTP SDK adapter for local/external wallet signers
+- `src/xmtp/bouncer.ts`: structured bouncer submission DM helper
 - `src/storage/thirdweb.ts`: default static-friendly IPFS storage provider
 - `src/storage/pinata.ts`: presigned-upload Pinata adapter
 - `src/attest/eas.ts`: EAS write adapter for verdicts and payout placeholders
 - `src/lib/reports.ts`: submission, loading, decryption, and review orchestration
 - `src/config/env.ts`: env parsing and defaults
 - `src/config/chains.ts`: chain isolation, currently Base-oriented
+- `scripts/bouncer-bot.py`: Python XMTP-to-Signal bouncer runner
+- `bots/cheapbugs_bouncer/`: bouncer command parsing, SQLite store, Signal CLI, and BUGZ payout adapters
 
 ## Project Conventions
 
@@ -107,13 +112,20 @@ npm run launch:token
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
 - The default public thirdweb client ID is committed in config; deployments may override it with `VITE_THIRDWEB_CLIENT_ID`.
 - Connected wallet UI now resolves ENS name/avatar from Ethereum mainnet and should prompt users to create an ENS name when none is found.
+- `VITE_BOUNCER_XMTP_ADDRESS` switches the submit route to XMTP DM submission. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
+- The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
+- The Python bouncer uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
+- Bouncer rewards are ERC20 transfers from `BUGZ_PAYOUT_PRIVATE_KEY`, not mints. Fund and cap that wallet intentionally before running without `BOUNCER_DRY_RUN=1`.
 
 ## Known Issues And Practical Tips
 
 - `npm run build` currently succeeds but emits large-chunk warnings because of the thirdweb dependency graph.
 - GitHub Actions run pages show top-level status and annotations publicly, but step logs require GitHub sign-in.
 - ENS avatar URLs are untrusted input. Only render sanitized HTTPS URLs or a local fallback badge.
+- Local XMTP wallet keys are browser-stored recovery material. Users must copy the recovery key before relying on that wallet for BUGZ rewards.
+- Signal reactions are social support signals only; they are not sybil-resistant votes.
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
+- Real XMTP submission requires `VITE_BOUNCER_XMTP_ADDRESS` to point at an already registered bouncer XMTP inbox.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
 - The contract launcher needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` for a real deployment.
 - The token launcher needs `BUGZ_DEPLOYER_PRIVATE_KEY` for a real deployment.

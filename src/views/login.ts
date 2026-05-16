@@ -17,6 +17,22 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
   title: "Login",
   html: `
     <section class="panel">
+      <div class="panel-title">[ xmtp identity ]</div>
+      <p class="lede">
+        Use a site-generated XMTP wallet for submissions and BUGZ rewards, or keep using an existing wallet below.
+      </p>
+      <div class="button-row">
+        ${
+          authController.hasLocalIdentity()
+            ? `<button id="use-local-identity" type="button" class="button">use stored xmtp wallet</button>
+               <button id="copy-local-recovery" type="button" class="button secondary">copy recovery key</button>
+               <button id="forget-local-identity" type="button" class="button secondary">forget stored wallet</button>`
+            : `<button id="create-local-identity" type="button" class="button">create local xmtp wallet</button>`
+        }
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-title">[ auth ]</div>
       ${
         authController.isConfigured()
@@ -86,8 +102,56 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
     </section>
   `,
   afterRender: (root, appContext) => {
+    const createLocalButton = root.querySelector<HTMLButtonElement>("#create-local-identity");
+    const useLocalButton = root.querySelector<HTMLButtonElement>("#use-local-identity");
+    const copyLocalButton = root.querySelector<HTMLButtonElement>("#copy-local-recovery");
+    const forgetLocalButton = root.querySelector<HTMLButtonElement>("#forget-local-identity");
     const codeForm = root.querySelector<HTMLFormElement>("#email-code-form");
     const loginForm = root.querySelector<HTMLFormElement>("#email-login-form");
+
+    createLocalButton?.addEventListener("click", async () => {
+      try {
+        const identity = await authController.createLocalIdentity();
+        appContext.notify("success", `Local XMTP wallet created: ${identity.address}.`);
+        appContext.router.navigate("/submit");
+      } catch (error) {
+        appContext.notify("error", error instanceof Error ? error.message : "Failed to create local XMTP wallet.");
+      }
+    });
+
+    useLocalButton?.addEventListener("click", async () => {
+      try {
+        const identity = await authController.useLocalIdentity();
+        appContext.notify("success", `Using local XMTP wallet ${identity.address}.`);
+        appContext.router.navigate("/submit");
+      } catch (error) {
+        appContext.notify("error", error instanceof Error ? error.message : "Failed to load local XMTP wallet.");
+      }
+    });
+
+    copyLocalButton?.addEventListener("click", async () => {
+      const identity = authController.getLocalIdentity();
+      const recovery = identity?.mnemonic || identity?.privateKey;
+      if (!recovery) {
+        appContext.notify("error", "No local XMTP recovery key is stored in this browser.");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(recovery);
+        appContext.notify("success", "Local XMTP recovery key copied.");
+      } catch {
+        appContext.notify("error", "Clipboard write failed.");
+      }
+    });
+
+    forgetLocalButton?.addEventListener("click", () => {
+      if (!window.confirm("Forget the stored XMTP wallet from this browser? Funds at that address will require the recovery key.")) {
+        return;
+      }
+      authController.forgetLocalIdentity();
+      appContext.notify("success", "Stored XMTP wallet removed from this browser.");
+      appContext.router.navigate("/login");
+    });
 
     codeForm?.addEventListener("submit", async (event) => {
       event.preventDefault();

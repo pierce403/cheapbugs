@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/fix-xmtp-wasm-worker.mjs",
+    "prebuild": "node scripts/fix-xmtp-wasm-worker.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
@@ -19,6 +21,7 @@
   "dependencies": {
     "@ethereum-attestation-service/eas-sdk": "^2.9.0",
     "@openzeppelin/contracts": "^5.6.1",
+    "@xmtp/browser-sdk": "^6.1.2",
     "ethers": "^6.16.0",
     "thirdweb": "^5.119.4",
     "viem": "^2.47.10"

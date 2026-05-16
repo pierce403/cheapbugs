@@ -35,6 +35,7 @@ export const env = {
   bugzTreasuryAddress: (import.meta.env.VITE_BUGZ_TREASURY_ADDRESS as `0x${string}` | undefined) || "",
   bugzTokenDeploymentBlock: optionalNumber(import.meta.env.VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK, 0),
   bugzBuyUrl: import.meta.env.VITE_BUGZ_BUY_URL || "",
+  bouncerXmtpAddress: (import.meta.env.VITE_BOUNCER_XMTP_ADDRESS as `0x${string}` | undefined) || "",
   routerMode: import.meta.env.VITE_ROUTER_MODE === "hash" ? "hash" : "history",
   storageProvider: import.meta.env.VITE_STORAGE_PROVIDER === "pinata" ? "pinata" : "thirdweb",
   pinataPresignEndpoint: import.meta.env.VITE_PINATA_PRESIGN_ENDPOINT || "",

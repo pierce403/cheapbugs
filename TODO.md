@@ -13,6 +13,8 @@
 - Replace the frontend reviewer allowlist with an onchain registry.
 - Add an optional EAS resolver contract for verdict policy enforcement.
 - Add reviewer key-sharing workflow improvements around encrypted dossier access.
+- Add public payout-record attestations for bouncer-paid BUGZ rewards.
+- Define a stronger support-scoring policy than raw Signal emoji reaction counts before treating rewards as adversarially robust.
 
 ## Storage
 
@@ -28,6 +30,5 @@
 
 ## Future Product Scope
 
-- Implement payout logic using the existing `PayoutRecord` type and schema placeholder.
 - Add patron leaderboard logic and receipts.
 - Add treasury, token gating, and governance modules as separate extensions.

@@ -4,7 +4,9 @@ CheapBugs is a static Vite + TypeScript app for Base-native bug intake and revie
 
 The current MVP stores public-safe report records onchain in `CheapBugsBugIndex` on Base, keeps the private dossier encrypted client-side before uploading it to IPFS, and uses EAS on Base for reviewer verdict attestations and payout-record placeholders.
 
-The repo also includes a standalone `BUGZ` ERC20 contract and Base launcher as a clean extension point for future token-gated or reward features, but the live app does not depend on that token yet.
+The repo now also includes an XMTP bouncer path for a private-review workflow: the static site can generate a local XMTP wallet, send submissions by XMTP DM to a configured bouncer wallet, and the Python bouncer can relay reports into a private Signal group, gate Signal access by BUGZ balance, count Signal reactions after seven days, and pay BUGZ rewards from a funded payout wallet.
+
+The repo also includes a standalone `BUGZ` ERC20 contract and Base launcher as a clean extension point for token-gated and reward features. The static app still runs without a deployed token unless the bouncer and token routes are configured.
 
 The frontend now reserves first-class routes for `index`, `submit`, `review`, `token`, and `patrons`. The token and patrons screens are safe to ship before BUGZ is deployed and fall back to placeholder mode until token config is present.
 
@@ -19,6 +21,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 - EAS review verdict attestations
 - public browsing, report pages, and reviewer queue
 - static deployment with no backend database
+- optional XMTP bouncer bot runtime for private Signal review and BUGZ rewards
 
 ## What Is Not In Scope Yet
 
@@ -26,7 +29,23 @@ For contract development, the repo now also includes a Foundry workspace with a 
 - treasury logic
 - Compound integration
 - DAO governance
-- payout execution
+- onchain treasury-managed payout execution
+
+## XMTP Bouncer Flow
+
+Set `VITE_BOUNCER_XMTP_ADDRESS` to switch the submit route from the legacy onchain/IPFS path to XMTP DM submission. Users can connect with an existing thirdweb wallet or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
+
+Bot setup:
+
+```bash
+python3 -m venv .venv-bouncer
+source .venv-bouncer/bin/activate
+pip install -r requirements-bouncer.txt
+python scripts/bouncer-bot.py init-db
+BOUNCER_DRY_RUN=1 python scripts/bouncer-bot.py run
+```
+
+The bot expects `xmtp==0.1.5`, `signal-cli`, a Signal account already joined/admin in the private group, `BUGZ_TOKEN_ADDRESS`, `BASE_RPC_URL`, `XMTP_WALLET_KEY`, and `BUGZ_PAYOUT_PRIVATE_KEY` for live payouts. `BOUNCER_DRY_RUN=1` prevents token transfers while still exercising the relay and scoring path.
 
 ## Quick Start
 
@@ -49,6 +68,7 @@ cp .env.example .env.local
 
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
 - optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TREASURY_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, and `VITE_BUGZ_BUY_URL` when the token dashboard should go live
+- optional `VITE_BOUNCER_XMTP_ADDRESS` when submissions should be XMTP DMs to the bouncer instead of legacy onchain/IPFS filings
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
 
@@ -111,6 +131,8 @@ The build defaults to the current public thirdweb client ID and can still be ove
 6. Reviewers publish verdicts as EAS onchain attestations on Base.
 7. The frontend reads the bug index contract for reports and the EAS GraphQL API for verdicts.
 
+With `VITE_BOUNCER_XMTP_ADDRESS` set, the submit route instead sends a structured XMTP DM to the bouncer wallet. The bouncer relays that message to Signal, records the Signal message timestamp in SQLite, counts active Signal emoji reactions after the configured review window, and transfers BUGZ to the reporter wallet.
+
 ## Environment Notes
 
 - The browser initializes thirdweb with `clientId` only.
@@ -118,6 +140,7 @@ The build defaults to the current public thirdweb client ID and can still be ove
 - Do not place Pinata API keys in browser code.
 - Pinata is supported only through a presigned upload endpoint.
 - ENS identity lookups use Ethereum mainnet RPC and can be overridden with `VITE_ENS_RPC_URL`.
+- Site-generated XMTP wallets are stored locally in the browser under `cheapbugs.localXmtpIdentity.v1`; users must keep the copied recovery key if that wallet will hold BUGZ.
 - Base-specific values are isolated in [src/config/chains.ts](/home/pierce/projects/cheapbugs/src/config/chains.ts) and [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts).
 
 ## Contract Launchers
@@ -152,6 +175,11 @@ The token launcher:
 - [src/contracts/bugIndex.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndex.ts)
 - [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
 - [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
+- [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
+- [src/xmtp/browser.ts](/home/pierce/projects/cheapbugs/src/xmtp/browser.ts)
+- [src/xmtp/bouncer.ts](/home/pierce/projects/cheapbugs/src/xmtp/bouncer.ts)
+- [scripts/bouncer-bot.py](/home/pierce/projects/cheapbugs/scripts/bouncer-bot.py)
+- [bots/cheapbugs_bouncer/](/home/pierce/projects/cheapbugs/bots/cheapbugs_bouncer)
 - [src/storage/thirdweb.ts](/home/pierce/projects/cheapbugs/src/storage/thirdweb.ts)
 - [src/storage/pinata.ts](/home/pierce/projects/cheapbugs/src/storage/pinata.ts)
 - [src/attest/eas.ts](/home/pierce/projects/cheapbugs/src/attest/eas.ts)

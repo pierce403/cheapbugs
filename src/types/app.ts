@@ -13,7 +13,7 @@ export type SessionState = {
   walletId: string | null;
   address: `0x${string}` | null;
   email: string | null;
-  mode: "email" | "external" | null;
+  mode: "email" | "external" | "local" | null;
   ensName: string | null;
   ensAvatarUrl: string | null;
   ensLookupStatus: "idle" | "loading" | "resolved" | "missing" | "error";
