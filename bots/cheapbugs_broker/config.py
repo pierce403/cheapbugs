@@ -56,6 +56,7 @@ def _env_address_set_any(names: tuple[str, ...]) -> frozenset[str]:
 @dataclass(frozen=True)
 class BrokerConfig:
     database_path: Path
+    log_path: Path
     xmtp_env: str
     xmtp_db_path: str | None
     broker_key: str
@@ -83,6 +84,7 @@ class BrokerConfig:
         xmtp_db_path = _env_first("BROKER_XMTP_DB_PATH") or None
         return cls(
             database_path=Path(_env_first("BROKER_DB_PATH", default=".broker/broker.sqlite")),
+            log_path=Path(_env_first("BROKER_LOG_PATH", default="broker.log")),
             xmtp_env=_env_first("BROKER_XMTP_ENV", default="production"),
             xmtp_db_path=xmtp_db_path,
             broker_key=_env_first("BROKER_KEY"),

@@ -17,6 +17,8 @@ out
 broadcast
 .bouncer
 .codex
+broker.log
+*.log
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

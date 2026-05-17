@@ -11,6 +11,7 @@ from .service import BrokerBot
 
 
 async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
+    logger = logging.getLogger(__name__)
     try:
         from xmtp.types import ClientOptions, LogLevel
         from xmtp_agent import Agent
@@ -24,11 +25,18 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
         logging_level=LogLevel.WARN,
     )
     os.environ["XMTP_WALLET_KEY"] = config.broker_key
+    logger.info("creating xmtp agent env=%s db_path=%s", config.xmtp_env, config.xmtp_db_path or "default")
     agent = await Agent.create_from_env(options)
 
     @agent.on("text")
     async def on_text(ctx) -> None:
         sender_address = await ctx.get_sender_address()
+        logger.info(
+            "xmtp text event conversation_id=%s message_id=%s sender=%s",
+            ctx.message.conversation_id.hex(),
+            ctx.message.id.hex(),
+            sender_address or "unknown",
+        )
         await bot.handle_xmtp_text(
             text=str(ctx.message.content),
             sender_address=sender_address,
@@ -37,12 +45,13 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
             reply=ctx.send_text_reply,
         )
 
-    logging.getLogger(__name__).info("Starting XMTP broker agent on %s.", config.xmtp_env)
+    logger.info("starting xmtp broker agent env=%s", config.xmtp_env)
     await agent.start()
     if config.signal_enabled:
+        logger.info("starting signal poll and settlement loops")
         await asyncio.gather(bot.poll_signal_forever(), bot.settle_forever())
     else:
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "Signal is not configured; broker will validate XMTP submissions without Signal relay or reward settlement."
         )
         await asyncio.Event().wait()

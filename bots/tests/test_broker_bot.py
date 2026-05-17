@@ -196,6 +196,37 @@ class StoreTest(unittest.TestCase):
 
 
 class BrokerServiceTest(unittest.TestCase):
+    def test_submission_logs_broker_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=2 * 10**18),
+            )
+
+            async def reply(_message: str) -> None:
+                return None
+
+            with self.assertLogs("cheapbugs_broker.service", level="INFO") as logs:
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="logged-message",
+                        reply=reply,
+                    )
+                )
+
+        output = "\n".join(logs.output)
+        self.assertIn("xmtp message received", output)
+        self.assertIn("submission command parsed", output)
+        self.assertIn("submission recorded", output)
+        self.assertNotIn("Private details go here.", output)
+
     def test_submission_replies_with_validation_stages_before_relay(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")
@@ -357,6 +388,7 @@ def minimal_submission_payload(**overrides: object) -> dict[str, object]:
 def test_config(path: Path, signal_enabled: bool = True) -> BrokerConfig:
     return BrokerConfig(
         database_path=path,
+        log_path=Path("broker.log"),
         xmtp_env="production",
         xmtp_db_path=None,
         broker_key="0xabc",

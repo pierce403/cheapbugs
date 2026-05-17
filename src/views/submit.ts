@@ -16,11 +16,19 @@ type SignatureWaitState = {
   open: boolean;
   detail: string;
 };
+type ProcessingState = {
+  open: boolean;
+  detail: string;
+};
 
 let persistedXmtpStatus: XmtpStatus | null = null;
 let persistedSignatureWait: SignatureWaitState = {
   open: false,
   detail: "Approve the XMTP registration signature in your wallet app or browser extension. This does not send a transaction."
+};
+let persistedProcessing: ProcessingState = {
+  open: false,
+  detail: "Preparing broker submission."
 };
 let submitInFlight = false;
 
@@ -106,6 +114,28 @@ const signatureWaitModalMarkup = (state = persistedSignatureWait): string => `
   </div>
 `;
 
+const processingModalMarkup = (state = persistedProcessing): string => `
+  <div
+    id="xmtp-processing-modal"
+    class="processing-modal-backdrop${state.open ? " is-open" : ""}"
+    role="dialog"
+    aria-modal="true"
+    aria-label="processing submission"
+    aria-live="polite"
+    data-testid="xmtp-processing-modal"
+    ${state.open ? "" : "hidden"}
+  >
+    <section class="processing-modal panel" aria-busy="true">
+      <div class="signature-spinner" aria-hidden="true"></div>
+      <div class="signature-modal-copy">
+        <div class="panel-title">[ broker submission ]</div>
+        <strong>processing submission</strong>
+        <p id="xmtp-processing-detail">${escapeHtml(state.detail)}</p>
+      </div>
+    </section>
+  </div>
+`;
+
 export const renderSubmitView = async (context: AppViewContext): Promise<ViewResult> => ({
   title: "Submit",
   html: `
@@ -133,6 +163,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         submit to broker
       </button>
     </form>
+    ${processingModalMarkup()}
     ${signatureWaitModalMarkup()}
   `,
   afterRender: (root, appContext) => {
@@ -147,6 +178,8 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
     const statusDetail = root.querySelector<HTMLElement>("#xmtp-status-detail");
     const signatureModal = root.querySelector<HTMLElement>("#xmtp-signature-modal");
     const signatureDetail = root.querySelector<HTMLElement>("#xmtp-signature-detail");
+    const processingModal = root.querySelector<HTMLElement>("#xmtp-processing-modal");
+    const processingDetail = root.querySelector<HTMLElement>("#xmtp-processing-detail");
 
     const setSignatureWait = (open: boolean, detail = signatureWaitDetail) => {
       persistedSignatureWait = { open, detail };
@@ -184,6 +217,18 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       }
     };
 
+    const setProcessing = (open: boolean, detail = "Preparing broker submission.") => {
+      persistedProcessing = { open, detail };
+      processingModal?.toggleAttribute("hidden", !open);
+      processingModal?.classList.toggle("is-open", open);
+      if (processingDetail) {
+        processingDetail.textContent = detail;
+      }
+      if (!processingModal || !document.body.contains(processingModal)) {
+        void appContext.rerender();
+      }
+    };
+
     const handleXmtpProgress = (message: string) => {
       if (isSignatureWaitProgress(message)) {
         setSignatureWait(true);
@@ -191,6 +236,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         setSignatureWait(false);
       }
 
+      setProcessing(true, message);
       setStatus("working", "xmtp: sending", message);
       appLog.info("submit: broker XMTP progress", { message });
     };
@@ -220,6 +266,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       submitInFlight = true;
       submitButton?.setAttribute("disabled", "true");
       submitButton?.setAttribute("aria-busy", "true");
+      setProcessing(true, "Preparing broker submission.");
       try {
         const input = {
           title: String(formData.get("title") || ""),
@@ -237,6 +284,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
 
         const xmtpIdentity = authController.getXmtpIdentity();
         if (!xmtpIdentity) {
+          setProcessing(false);
           setStatus("blocked", "xmtp: signer unavailable", "Connect with a local XMTP wallet or a wallet that can sign XMTP messages.");
           appLog.warn("submit: broker submit blocked without XMTP signer");
           return;
@@ -254,6 +302,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         appLog.error("submit: broker submission failed", error);
       } finally {
         setSignatureWait(false);
+        setProcessing(false);
         submitInFlight = false;
         submitButton?.removeAttribute("disabled");
         submitButton?.removeAttribute("aria-busy");

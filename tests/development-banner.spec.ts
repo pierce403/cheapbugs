@@ -96,6 +96,7 @@ test("submit route shows a wallet-device wait modal during XMTP signature reques
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("waiting for signature from wallet device");
   await expect(dialog).toContainText("Approve the XMTP registration signature");
+  await expect(page.getByRole("dialog", { name: "processing submission" })).toBeVisible();
 
   await page.locator("[data-view-root]").evaluate((root) => {
     root.dispatchEvent(
@@ -106,4 +107,23 @@ test("submit route shows a wallet-device wait modal during XMTP signature reques
   });
 
   await expect(dialog).toBeHidden();
+});
+
+test("submit route shows a processing modal during broker submission progress", async ({ page }) => {
+  await page.goto("/submit");
+
+  const dialog = page.getByRole("dialog", { name: "processing submission" });
+  await expect(dialog).toBeHidden();
+
+  await page.locator("[data-view-root]").evaluate((root) => {
+    root.dispatchEvent(
+      new CustomEvent("cheapbugs:xmtp-progress", {
+        detail: { message: "opening broker DM" }
+      })
+    );
+  });
+
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("processing submission");
+  await expect(dialog).toContainText("opening broker DM");
 });

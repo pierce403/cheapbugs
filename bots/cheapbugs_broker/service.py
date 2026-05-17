@@ -43,24 +43,56 @@ class BrokerBot:
         reply: ReplyFn,
     ) -> None:
         if self.store.message_seen(message_id):
+            self.logger.info("xmtp message ignored duplicate message_id=%s", message_id)
             return
+        self.logger.info(
+            "xmtp message received message_id=%s conversation_id=%s sender=%s chars=%s",
+            message_id,
+            conversation_id,
+            sender_address or "unknown",
+            len(text),
+        )
         try:
             command = parse_command(text, sender_address)
         except CommandError as exc:
-            await reply(f"{exc}\n\n{command_help()}")
+            self.logger.warning("xmtp message rejected message_id=%s reason=%s", message_id, exc)
+            await self._reply(reply, message_id, "invalid", f"{exc}\n\n{command_help()}")
             self.store.mark_message_processed(message_id, "invalid")
             return
 
         if isinstance(command, AccessCommand):
+            self.logger.info(
+                "access command parsed message_id=%s wallet=%s signal=%s",
+                message_id,
+                command.wallet_address,
+                command.signal_recipient,
+            )
             await self._handle_access(command, message_id, reply)
             return
+        self.logger.info(
+            "submission command parsed message_id=%s reporter=%s title=%r target=%s:%s details_chars=%s",
+            message_id,
+            command.reporter_address,
+            command.title,
+            command.target_kind,
+            command.target_ref,
+            len(command.details or command.body),
+        )
         await self._handle_submission(command, conversation_id, message_id, reply)
 
     async def _handle_access(self, command: AccessCommand, message_id: str, reply: ReplyFn) -> None:
         if self.signal is None:
-            await reply(
+            self.logger.info(
+                "access unavailable signal_disabled message_id=%s wallet=%s",
+                message_id,
+                command.wallet_address,
+            )
+            await self._reply(
+                reply,
+                message_id,
+                "access_signal_disabled",
                 "Access request unavailable: Signal is not configured. "
-                "Set BROKER_SIGNAL_CLI, BROKER_SIGNAL_ACCOUNT, and BROKER_SIGNAL_GROUP_ID on the broker."
+                "Set BROKER_SIGNAL_CLI, BROKER_SIGNAL_ACCOUNT, and BROKER_SIGNAL_GROUP_ID on the broker.",
             )
             self.store.mark_message_processed(message_id, "access_signal_disabled")
             return
@@ -68,16 +100,32 @@ class BrokerBot:
         min_balance = tokens_to_wei(self.config.access_min_balance_tokens, self.token.decimals())
         balance = self.token.balance_of(command.wallet_address)
         if balance < min_balance:
-            await reply(
+            self.logger.info(
+                "access denied message_id=%s wallet=%s balance_wei=%s min_wei=%s",
+                message_id,
+                command.wallet_address,
+                balance,
+                min_balance,
+            )
+            await self._reply(
+                reply,
+                message_id,
+                "access_denied",
                 "Access request denied: wallet balance is below "
-                f"{self.config.access_min_balance_tokens} BUGZ."
+                f"{self.config.access_min_balance_tokens} BUGZ.",
             )
             self.store.mark_message_processed(message_id, "access_denied")
             return
 
         self.signal.add_group_member(command.signal_recipient)
         self.store.mark_message_processed(message_id, "access_granted")
-        await reply("Access request approved. I sent the Signal group invite/update.")
+        self.logger.info("access granted message_id=%s wallet=%s", message_id, command.wallet_address)
+        await self._reply(
+            reply,
+            message_id,
+            "access_granted",
+            "Access request approved. I sent the Signal group invite/update.",
+        )
 
     async def _handle_submission(
         self,
@@ -86,29 +134,51 @@ class BrokerBot:
         message_id: str,
         reply: ReplyFn,
     ) -> None:
-        await reply(f"Submission JSON is valid for {SUBMISSION_SCHEMA}.")
-        await reply("Submission fields are present and well formed.")
+        await self._reply(
+            reply,
+            message_id,
+            "submission_json_valid",
+            f"Submission JSON is valid for {SUBMISSION_SCHEMA}.",
+        )
+        await self._reply(reply, message_id, "submission_fields_valid", "Submission fields are present and well formed.")
 
         try:
             validate_submission_target(command)
         except CommandError as exc:
-            await reply(f"Submission target is invalid: {exc}")
+            self.logger.info("submission target invalid message_id=%s reason=%s", message_id, exc)
+            await self._reply(reply, message_id, "target_invalid", f"Submission target is invalid: {exc}")
             self.store.mark_message_processed(message_id, "target_invalid")
             return
         if command.target_ref == "broker triage":
-            await reply("Submission target is valid for broker triage.")
+            await self._reply(reply, message_id, "target_valid", "Submission target is valid for broker triage.")
         else:
-            await reply(f"Submission target is valid: {command.target_kind} {command.target_ref}.")
+            await self._reply(
+                reply,
+                message_id,
+                "target_valid",
+                f"Submission target is valid: {command.target_kind} {command.target_ref}.",
+            )
 
         try:
             credential_summary = self._validate_submission_credentials(command)
         except CommandError as exc:
-            await reply(f"Submission credentials are invalid: {exc}")
+            self.logger.info(
+                "submission credentials invalid message_id=%s reporter=%s reason=%s",
+                message_id,
+                command.reporter_address,
+                exc,
+            )
+            await self._reply(reply, message_id, "credentials_invalid", f"Submission credentials are invalid: {exc}")
             self.store.mark_message_processed(message_id, "credentials_invalid")
             return
-        await reply(f"Submission credentials are valid: {credential_summary}.")
+        await self._reply(reply, message_id, "credentials_valid", f"Submission credentials are valid: {credential_summary}.")
 
         if self.signal is None:
+            self.logger.info(
+                "submission accepted without signal message_id=%s reporter=%s",
+                message_id,
+                command.reporter_address,
+            )
             record = self.store.create_submission(
                 command=command,
                 xmtp_conversation_id=conversation_id,
@@ -119,13 +189,22 @@ class BrokerBot:
                 status="accepted",
             )
             self.store.mark_message_processed(message_id, "submission_signal_disabled")
-            await reply(
+            self.logger.info(
+                "submission recorded message_id=%s broker_id=%s status=submission_signal_disabled",
+                message_id,
+                record.id,
+            )
+            await self._reply(
+                reply,
+                message_id,
+                "submission_signal_disabled",
                 "Signal is not configured, so this submission was validated and recorded locally "
-                f"but not relayed to a reviewer channel. Broker id: {record.id}."
+                f"but not relayed to a reviewer channel. Broker id: {record.id}.",
             )
             return
 
         signal_message = format_signal_submission(command)
+        self.logger.info("submission relay to signal message_id=%s reporter=%s", message_id, command.reporter_address)
         sent = self.signal.send_group_message(signal_message)
         record = self.store.create_submission(
             command=command,
@@ -136,19 +215,39 @@ class BrokerBot:
             review_window_seconds=self.config.review_window_seconds,
         )
         self.store.mark_message_processed(message_id, "submission")
-        await reply(
+        self.logger.info(
+            "submission relayed message_id=%s broker_id=%s signal_timestamp=%s",
+            message_id,
+            record.id,
+            sent.sent_timestamp,
+        )
+        await self._reply(
+            reply,
+            message_id,
+            "submission",
             "Submission relayed to the private Signal channel. "
             f"Broker id: {record.id}. Reward window closes after "
-            f"{self.config.review_window_seconds // 86400} days."
+            f"{self.config.review_window_seconds // 86400} days.",
         )
+
+    async def _reply(self, reply: ReplyFn, message_id: str, stage: str, message: str) -> None:
+        self.logger.info("xmtp reply queued message_id=%s stage=%s chars=%s", message_id, stage, len(message))
+        await reply(message)
 
     def _validate_submission_credentials(self, command: SubmissionCommand) -> str:
         if command.reporter_address.lower() in self.config.reputation_blocklist:
+            self.logger.info("reputation blocked reporter=%s", command.reporter_address)
             raise CommandError("reporter address is blocked by the local reputation list.")
 
         decimals = self.token.decimals()
         min_balance = tokens_to_wei(self.config.submission_min_balance_tokens, decimals)
         balance = self.token.balance_of(command.reporter_address)
+        self.logger.info(
+            "submission credential check reporter=%s balance_wei=%s min_wei=%s",
+            command.reporter_address,
+            balance,
+            min_balance,
+        )
         if balance < min_balance:
             raise CommandError(
                 "reporter BUGZ balance is below "
@@ -221,10 +320,6 @@ class BrokerBot:
             except Exception:
                 self.logger.exception("Settlement sweep failed.")
             await asyncio.sleep(max(self.config.poll_seconds, 60))
-
-
-BouncerBot = BrokerBot
-
 
 def format_signal_submission(command: SubmissionCommand) -> str:
     title = _compact(command.title, 140)

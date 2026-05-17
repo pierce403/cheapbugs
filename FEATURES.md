@@ -112,6 +112,7 @@ cheapbugs/
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, title, public summary, private details, and client metadata.
   - The frontend does not yet attach a reporter signature over the submission payload; broker-relayed onchain attribution must stay disabled until the reporter-signed relay feature exists.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
+  - The submit route shows a processing-submission modal while broker XMTP submission work is in progress.
   - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve XMTP registration.
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
@@ -153,6 +154,7 @@ cheapbugs/
   - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`.
   - `run-broker.sh` loads `.env`, validates mandatory `BROKER_KEY`, prepares `.venv-broker`, initializes the SQLite store, and runs the broker.
   - Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base BUGZ token and can be overridden for local testing.
+  - Broker runtime logs are timestamped to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`; logs record message metadata and broker actions without dumping private detail bodies.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; disable it only when the broker wallet is intentionally funded for live payouts.

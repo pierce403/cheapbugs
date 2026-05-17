@@ -141,12 +141,14 @@ npm run launch:token
 - Browser-to-broker submissions are not yet reporter-signed. Do not let the broker create user-attributed onchain bug-index records until `CheapBugsBugIndex` has a reporter-signed broker-relay path that verifies EIP-712/ECDSA and prevents replay.
 - The broker generates and holds the review key for XMTP submissions; do not expose a frontend review access key on the broker path.
 - The submit route has an inline `#xmtp-status` indicator for XMTP wallet readiness, registration-signature progress, success, and failure. During external-wallet XMTP signature waits it also shows `#xmtp-signature-modal` so WalletConnect/mobile approvals are visible. Keep `submit to broker` clickable while disconnected so it can show the wallet-required status instead of doing nothing.
+- During broker submission progress, the submit route shows `#xmtp-processing-modal` with the latest XMTP progress message.
 - Browser XMTP registration can require a wallet signature before any broker message is sent. `src/xmtp/browser.ts` caches identical signature requests, skips redundant registration when the SDK reports the installation is already registered, and checks broker inboxes with both stripped and `0x` Ethereum identifier forms.
 - The Python parser rejects text `!submit` messages, missing core fields, unexpected fields, and invalid provided target references.
 - The broker replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
 - The Python broker uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
 - Use `./run-broker.sh` for local broker runtime startup. It expects a shell-compatible `.env`, defaults `BROKER_DRY_RUN=1`, requires only `BROKER_KEY` for the no-Signal path, and creates `.venv-broker`/`.broker`, which are gitignored. Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base token. If `BROKER_SIGNAL_CLI` is unset, Signal relay/reaction/reward support is disabled with a warning.
+- Broker runtime logs go to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`, with timestamps. Keep broker logs focused on event metadata and broker actions; do not dump private submission details into logs.
 - Broker rewards are ERC20 transfers from the wallet behind `BROKER_KEY`, not mints. `BROKER_KEY` is also the XMTP broker identity, so fund and cap that wallet intentionally before running without `BROKER_DRY_RUN=1`.
 
 ## Known Issues And Practical Tips

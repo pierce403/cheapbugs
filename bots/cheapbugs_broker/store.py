@@ -255,10 +255,6 @@ class BrokerStore:
                 (support_score, error, now, record_id),
             )
 
-
-BouncerStore = BrokerStore
-
-
 def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
     return SubmissionRecord(
         id=str(row["id"]),

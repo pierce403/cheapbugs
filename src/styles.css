@@ -266,11 +266,26 @@ button:disabled,
   background: rgba(0, 0, 0, 0.76);
 }
 
+.processing-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.7);
+}
+
 .signature-modal-backdrop[hidden] {
   display: none;
 }
 
-.signature-modal {
+.processing-modal-backdrop[hidden] {
+  display: none;
+}
+
+.signature-modal,
+.processing-modal {
   width: min(420px, 100%);
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);

@@ -52,6 +52,7 @@ is_falsey() {
 export BROKER_XMTP_ENV="${BROKER_XMTP_ENV:-production}"
 export BROKER_XMTP_DB_PATH="${BROKER_XMTP_DB_PATH:-.broker/xmtp.db3}"
 export BROKER_DB_PATH="${BROKER_DB_PATH:-.broker/broker.sqlite}"
+export BROKER_LOG_PATH="${BROKER_LOG_PATH:-broker.log}"
 export BROKER_DRY_RUN="${BROKER_DRY_RUN:-1}"
 export BROKER_SIGNAL_CLI="${BROKER_SIGNAL_CLI:-}"
 export BASE_RPC_URL="${BASE_RPC_URL:-https://mainnet.base.org}"
@@ -138,7 +139,7 @@ if [[ ! -f "$install_stamp" || requirements-broker.txt -nt "$install_stamp" ]]; 
   touch "$install_stamp"
 fi
 
-mkdir -p "$(dirname "$BROKER_DB_PATH")" "$(dirname "$BROKER_XMTP_DB_PATH")"
+mkdir -p "$(dirname "$BROKER_DB_PATH")" "$(dirname "$BROKER_XMTP_DB_PATH")" "$(dirname "$BROKER_LOG_PATH")"
 
 if [[ "$COMMAND" == "run" ]]; then
   python scripts/broker-bot.py init-db
