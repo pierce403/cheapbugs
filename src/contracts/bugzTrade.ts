@@ -1,9 +1,7 @@
 import {
   AbiCoder,
-  BrowserProvider,
   Contract,
   JsonRpcProvider,
-  Wallet,
   parseEther,
   parseUnits
 } from "ethers";
@@ -127,18 +125,7 @@ const connectedAddress = (): HexString => {
 };
 
 const getWriteSigner = async () => {
-  const session = authController.getSession();
-  const localIdentity = authController.getLocalIdentity();
-  if (session.mode === "local" && localIdentity && session.address === localIdentity.address) {
-    return new Wallet(localIdentity.privateKey, readProvider);
-  }
-
-  const activeProvider = authController.getActiveProvider();
-  if (!activeProvider || !session.address) {
-    throw new Error("Connect with a wallet that can sign Base transactions before trading BUGZ.");
-  }
-
-  return new BrowserProvider(activeProvider).getSigner(session.address);
+  return authController.getSigner();
 };
 
 const addressAsBigInt = (value: string): bigint => BigInt(value.toLowerCase());

@@ -1,4 +1,23 @@
+import { defineChain } from "thirdweb/chains";
+
 import { env } from "./env";
+
+export const appChain = defineChain({
+  id: env.chainId,
+  name: env.chainName,
+  nativeCurrency: {
+    decimals: 18,
+    name: env.nativeSymbol,
+    symbol: env.nativeSymbol
+  },
+  rpc: env.chainRpcUrl,
+  blockExplorers: [
+    {
+      name: `${env.chainName} Explorer`,
+      url: env.blockExplorerUrl
+    }
+  ]
+});
 
 export const chainConfig = {
   id: env.chainId,

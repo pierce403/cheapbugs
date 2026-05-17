@@ -38,10 +38,10 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
       ${
         authController.isConfigured()
           ? ""
-          : `<p class="warning-copy">No browser wallet was detected and VITE_WALLETCONNECT_PROJECT_ID is unset, so WalletConnect QR login is disabled.</p>`
+          : `<p class="warning-copy">VITE_THIRDWEB_CLIENT_ID is unset, so Thirdweb wallet login is disabled.</p>`
       }
       <p class="lede">
-        Sign in with the wallet built into this browser. If this browser has no web3 provider, use WalletConnect QR.
+        Sign in through Thirdweb with the wallet built into this browser. If this browser has no web3 provider, use WalletConnect QR.
       </p>
       <div class="button-row">
         <button id="connect-primary-wallet" type="button" class="button" ${authController.isConfigured() ? "" : "disabled"}>sign in with wallet</button>
@@ -51,7 +51,7 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
     <section class="panel">
       <div class="panel-title">[ external wallets ]</div>
       <div class="button-row">
-        ${externalButtons() || `<span class="muted-copy">No browser wallet detected. Configure VITE_WALLETCONNECT_PROJECT_ID to enable QR login.</span>`}
+        ${externalButtons() || `<span class="muted-copy">Configure VITE_THIRDWEB_CLIENT_ID to enable Thirdweb wallet login.</span>`}
       </div>
     </section>
 

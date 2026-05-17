@@ -70,9 +70,9 @@ System boundaries:
 
 Name: CheapBugs static web app
 
-Description: A narrow-layout, milw0rm-inspired frontend for login, report submission, public browsing, report review, live BUGZ balance/trading controls, a patrons leaderboard, and local decryption of private dossiers.
+Description: A narrow-layout, milw0rm-inspired frontend for Thirdweb wallet login, report submission, public browsing, report review, live BUGZ balance/trading controls, a patrons leaderboard, and local decryption of private dossiers.
 
-Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, ethers, WalletConnect Ethereum Provider, viem, optional `@xmtp/browser-sdk`
+Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, ethers, Thirdweb, viem, optional `@xmtp/browser-sdk`
 
 Deployment: Static assets from `dist/`, suitable for Netlify, Cloudflare Pages, Vercel static hosting, GitHub Pages, or IPFS-aware static hosting
 
@@ -188,16 +188,16 @@ Key Records:
 
 Wallet Auth:
 
-- Purpose: Connect injected browser wallets, prompt a local SIWE-style signature for external-wallet login, fall back to WalletConnect QR when browser web3 is unavailable or fails, restore the last authorized wallet session after refresh, and expose ethers signers to contract adapters
-- Integration Method: [src/auth/wallet.ts](/home/pierce/projects/cheapbugs/src/auth/wallet.ts) with ethers `BrowserProvider`, direct `@walletconnect/ethereum-provider`, and site-local XMTP identities from [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
-- Persistence: Connector choice lives in `cheapbugs.walletSession.v1`; external-wallet SIWE message/signature proofs live in `cheapbugs.siweSession.v1` and are reused on refresh when address, connector, Base chain id, domain, and origin still match.
-- Configuration: `VITE_WALLETCONNECT_PROJECT_ID` enables WalletConnect QR. Injected browser wallets work without a project ID.
-- Debugging: [src/lib/logger.ts](/home/pierce/projects/cheapbugs/src/lib/logger.ts) emits namespaced console breadcrumbs for auth clicks, provider choices, WalletConnect fallback, SIWE prompts, session restore, and failures.
+- Purpose: Connect Thirdweb installed wallets, prompt a local SIWE-style signature for external-wallet login, fall back to Thirdweb WalletConnect QR when browser web3 is unavailable or fails, restore authorized wallet sessions after refresh, and expose ethers signers to contract adapters
+- Integration Method: [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts) with Thirdweb wallets, `thirdweb/adapters/ethers6`, and site-local XMTP identities from [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
+- Persistence: Thirdweb manages external wallet auto-connect state; external-wallet SIWE message/signature proofs live in `cheapbugs.siweSession.v1` and are reused on refresh when address, wallet id, Base chain id, domain, and origin still match.
+- Configuration: `VITE_THIRDWEB_CLIENT_ID` overrides the committed public default Thirdweb client id. WalletConnect QR is handled through Thirdweb.
+- Debugging: [src/lib/logger.ts](/home/pierce/projects/cheapbugs/src/lib/logger.ts) emits namespaced console breadcrumbs for auth clicks, Thirdweb provider choices, WalletConnect fallback, SIWE prompts, session restore, and failures.
 
 ENS:
 
 - Purpose: Resolve connected wallet ENS name and avatar for the session UI
-- Integration Method: Browser-side Ethereum mainnet RPC reads in [src/lib/ens.ts](/home/pierce/projects/cheapbugs/src/lib/ens.ts), surfaced through [src/auth/wallet.ts](/home/pierce/projects/cheapbugs/src/auth/wallet.ts)
+- Integration Method: Browser-side Ethereum mainnet RPC reads in [src/lib/ens.ts](/home/pierce/projects/cheapbugs/src/lib/ens.ts), surfaced through [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
 - Configuration: defaults to a public Ethereum mainnet RPC and allows `VITE_ENS_RPC_URL` overrides
 
 EAS:
@@ -255,13 +255,13 @@ Key Services Used:
 - GitHub Pages
 - optional worker host for `scripts/bouncer-bot.py`
 - Base RPC endpoint
-- WalletConnect relay infrastructure when QR login is enabled
+- Thirdweb wallet infrastructure, including WalletConnect QR
 - EAS contracts and indexing
 - IPFS storage/gateway infrastructure
 - XMTP network
 - Signal account and group reachable by `signal-cli`
 
-CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`, with GitHub Pages configured for workflow-based publishing, a root `/` asset base for the `cheapbugs.net` custom domain, hash routing, and optional `VITE_WALLETCONNECT_PROJECT_ID`
+CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`, with GitHub Pages configured for workflow-based publishing, a root `/` asset base for the `cheapbugs.net` custom domain, hash routing, and optional `VITE_THIRDWEB_CLIENT_ID`
 
 Monitoring & Logging: Browser console and wallet/provider errors only in the current MVP
 
@@ -269,8 +269,8 @@ Monitoring & Logging: Browser console and wallet/provider errors only in the cur
 
 Authentication:
 
-- injected browser wallet connect
-- WalletConnect QR connect when `VITE_WALLETCONNECT_PROJECT_ID` is configured
+- Thirdweb installed-wallet connect
+- Thirdweb WalletConnect QR connect
 - site-generated local XMTP wallet using a browser-stored EVM private key
 
 Authorization:
@@ -279,7 +279,7 @@ Authorization:
 - report submission requires a connected wallet on Base
 - bouncer submissions require an XMTP-capable identity
 - private Signal access requests require the requested wallet to hold at least `BOUNCER_ACCESS_MIN_BUGZ`
-- BUGZ buy/sell actions require a connected transaction signer, either an injected wallet, WalletConnect wallet, or the browser-stored local wallet with Base ETH for gas
+- BUGZ buy/sell actions require a connected transaction signer, either a Thirdweb external wallet or the browser-stored local wallet with Base ETH for gas
 
 Data Encryption:
 
@@ -304,7 +304,7 @@ Local Setup Instructions:
 - sync the Foundry library submodule with `git submodule update --init --recursive`
 - install `forge` if you want the Solidity-native build, test, or launch path
 - copy `.env.example` to `.env.local`
-- optionally set `VITE_WALLETCONNECT_PROJECT_ID` for WalletConnect QR login or override `VITE_ENS_RPC_URL`
+- optionally set `VITE_THIRDWEB_CLIENT_ID` to override the default Thirdweb client id or override `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
 - BUGZ defaults to the Base Clanker token at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`
 - optionally configure the BUGZ deployment block, market URL, and `VITE_BUGZ_V4_*` pool overrides when `/patrons` scans or a different Clanker market should become live. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional dashboard stats.

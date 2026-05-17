@@ -14,7 +14,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 ## What Is In Scope
 
-- injected browser wallet login with WalletConnect QR fallback
+- Thirdweb wallet login with injected browser wallet and WalletConnect QR fallback
 - Base-only onchain report index contract
 - encrypted private report uploads to IPFS
 - EAS review verdict attestations
@@ -71,7 +71,7 @@ cp .env.example .env.local
 
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
 - optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_BUGZ_MARKET_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional treasury display rows.
-- `VITE_WALLETCONNECT_PROJECT_ID` when browsers without injected web3 should use WalletConnect QR login
+- optional `VITE_THIRDWEB_CLIENT_ID` override for Thirdweb wallet login. A public default client id is committed for static deploys.
 - optional `VITE_BOUNCER_XMTP_ADDRESS` when submissions should be XMTP DMs to the bouncer instead of legacy onchain/IPFS filings
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
@@ -121,11 +121,11 @@ Set these repository variables before relying on the Pages deploy:
 
 The workflow lives at [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml).
 It builds with `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain and `hash` routing so GitHub Pages can serve SPA routes without a custom origin server.
-Set `VITE_WALLETCONNECT_PROJECT_ID` as a repository variable if WalletConnect QR should work on the hosted site.
+Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site should use a different Thirdweb client id.
 
 ## How Reports Work
 
-1. A reporter connects an injected browser wallet, scans a WalletConnect QR code, or uses a site-local XMTP wallet.
+1. A reporter connects through Thirdweb with an injected browser wallet, scans a WalletConnect QR code, or uses a site-local XMTP wallet.
 2. The browser builds `SubmissionPrivate` and `SubmissionPublic`.
 3. `SubmissionPrivate` is encrypted locally in the browser.
 4. The encrypted private dossier is uploaded to IPFS through the configured storage provider.
@@ -137,8 +137,8 @@ With `VITE_BOUNCER_XMTP_ADDRESS` set, the submit route instead sends a structure
 
 ## Environment Notes
 
-- Wallet sessions are remembered in browser local storage and restored after refresh when the wallet still authorizes the site.
-- WalletConnect QR login requires `VITE_WALLETCONNECT_PROJECT_ID`.
+- Thirdweb wallet sessions are remembered in browser local storage and restored after refresh when the wallet still authorizes the site.
+- WalletConnect QR login is handled by Thirdweb and uses `VITE_THIRDWEB_CLIENT_ID`; the committed default can be overridden per deployment.
 - Do not place Pinata API keys in browser code.
 - Pinata is supported only through a presigned upload endpoint.
 - Without a Pinata presign endpoint, the default IPFS gateway provider can read existing IPFS JSON but cannot upload new legacy onchain dossiers.
@@ -179,7 +179,7 @@ The token launcher:
 - [test/CheapBugsBugIndex.t.sol](/home/pierce/projects/cheapbugs/test/CheapBugsBugIndex.t.sol)
 - [src/contracts/bugIndex.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndex.ts)
 - [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
-- [src/auth/wallet.ts](/home/pierce/projects/cheapbugs/src/auth/wallet.ts)
+- [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
 - [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
 - [src/xmtp/browser.ts](/home/pierce/projects/cheapbugs/src/xmtp/browser.ts)
 - [src/xmtp/bouncer.ts](/home/pierce/projects/cheapbugs/src/xmtp/bouncer.ts)
@@ -193,7 +193,7 @@ The token launcher:
 
 ## References
 
-- WalletConnect Ethereum Provider: https://github.com/WalletConnect/walletconnect-monorepo/tree/master/packages/ethereum-provider
+- Thirdweb TypeScript SDK: https://portal.thirdweb.com/typescript/v5
 - Pinata presigned uploads: https://docs.pinata.cloud/files/presigned-urls
 - EAS indexing service repo: https://github.com/ethereum-attestation-service/eas-indexing-service
 - IPFS web app guidance: https://docs.ipfs.tech/how-to/ipfs-in-web-apps/

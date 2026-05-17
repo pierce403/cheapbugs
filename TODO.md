@@ -4,7 +4,7 @@
 
 - Add explorer links for bug index contract addresses, report transactions, and EAS attestations.
 - Add contract-level pagination and event-based indexing for larger report volumes.
-- Split WalletConnect/XMTP-heavy code paths to reduce the initial bundle size.
+- Split Thirdweb/XMTP-heavy code paths to reduce the initial bundle size.
 - Add a report lookup route by `reportId` in addition to `reportHash`.
 - Add stronger client-side validation for public-summary size and tag count before onchain submit.
 

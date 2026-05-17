@@ -14,7 +14,7 @@ Frontend values:
 - `VITE_REVIEW_VERDICT_SCHEMA_UID`
 - `VITE_PAYOUT_RECORD_SCHEMA_UID` if you want the placeholder schema pinned now
 - `VITE_REVIEWER_ADDRESSES`
-- `VITE_WALLETCONNECT_PROJECT_ID` when WalletConnect QR login should be enabled
+- `VITE_THIRDWEB_CLIENT_ID` only if you want to override the committed public Thirdweb client id used for wallet login and WalletConnect QR
 - `VITE_ENS_RPC_URL` only if you want to override the default Ethereum mainnet ENS RPC endpoint
 
 Launcher values:
@@ -116,7 +116,7 @@ The Pages workflow builds with:
 - `.nojekyll` enabled through [public/.nojekyll](/home/pierce/projects/cheapbugs/public/.nojekyll)
 
 That combination keeps asset URLs correct at the domain root and avoids SPA route breakage on GitHub Pages.
-Set `VITE_WALLETCONNECT_PROJECT_ID` as a repository variable if WalletConnect QR login should be enabled on the hosted site.
+Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site should use a different Thirdweb client id.
 
 If you ever deploy the same app under a repository subpath instead of the custom domain, override `VITE_BASE_PATH` for that environment explicitly.
 
