@@ -35,7 +35,8 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
   await page.goto("/submit");
 
   await expect(page.getByText("xmtp broker wallet: 0xea6995fc3674e1e94736766f5eeefb0506e4ef32")).toBeVisible();
-  await expect(page.getByRole("button", { name: "submit to broker" })).toBeVisible();
+  await expect(page.getByTestId("xmtp-status")).toContainText("xmtp: wallet required");
+  await expect(page.getByRole("button", { name: "submit to broker" })).toBeEnabled();
   for (const removedLabel of [
     "repro steps",
     "evidence",
@@ -51,4 +52,19 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
   ]) {
     await expect(page.getByText(removedLabel, { exact: true })).toHaveCount(0);
   }
+});
+
+test("submit route gives inline XMTP feedback when submit is blocked", async ({ page }) => {
+  await page.goto("/submit");
+
+  await page.getByLabel("title").fill("Parser overflow");
+  await page.getByLabel("public summary").fill("Public safe summary for reviewers.");
+  await page.getByLabel("details").fill("Private details for the broker only.");
+  await page.getByRole("button", { name: "submit to broker" }).click();
+
+  await expect(page).toHaveURL(/\/submit$/);
+  await expect(page.getByTestId("xmtp-status")).toContainText("xmtp: wallet required");
+  await expect(page.getByTestId("xmtp-status")).toContainText(
+    "Connect a local XMTP wallet or compatible external wallet before submitting."
+  );
 });

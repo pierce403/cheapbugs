@@ -106,13 +106,15 @@ cheapbugs/
   - `VITE_BROKER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed; `VITE_BOUNCER_XMTP_ADDRESS` is a legacy alias.
   - The frontend form currently collects only title, public summary, and private details; repro steps, evidence, severity, Signal recipient, contact hints, target fields, tags, and review access keys are intentionally not user-facing.
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, title, public summary, private details, and client metadata.
+  - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
+  - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.
   - The broker owns review-key generation and retention for this flow.
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid provided target references, and invalid reporter credentials.
   - The broker replies over XMTP after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`; the old `BOUNCER_*` names are accepted as aliases.
 - **Test Criteria**:
   - [x] Python unit tests cover strict JSON parsing, required fields, target validation, staged replies, and credential failure.
-  - [x] Playwright covers the default broker wallet and structured XMTP submit UI.
+  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, and structured XMTP submit UI.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
 
 ### Python Broker Bot

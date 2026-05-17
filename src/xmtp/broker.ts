@@ -2,7 +2,7 @@ import { env } from "../config/env";
 import type { SubmissionFormInput } from "../lib/reports";
 import { stableStringify } from "../lib/utils";
 
-import { sendXmtpDm, type BrowserXmtpIdentity } from "./browser";
+import { sendXmtpDm, type BrowserXmtpIdentity, type XmtpProgressHandler } from "./browser";
 
 export const BROKER_SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1";
 export const BROKER_SUBMISSION_VERSION = 1;
@@ -29,12 +29,13 @@ export const buildBrokerSubmissionMessage = (
 
 export const sendBrokerSubmission = async (
   identity: BrowserXmtpIdentity,
-  input: SubmissionFormInput
+  input: SubmissionFormInput,
+  onProgress?: XmtpProgressHandler
 ) => {
   if (!env.brokerXmtpAddress) {
     throw new Error("Set VITE_BROKER_XMTP_ADDRESS before sending XMTP submissions.");
   }
 
   const message = buildBrokerSubmissionMessage(input, identity.address);
-  return sendXmtpDm(identity, env.brokerXmtpAddress, message);
+  return sendXmtpDm(identity, env.brokerXmtpAddress, message, onProgress);
 };

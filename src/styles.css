@@ -55,6 +55,12 @@ button {
   cursor: pointer;
 }
 
+button:disabled,
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 #app {
   min-height: 100vh;
 }
@@ -190,6 +196,57 @@ button {
   text-align: right;
   font-size: 11px;
   color: var(--muted);
+}
+
+.xmtp-status {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255, 106, 0, 0.28);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.xmtp-status-light {
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  background: currentColor;
+}
+
+.xmtp-status-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.xmtp-status-copy strong {
+  color: var(--text);
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.xmtp-status-copy span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.xmtp-status-ready,
+.xmtp-status-sent {
+  color: var(--success);
+  border-color: rgba(160, 240, 140, 0.45);
+}
+
+.xmtp-status-blocked,
+.xmtp-status-working {
+  color: var(--warning);
+}
+
+.xmtp-status-error {
+  color: var(--danger);
+  border-color: rgba(255, 113, 91, 0.5);
 }
 
 .auth-panel {
