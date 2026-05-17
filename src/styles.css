@@ -166,6 +166,13 @@ button:disabled,
   display: block;
 }
 
+.build-badge {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
 .brand-block {
   display: flex;
   align-items: center;

@@ -35,7 +35,9 @@ export default defineConfig({
       VITE_ENS_RPC_URL: "https://ethereum-rpc.publicnode.com",
       VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK: "46093316",
       VITE_ETHERSCAN_API_KEY: "",
-      VITE_BASESCAN_API_KEY: ""
+      VITE_BASESCAN_API_KEY: "",
+      VITE_BUILD_ID: "testbuild123",
+      VITE_BUILD_TIME: "2026-05-17T19:34:56.000Z"
     }
   }
 });

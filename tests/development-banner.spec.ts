@@ -22,6 +22,17 @@ test("shows the GitHub repository icon link beside the brand", async ({ page }) 
   await page.goto("/");
 
   const brandBlock = page.locator(".brand-block");
+  const expectedBuildTime = await page.evaluate(() =>
+    new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZoneName: "short"
+    }).format(new Date("2026-05-17T19:34:56.000Z"))
+  );
   await expect(brandBlock.locator(".brand")).toHaveText("cheapbugs");
   await expect(brandBlock.getByText("github", { exact: true })).toHaveCount(0);
   await expect(brandBlock.getByRole("link", { name: "GitHub repository" })).toHaveAttribute(
@@ -29,6 +40,7 @@ test("shows the GitHub repository icon link beside the brand", async ({ page }) 
     "https://github.com/pierce403/cheapbugs"
   );
   await expect(brandBlock.locator(".brand-github-icon")).toBeVisible();
+  await expect(brandBlock.getByTestId("build-badge")).toHaveText(`build testbuild123 / ${expectedBuildTime}`);
 });
 
 test("submit route defaults to the broker XMTP path", async ({ page }) => {
