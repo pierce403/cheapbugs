@@ -1,4 +1,4 @@
-import { EAS, NO_EXPIRATION, SchemaEncoder, SchemaRegistry } from "@ethereum-attestation-service/eas-sdk";
+import { AbiCoder, Contract, Interface, type ContractTransactionReceipt } from "ethers";
 
 import { authController } from "../services";
 import { chainConfig } from "../config/chains";
@@ -8,35 +8,75 @@ import { clamp, impactToIndex, payoutTypeToIndex, rewardClassToIndex, validityTo
 import type { PayoutRecord } from "../types/payout";
 import type { ReviewVerdict } from "../types/review";
 
-const reviewEncoder = new SchemaEncoder(EAS_SCHEMAS.ReviewVerdict.definition);
-const payoutEncoder = new SchemaEncoder(EAS_SCHEMAS.PayoutRecord.definition);
+const NO_EXPIRATION = 0n;
+const abiCoder = AbiCoder.defaultAbiCoder();
+
+const easAbi = [
+  "function attest(tuple(bytes32 schema,tuple(address recipient,uint64 expirationTime,bool revocable,bytes32 refUID,bytes data,uint256 value) data) request) payable returns (bytes32)",
+  "event Attested(address indexed recipient,address indexed attester,bytes32 uid,bytes32 indexed schemaUID)"
+] as const;
+
+const schemaRegistryAbi = [
+  "function register(string schema,address resolver,bool revocable) returns (bytes32)",
+  "event Registered(bytes32 indexed uid,address indexed registerer,tuple(bytes32 uid,address resolver,bool revocable,string schema) schema)"
+] as const;
+
+const easInterface = new Interface(easAbi);
+const schemaRegistryInterface = new Interface(schemaRegistryAbi);
 
 const toSigner = async () => authController.getSigner();
 
-const easClient = async (): Promise<EAS> => {
+const easClient = async (): Promise<Contract> => {
   const signer = await toSigner();
-  const eas = new EAS(chainConfig.easContractAddress);
-  eas.connect(signer);
-  return eas;
+  return new Contract(chainConfig.easContractAddress, easAbi, signer);
 };
 
-const schemaRegistryClient = async (): Promise<SchemaRegistry> => {
+const schemaRegistryClient = async (): Promise<Contract> => {
   const signer = await toSigner();
-  const registry = new SchemaRegistry(chainConfig.easSchemaRegistryAddress);
-  registry.connect(signer);
-  return registry;
+  return new Contract(chainConfig.easSchemaRegistryAddress, schemaRegistryAbi, signer);
+};
+
+const schemaTypes = (definition: string): string[] =>
+  definition.split(",").map((field) => {
+    const [type] = field.trim().split(/\s+/);
+    if (!type) {
+      throw new Error(`Invalid EAS schema field: ${field}`);
+    }
+    return type;
+  });
+
+const encodeSchemaData = (definition: string, values: unknown[]): `0x${string}` =>
+  abiCoder.encode(schemaTypes(definition), values) as `0x${string}`;
+
+const uidFromReceipt = (
+  receipt: ContractTransactionReceipt | null,
+  contractInterface: Interface,
+  eventName: "Attested" | "Registered"
+): `0x${string}` => {
+  if (!receipt) {
+    throw new Error(`${eventName} transaction was not mined.`);
+  }
+
+  for (const log of receipt.logs) {
+    try {
+      const parsed = contractInterface.parseLog(log);
+      if (parsed?.name === eventName) {
+        return parsed.args.uid as `0x${string}`;
+      }
+    } catch {
+      // Ignore logs emitted by other contracts in the same transaction.
+    }
+  }
+
+  throw new Error(`${eventName} event was missing from transaction receipt.`);
 };
 
 export const registerSchema = async (name: keyof typeof EAS_SCHEMAS): Promise<`0x${string}`> => {
   const schema = EAS_SCHEMAS[name];
   const registry = await schemaRegistryClient();
-  const transaction = await registry.register({
-    schema: schema.definition,
-    resolverAddress: schema.resolverAddress,
-    revocable: schema.revocable
-  });
+  const transaction = await registry.register(schema.definition, schema.resolverAddress, schema.revocable);
 
-  const uid = (await transaction.wait()) as `0x${string}`;
+  const uid = uidFromReceipt(await transaction.wait(), schemaRegistryInterface, "Registered");
   setSchemaUidOverride(name, uid);
   return uid;
 };
@@ -50,27 +90,31 @@ export const createReviewVerdictAttestation = async (
   }
 
   const eas = await easClient();
-  const encodedData = reviewEncoder.encodeData([
-    { name: "reportHash", value: verdict.reportHash, type: "bytes32" },
-    { name: "validity", value: validityToIndex(verdict.validity), type: "uint8" },
-    { name: "impact", value: impactToIndex(verdict.impact), type: "uint8" },
-    { name: "rewardClass", value: rewardClassToIndex(verdict.rewardClass), type: "uint8" },
-    { name: "confidence", value: clamp(Math.round(verdict.confidence), 0, 100), type: "uint8" },
-    { name: "noteCID", value: verdict.noteCid, type: "string" }
+  const encodedData = encodeSchemaData(EAS_SCHEMAS.ReviewVerdict.definition, [
+    verdict.reportHash,
+    validityToIndex(verdict.validity),
+    impactToIndex(verdict.impact),
+    rewardClassToIndex(verdict.rewardClass),
+    clamp(Math.round(verdict.confidence), 0, 100),
+    verdict.noteCid
   ]);
 
-  const transaction = await eas.attest({
-    schema: schemaUid,
-    data: {
-      recipient: authController.getSession().address ?? ZERO_ADDRESS,
-      expirationTime: NO_EXPIRATION,
-      revocable: true,
-      refUID: ZERO_BYTES32,
-      data: encodedData
-    }
-  });
+  const transaction = await eas.attest(
+    {
+      schema: schemaUid,
+      data: {
+        recipient: authController.getSession().address ?? ZERO_ADDRESS,
+        expirationTime: NO_EXPIRATION,
+        revocable: true,
+        refUID: ZERO_BYTES32,
+        data: encodedData,
+        value: 0n
+      }
+    },
+    { value: 0n }
+  );
 
-  return transaction.wait() as Promise<`0x${string}`>;
+  return uidFromReceipt(await transaction.wait(), easInterface, "Attested");
 };
 
 export const createPayoutRecordAttestation = async (record: PayoutRecord): Promise<`0x${string}`> => {
@@ -80,24 +124,28 @@ export const createPayoutRecordAttestation = async (record: PayoutRecord): Promi
   }
 
   const eas = await easClient();
-  const encodedData = payoutEncoder.encodeData([
-    { name: "reportHash", value: record.reportHash, type: "bytes32" },
-    { name: "payoutType", value: payoutTypeToIndex(record.payoutType), type: "uint8" },
-    { name: "asset", value: record.asset, type: "address" },
-    { name: "amount", value: BigInt(record.amount || "0"), type: "uint256" },
-    { name: "noteCID", value: record.noteCid, type: "string" }
+  const encodedData = encodeSchemaData(EAS_SCHEMAS.PayoutRecord.definition, [
+    record.reportHash,
+    payoutTypeToIndex(record.payoutType),
+    record.asset,
+    BigInt(record.amount || "0"),
+    record.noteCid
   ]);
 
-  const transaction = await eas.attest({
-    schema: schemaUid,
-    data: {
-      recipient: ZERO_ADDRESS,
-      expirationTime: NO_EXPIRATION,
-      revocable: true,
-      refUID: ZERO_BYTES32,
-      data: encodedData
-    }
-  });
+  const transaction = await eas.attest(
+    {
+      schema: schemaUid,
+      data: {
+        recipient: ZERO_ADDRESS,
+        expirationTime: NO_EXPIRATION,
+        revocable: true,
+        refUID: ZERO_BYTES32,
+        data: encodedData,
+        value: 0n
+      }
+    },
+    { value: 0n }
+  );
 
-  return transaction.wait() as Promise<`0x${string}`>;
+  return uidFromReceipt(await transaction.wait(), easInterface, "Attested");
 };

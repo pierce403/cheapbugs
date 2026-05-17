@@ -1,74 +1,42 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { execFileSync } from "node:child_process";
 
-import solc from "solc";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 
 const projectRoot = process.cwd();
-const contractPath = path.join(projectRoot, "contracts", "CheapBugsToken.sol");
 const artifactDir = path.join(projectRoot, "artifacts");
 const artifactPath = path.join(artifactDir, "CheapBugsToken.json");
 const frontendAbiPath = path.join(projectRoot, "src", "contracts", "bugzTokenAbi.ts");
+const foundryArtifactPath = path.join(projectRoot, "out", "CheapBugsToken.sol", "CheapBugsToken.json");
 
 const rpcUrl = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const dryRun = process.argv.includes("--dry-run") || process.env.BUGZ_DRY_RUN === "1";
 const deployerKey = process.env.BUGZ_DEPLOYER_PRIVATE_KEY;
 
-const source = fs.readFileSync(contractPath, "utf8");
-
-const findImports = (importPath) => {
-  const localPath = path.join(projectRoot, importPath);
-  const nodeModulesPath = path.join(projectRoot, "node_modules", importPath);
-
-  for (const candidate of [localPath, nodeModulesPath]) {
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      return { contents: fs.readFileSync(candidate, "utf8") };
-    }
-  }
-
-  return { error: `File not found: ${importPath}` };
-};
-
-const input = {
-  language: "Solidity",
-  sources: {
-    "contracts/CheapBugsToken.sol": {
-      content: source
-    }
-  },
-  settings: {
-    viaIR: true,
-    optimizer: {
-      enabled: true,
-      runs: 200
-    },
-    outputSelection: {
-      "*": {
-        "*": ["abi", "evm.bytecode.object"]
-      }
-    }
-  }
-};
-
-const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
-const contractOutput = output.contracts?.["contracts/CheapBugsToken.sol"]?.CheapBugsToken;
-
-if (!contractOutput) {
-  console.error("Contract compilation failed.");
-  console.error(JSON.stringify(output.errors || [], null, 2));
+try {
+  execFileSync("forge", ["build"], { cwd: projectRoot, stdio: "inherit" });
+} catch {
+  console.error("Contract compilation failed. Install Foundry and run `forge build` for details.");
   process.exit(1);
 }
 
-if (output.errors?.some((entry) => entry.severity === "error")) {
-  console.error(JSON.stringify(output.errors, null, 2));
+if (!fs.existsSync(foundryArtifactPath)) {
+  console.error(`Foundry artifact was not created: ${foundryArtifactPath}`);
   process.exit(1);
 }
 
+const contractOutput = JSON.parse(fs.readFileSync(foundryArtifactPath, "utf8"));
 const abi = contractOutput.abi;
-const bytecode = `0x${contractOutput.evm.bytecode.object}`;
+const bytecode = contractOutput.bytecode?.object;
+
+if (!Array.isArray(abi) || typeof bytecode !== "string" || bytecode === "0x") {
+  console.error(`Foundry artifact is missing ABI or bytecode: ${foundryArtifactPath}`);
+  process.exit(1);
+}
 
 fs.mkdirSync(artifactDir, { recursive: true });
 fs.writeFileSync(

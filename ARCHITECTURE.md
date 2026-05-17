@@ -102,9 +102,9 @@ Deployment: Deployed with [scripts/launch-token.mjs](/home/pierce/projects/cheap
 
 Name: EAS integration
 
-Description: Handles onchain reviewer verdict attestations and a placeholder payout record schema. Reads are performed through EAS GraphQL; writes use the EAS SDK from the connected wallet.
+Description: Handles onchain reviewer verdict attestations and a placeholder payout record schema. Reads are performed through EAS GraphQL; writes use direct ethers contract calls from the connected wallet.
 
-Technologies: `@ethereum-attestation-service/eas-sdk`, Base EAS contracts, EAS GraphQL API
+Technologies: ethers, Base EAS contracts, EAS GraphQL API
 
 Deployment: External network dependency on Base EAS contracts and EAS Scan indexing infrastructure
 
@@ -203,7 +203,7 @@ ENS:
 EAS:
 
 - Purpose: Onchain reviewer verdicts and placeholder payout attestations
-- Integration Method: SDK writes in [src/attest/eas.ts](/home/pierce/projects/cheapbugs/src/attest/eas.ts), GraphQL reads in [src/lib/eas.ts](/home/pierce/projects/cheapbugs/src/lib/eas.ts)
+- Integration Method: Direct EAS and SchemaRegistry contract writes in [src/attest/eas.ts](/home/pierce/projects/cheapbugs/src/attest/eas.ts), GraphQL reads in [src/lib/eas.ts](/home/pierce/projects/cheapbugs/src/lib/eas.ts)
 
 Pinata:
 

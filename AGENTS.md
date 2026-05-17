@@ -101,13 +101,14 @@ npm run launch:token
 
 - Base mainnet is the default chain configuration.
 - The submit path writes public reports to the Base bug index contract, not to an EAS submission-pointer schema.
-- EAS is currently used for `ReviewVerdict` and a `PayoutRecord` placeholder only.
+- EAS is currently used for `ReviewVerdict` and a `PayoutRecord` placeholder only. Do not re-add `@ethereum-attestation-service/eas-sdk`; it pulls Hardhat-era dependencies into npm audit. `src/attest/eas.ts` uses direct ethers contract calls against EAS and SchemaRegistry.
 - The bug index contract now includes reviewer-only onchain vote functions for contract-level testing and future extensions. The current frontend review state still comes from EAS.
 - BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` and is the default `VITE_BUGZ_TOKEN_ADDRESS`.
 - The `/token` route reads connected-wallet BUGZ balances and performs static, browser-signed buy/sell swaps through the Uniswap v4 Quoter and Universal Router 2.1.1 on Base. Do not replace this with a backend buy-flow.
 - The frontend nav is now `index`, `submit`, `review`, `token`, `patrons`, with login/session controls moved to the top-right header block.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
 - The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes.
+- The JS launchers use `forge build` plus Foundry artifacts from `out/...` instead of npm `solc`; keep npm `solc` out of `package.json` unless its audit footprint has been reviewed.
 - Foundry is now configured with `contracts/` as the source directory, `script/` for deploy scripts, and `test/` for scenario coverage.
 - `forge-std` is tracked as the `lib/forge-std` git submodule, so fresh clones need `git submodule update --init --recursive` before `forge build` or `forge test`.
 - The BUGZ patrons leaderboard only works once `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` is configured. Treasury stats are optional display-only rows and must stay hidden when `VITE_BUGZ_TREASURY_ADDRESS` is unset.

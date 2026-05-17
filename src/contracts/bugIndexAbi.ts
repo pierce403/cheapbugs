@@ -1,751 +1,751 @@
 export const bugIndexAbi = [
   {
+    "type": "constructor",
     "inputs": [
       {
-        "internalType": "address",
         "name": "initialOwner",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       },
       {
-        "internalType": "address[]",
         "name": "initialReviewers",
-        "type": "address[]"
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
+    "stateMutability": "nonpayable"
   },
   {
-    "inputs": [
-      {
-        "internalType": "string",
-        "name": "field",
-        "type": "string"
-      }
-    ],
-    "name": "EmptyField",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "confidence",
-        "type": "uint8"
-      }
-    ],
-    "name": "InvalidConfidence",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidOwner",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      }
-    ],
-    "name": "MissingReport",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "address",
-        "name": "reviewer",
-        "type": "address"
-      }
-    ],
-    "name": "MissingReviewVote",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "NotOwner",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "NotReviewer",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      }
-    ],
-    "name": "SubmissionExists",
-    "type": "error"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "previousOwner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "OwnershipTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "reportId",
-        "type": "string"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "reporter",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint64",
-        "name": "createdAt",
-        "type": "uint64"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum CheapBugsBugIndex.DisclosureMode",
-        "name": "disclosureMode",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "publicSummary",
-        "type": "string"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "encryptedPayloadCid",
-        "type": "string"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum CheapBugsBugIndex.TargetKind",
-        "name": "targetKind",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "targetRefHash",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "tags",
-        "type": "string"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "contentHash",
-        "type": "bytes32"
-      }
-    ],
-    "name": "ReportSubmitted",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "reviewer",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint64",
-        "name": "createdAt",
-        "type": "uint64"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum CheapBugsBugIndex.Validity",
-        "name": "validity",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum CheapBugsBugIndex.Impact",
-        "name": "impact",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum CheapBugsBugIndex.RewardClass",
-        "name": "rewardClass",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "confidence",
-        "type": "uint8"
-      }
-    ],
-    "name": "ReviewVoteSubmitted",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "reviewer",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "allowed",
-        "type": "bool"
-      }
-    ],
-    "name": "ReviewerSet",
-    "type": "event"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
+    "type": "function",
     "name": "exists",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getReport",
+    "inputs": [
+      {
+        "name": "reportHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "bytes32",
-            "name": "reportHash",
-            "type": "bytes32"
-          },
-          {
-            "internalType": "string",
-            "name": "reportId",
-            "type": "string"
-          },
-          {
-            "internalType": "address",
-            "name": "reporter",
-            "type": "address"
-          },
-          {
-            "internalType": "uint64",
-            "name": "createdAt",
-            "type": "uint64"
-          },
-          {
-            "internalType": "enum CheapBugsBugIndex.DisclosureMode",
-            "name": "disclosureMode",
-            "type": "uint8"
-          },
-          {
-            "internalType": "string",
-            "name": "publicSummary",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "encryptedPayloadCid",
-            "type": "string"
-          },
-          {
-            "internalType": "enum CheapBugsBugIndex.TargetKind",
-            "name": "targetKind",
-            "type": "uint8"
-          },
-          {
-            "internalType": "bytes32",
-            "name": "targetRefHash",
-            "type": "bytes32"
-          },
-          {
-            "internalType": "string",
-            "name": "tags",
-            "type": "string"
-          },
-          {
-            "internalType": "bytes32",
-            "name": "contentHash",
-            "type": "bytes32"
-          }
-        ],
+        "name": "",
+        "type": "tuple",
         "internalType": "struct CheapBugsBugIndex.Submission",
-        "name": "",
-        "type": "tuple"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "address",
-        "name": "reviewer",
-        "type": "address"
-      }
-    ],
-    "name": "getReviewVote",
-    "outputs": [
-      {
         "components": [
           {
-            "internalType": "bytes32",
             "name": "reportHash",
-            "type": "bytes32"
+            "type": "bytes32",
+            "internalType": "bytes32"
           },
           {
-            "internalType": "address",
-            "name": "reviewer",
-            "type": "address"
-          },
-          {
-            "internalType": "uint64",
-            "name": "createdAt",
-            "type": "uint64"
-          },
-          {
-            "internalType": "enum CheapBugsBugIndex.Validity",
-            "name": "validity",
-            "type": "uint8"
-          },
-          {
-            "internalType": "enum CheapBugsBugIndex.Impact",
-            "name": "impact",
-            "type": "uint8"
-          },
-          {
-            "internalType": "enum CheapBugsBugIndex.RewardClass",
-            "name": "rewardClass",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint8",
-            "name": "confidence",
-            "type": "uint8"
-          }
-        ],
-        "internalType": "struct CheapBugsBugIndex.ReviewVote",
-        "name": "",
-        "type": "tuple"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      }
-    ],
-    "name": "getReviewVotes",
-    "outputs": [
-      {
-        "components": [
-          {
-            "internalType": "bytes32",
-            "name": "reportHash",
-            "type": "bytes32"
-          },
-          {
-            "internalType": "address",
-            "name": "reviewer",
-            "type": "address"
-          },
-          {
-            "internalType": "uint64",
-            "name": "createdAt",
-            "type": "uint64"
-          },
-          {
-            "internalType": "enum CheapBugsBugIndex.Validity",
-            "name": "validity",
-            "type": "uint8"
-          },
-          {
-            "internalType": "enum CheapBugsBugIndex.Impact",
-            "name": "impact",
-            "type": "uint8"
-          },
-          {
-            "internalType": "enum CheapBugsBugIndex.RewardClass",
-            "name": "rewardClass",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint8",
-            "name": "confidence",
-            "type": "uint8"
-          }
-        ],
-        "internalType": "struct CheapBugsBugIndex.ReviewVote[]",
-        "name": "",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "hasReviewVote",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "limit",
-        "type": "uint256"
-      }
-    ],
-    "name": "latestReportHashes",
-    "outputs": [
-      {
-        "internalType": "bytes32[]",
-        "name": "",
-        "type": "bytes32[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "owner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "reportCount",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "index",
-        "type": "uint256"
-      }
-    ],
-    "name": "reportHashAt",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      }
-    ],
-    "name": "reviewVoteCount",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "reportHash",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "uint256",
-        "name": "index",
-        "type": "uint256"
-      }
-    ],
-    "name": "reviewVoteReviewerAt",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "reviewers",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "reviewer",
-        "type": "address"
-      },
-      {
-        "internalType": "bool",
-        "name": "allowed",
-        "type": "bool"
-      }
-    ],
-    "name": "setReviewer",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "components": [
-          {
-            "internalType": "bytes32",
-            "name": "reportHash",
-            "type": "bytes32"
-          },
-          {
-            "internalType": "string",
             "name": "reportId",
-            "type": "string"
+            "type": "string",
+            "internalType": "string"
           },
           {
-            "internalType": "uint64",
+            "name": "reporter",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
             "name": "createdAt",
-            "type": "uint64"
+            "type": "uint64",
+            "internalType": "uint64"
           },
           {
-            "internalType": "enum CheapBugsBugIndex.DisclosureMode",
             "name": "disclosureMode",
-            "type": "uint8"
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.DisclosureMode"
           },
           {
-            "internalType": "string",
             "name": "publicSummary",
-            "type": "string"
+            "type": "string",
+            "internalType": "string"
           },
           {
-            "internalType": "string",
             "name": "encryptedPayloadCid",
-            "type": "string"
+            "type": "string",
+            "internalType": "string"
           },
           {
-            "internalType": "enum CheapBugsBugIndex.TargetKind",
             "name": "targetKind",
-            "type": "uint8"
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.TargetKind"
           },
           {
-            "internalType": "bytes32",
             "name": "targetRefHash",
-            "type": "bytes32"
+            "type": "bytes32",
+            "internalType": "bytes32"
           },
           {
-            "internalType": "string",
             "name": "tags",
-            "type": "string"
+            "type": "string",
+            "internalType": "string"
           },
           {
-            "internalType": "bytes32",
             "name": "contentHash",
-            "type": "bytes32"
+            "type": "bytes32",
+            "internalType": "bytes32"
           }
-        ],
-        "internalType": "struct CheapBugsBugIndex.SubmissionInput",
-        "name": "input",
-        "type": "tuple"
+        ]
       }
     ],
-    "name": "submitReport",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "getReviewVote",
     "inputs": [
       {
+        "name": "reportHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "reviewer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct CheapBugsBugIndex.ReviewVote",
         "components": [
           {
-            "internalType": "bytes32",
             "name": "reportHash",
-            "type": "bytes32"
+            "type": "bytes32",
+            "internalType": "bytes32"
           },
           {
-            "internalType": "enum CheapBugsBugIndex.Validity",
+            "name": "reviewer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "createdAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
             "name": "validity",
-            "type": "uint8"
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.Validity"
           },
           {
-            "internalType": "enum CheapBugsBugIndex.Impact",
             "name": "impact",
-            "type": "uint8"
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.Impact"
           },
           {
-            "internalType": "enum CheapBugsBugIndex.RewardClass",
             "name": "rewardClass",
-            "type": "uint8"
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.RewardClass"
           },
           {
-            "internalType": "uint8",
             "name": "confidence",
-            "type": "uint8"
+            "type": "uint8",
+            "internalType": "uint8"
           }
-        ],
-        "internalType": "struct CheapBugsBugIndex.ReviewVoteInput",
-        "name": "input",
-        "type": "tuple"
+        ]
       }
     ],
-    "name": "submitReviewVote",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "getReviewVotes",
     "inputs": [
       {
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
+        "name": "reportHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
-    "name": "transferOwnership",
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple[]",
+        "internalType": "struct CheapBugsBugIndex.ReviewVote[]",
+        "components": [
+          {
+            "name": "reportHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "reviewer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "createdAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "validity",
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.Validity"
+          },
+          {
+            "name": "impact",
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.Impact"
+          },
+          {
+            "name": "rewardClass",
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.RewardClass"
+          },
+          {
+            "name": "confidence",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasReviewVote",
+    "inputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "latestReportHashes",
+    "inputs": [
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "owner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "reportCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "reportHashAt",
+    "inputs": [
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "reviewVoteCount",
+    "inputs": [
+      {
+        "name": "reportHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "reviewVoteReviewerAt",
+    "inputs": [
+      {
+        "name": "reportHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "reviewers",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "setReviewer",
+    "inputs": [
+      {
+        "name": "reviewer",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
     "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "submitReport",
+    "inputs": [
+      {
+        "name": "input",
+        "type": "tuple",
+        "internalType": "struct CheapBugsBugIndex.SubmissionInput",
+        "components": [
+          {
+            "name": "reportHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "reportId",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "createdAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "disclosureMode",
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.DisclosureMode"
+          },
+          {
+            "name": "publicSummary",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "encryptedPayloadCid",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "targetKind",
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.TargetKind"
+          },
+          {
+            "name": "targetRefHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "tags",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "contentHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "submitReviewVote",
+    "inputs": [
+      {
+        "name": "input",
+        "type": "tuple",
+        "internalType": "struct CheapBugsBugIndex.ReviewVoteInput",
+        "components": [
+          {
+            "name": "reportHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "validity",
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.Validity"
+          },
+          {
+            "name": "impact",
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.Impact"
+          },
+          {
+            "name": "rewardClass",
+            "type": "uint8",
+            "internalType": "enum CheapBugsBugIndex.RewardClass"
+          },
+          {
+            "name": "confidence",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "transferOwnership",
+    "inputs": [
+      {
+        "name": "newOwner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReportSubmitted",
+    "inputs": [
+      {
+        "name": "reportHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "reportId",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "reporter",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "createdAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "disclosureMode",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CheapBugsBugIndex.DisclosureMode"
+      },
+      {
+        "name": "publicSummary",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "encryptedPayloadCid",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "targetKind",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CheapBugsBugIndex.TargetKind"
+      },
+      {
+        "name": "targetRefHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "tags",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "contentHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReviewVoteSubmitted",
+    "inputs": [
+      {
+        "name": "reportHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "reviewer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "createdAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "validity",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CheapBugsBugIndex.Validity"
+      },
+      {
+        "name": "impact",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CheapBugsBugIndex.Impact"
+      },
+      {
+        "name": "rewardClass",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CheapBugsBugIndex.RewardClass"
+      },
+      {
+        "name": "confidence",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReviewerSet",
+    "inputs": [
+      {
+        "name": "reviewer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "EmptyField",
+    "inputs": [
+      {
+        "name": "field",
+        "type": "string",
+        "internalType": "string"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidConfidence",
+    "inputs": [
+      {
+        "name": "confidence",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidOwner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MissingReport",
+    "inputs": [
+      {
+        "name": "reportHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "MissingReviewVote",
+    "inputs": [
+      {
+        "name": "reportHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "reviewer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotOwner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotReviewer",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SubmissionExists",
+    "inputs": [
+      {
+        "name": "reportHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
   }
 ] as const;
