@@ -4,7 +4,7 @@
 
 Read this file at the start of every task. Update it before you finish whenever you learn something important about this codebase, its workflow, or the collaborator's preferences.
 
-Also read `ARCHITECTURE.md` at the start of every task that touches system design, data flow, deployment shape, contracts, storage, auth, or vendor integrations.
+Also read `FEATURES.md` at the start of every task that touches feature behavior, system design, data flow, deployment shape, contracts, storage, auth, or vendor integrations.
 
 Record both wins to repeat and mistakes to avoid. Prefer exact commands, concrete file paths, and specific implementation notes over vague summaries.
 
@@ -16,7 +16,7 @@ After every completed task:
 
 1. Run the relevant verification commands.
 2. Update `AGENTS.md` if you learned anything useful.
-3. Update `ARCHITECTURE.md` if the task changed architecture, system boundaries, integrations, deployment assumptions, or the recommended code-navigation map.
+3. Update `FEATURES.md` if the task changed feature behavior, system boundaries, integrations, deployment assumptions, milestones, tests, or the recommended code-navigation map.
 4. Stage the completed work.
 5. Commit it with a clear message.
 6. Push it to the current branch on `origin`.
@@ -87,6 +87,7 @@ npm run launch:token
 - `src/lib/reports.ts`: submission, loading, decryption, and review orchestration
 - `src/config/env.ts`: env parsing and defaults
 - `src/config/chains.ts`: chain isolation, currently Base-oriented
+- `FEATURES.md`: living feature map with stability, properties, milestones, and test criteria
 - `scripts/bouncer-bot.py`: Python XMTP-to-Signal bouncer runner
 - `bots/cheapbugs_bouncer/`: bouncer command parsing, SQLite store, Signal CLI, and BUGZ payout adapters
 
@@ -130,7 +131,9 @@ npm run launch:token
 - ENS avatars are read from the raw `avatar` text record with `ensClient.getEnsText({ key: "avatar" })`, then sanitized to HTTPS or an IPFS gateway URL with paths preserved. Do not switch this back to `getEnsAvatar`; viem's avatar parser HEAD-probes image URLs and can hide otherwise valid avatars when hosts reject HEAD/CORS.
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
 - The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views.
-- `VITE_BOUNCER_XMTP_ADDRESS` switches the submit route to XMTP DM submission. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
+- The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BOUNCER_XMTP_ADDRESS` only overrides that broker. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
+- Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/bouncer.ts`; the Python parser rejects text `!submit` messages, missing fields, unexpected fields, and invalid target references.
+- The bouncer replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BOUNCER_SUBMISSION_MIN_BUGZ` plus `BOUNCER_REPUTATION_BLOCKLIST`.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
 - The Python bouncer uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
 - Bouncer rewards are ERC20 transfers from `BUGZ_PAYOUT_PRIVATE_KEY`, not mints. Fund and cap that wallet intentionally before running without `BOUNCER_DRY_RUN=1`.
@@ -150,7 +153,7 @@ npm run launch:token
 - `ffmpeg` is available in the local environment and was used to derive favicon/OpenGraph PNG assets from `cheapbugs.png`.
 - Signal reactions are social support signals only; they are not sybil-resistant votes.
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
-- Real XMTP submission requires `VITE_BOUNCER_XMTP_ADDRESS` to point at an already registered bouncer XMTP inbox.
+- Real XMTP submission requires the default or overridden broker address to point at an already registered bouncer XMTP inbox.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
 - The contract launcher needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` for a real deployment.
 - The token launcher needs `BUGZ_DEPLOYER_PRIVATE_KEY` for a real deployment.
@@ -168,4 +171,4 @@ npm run launch:token
 
 When updating this file, keep it compact and high-signal. Replace stale guidance instead of only appending new notes.
 
-When architecture changes, do not leave `ARCHITECTURE.md` stale. Treat it as a living system map for future agents.
+When feature behavior or architecture changes, do not leave `FEATURES.md` stale. Treat it as a living feature and system map for future agents.

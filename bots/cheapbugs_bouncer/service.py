@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from decimal import Decimal
 
-from .commands import CommandError, command_help, parse_command
+from .commands import CommandError, SUBMISSION_SCHEMA, command_help, parse_command, validate_submission_target
 from .config import BouncerConfig
 from .models import AccessCommand, SubmissionCommand
 from .rewards import reward_tokens, tokens_to_wei
@@ -77,6 +78,25 @@ class BouncerBot:
         message_id: str,
         reply: ReplyFn,
     ) -> None:
+        await reply(f"Submission JSON is valid for {SUBMISSION_SCHEMA}.")
+        await reply("Submission fields are present and well formed.")
+
+        try:
+            validate_submission_target(command)
+        except CommandError as exc:
+            await reply(f"Submission target is invalid: {exc}")
+            self.store.mark_message_processed(message_id, "target_invalid")
+            return
+        await reply(f"Submission target is valid: {command.target_kind} {command.target_ref}.")
+
+        try:
+            credential_summary = self._validate_submission_credentials(command)
+        except CommandError as exc:
+            await reply(f"Submission credentials are invalid: {exc}")
+            self.store.mark_message_processed(message_id, "credentials_invalid")
+            return
+        await reply(f"Submission credentials are valid: {credential_summary}.")
+
         signal_message = format_signal_submission(command)
         sent = self.signal.send_group_message(signal_message)
         record = self.store.create_submission(
@@ -92,6 +112,24 @@ class BouncerBot:
             "Submission relayed to the private Signal channel. "
             f"Bouncer id: {record.id}. Reward window closes after "
             f"{self.config.review_window_seconds // 86400} days."
+        )
+
+    def _validate_submission_credentials(self, command: SubmissionCommand) -> str:
+        if command.reporter_address.lower() in self.config.reputation_blocklist:
+            raise CommandError("reporter address is blocked by the local reputation list.")
+
+        decimals = self.token.decimals()
+        min_balance = tokens_to_wei(self.config.submission_min_balance_tokens, decimals)
+        balance = self.token.balance_of(command.reporter_address)
+        if balance < min_balance:
+            raise CommandError(
+                "reporter BUGZ balance is below "
+                f"{self.config.submission_min_balance_tokens} BUGZ."
+            )
+
+        return (
+            f"{_format_token_amount(balance, decimals)} BUGZ available; "
+            "reputation checks passed"
         )
 
     def sync_signal_once(self) -> int:
@@ -154,15 +192,25 @@ class BouncerBot:
 def format_signal_submission(command: SubmissionCommand) -> str:
     title = _compact(command.title, 140)
     summary = _compact(command.summary, 600)
-    body = _compact(command.body, 4_000)
+    details = _compact(command.details or command.body, 4_000)
+    repro_steps = _compact(command.repro_steps or "-", 1_500)
+    evidence = _compact(command.evidence or "-", 1_500)
+    contact_hints = _compact(command.contact_hints or "-", 800)
+    tags = ", ".join(command.tags) if command.tags else "-"
     return (
         "[CheapBugs submission]\n"
         f"Reporter: {command.reporter_address}\n"
         f"Signal: {command.signal_recipient}\n"
         f"Severity: {command.severity}\n"
+        f"Target: {command.target_kind} {command.target_ref}\n"
+        f"Disclosure: {command.disclosure_mode}\n"
+        f"Tags: {tags}\n"
         f"Title: {title}\n\n"
         f"Summary:\n{summary}\n\n"
-        f"Details:\n{body}"
+        f"Details:\n{details}\n\n"
+        f"Repro steps:\n{repro_steps}\n\n"
+        f"Evidence:\n{evidence}\n\n"
+        f"Contact hints:\n{contact_hints}"
     )
 
 
@@ -171,3 +219,9 @@ def _compact(value: str, limit: int) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[: limit - 3].rstrip() + "..."
+
+
+def _format_token_amount(amount_wei: int, decimals: int) -> str:
+    scale = Decimal(10) ** decimals
+    value = Decimal(amount_wei) / scale
+    return f"{value.normalize():f}"

@@ -33,6 +33,14 @@ def _env_int(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer.") from exc
 
 
+def _env_address_set(name: str) -> frozenset[str]:
+    return frozenset(
+        entry.strip().lower()
+        for entry in os.getenv(name, "").split(",")
+        if entry.strip()
+    )
+
+
 @dataclass(frozen=True)
 class BouncerConfig:
     database_path: Path
@@ -45,6 +53,8 @@ class BouncerConfig:
     bugz_token_address: str
     bugz_payout_private_key: str
     access_min_balance_tokens: Decimal
+    submission_min_balance_tokens: Decimal
+    reputation_blocklist: frozenset[str]
     reward_base_tokens: Decimal
     reward_per_reaction_tokens: Decimal
     reward_max_tokens: Decimal
@@ -66,6 +76,8 @@ class BouncerConfig:
             bugz_token_address=os.getenv("BUGZ_TOKEN_ADDRESS", os.getenv("VITE_BUGZ_TOKEN_ADDRESS", "")).strip(),
             bugz_payout_private_key=os.getenv("BUGZ_PAYOUT_PRIVATE_KEY", "").strip(),
             access_min_balance_tokens=_env_decimal("BOUNCER_ACCESS_MIN_BUGZ", "1"),
+            submission_min_balance_tokens=_env_decimal("BOUNCER_SUBMISSION_MIN_BUGZ", "1"),
+            reputation_blocklist=_env_address_set("BOUNCER_REPUTATION_BLOCKLIST"),
             reward_base_tokens=_env_decimal("BOUNCER_BUGZ_BASE_REWARD", "0"),
             reward_per_reaction_tokens=_env_decimal("BOUNCER_BUGZ_PER_REACTION", "100"),
             reward_max_tokens=_env_decimal("BOUNCER_BUGZ_MAX_REWARD", "5000"),

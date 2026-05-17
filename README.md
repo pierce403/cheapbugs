@@ -4,7 +4,7 @@ CheapBugs is a static Vite + TypeScript app for Base-native bug intake and revie
 
 The current MVP stores public-safe report records onchain in `CheapBugsBugIndex` on Base, keeps the private dossier encrypted client-side before uploading it to IPFS, and uses EAS on Base for reviewer verdict attestations and payout-record placeholders.
 
-The repo now also includes an XMTP bouncer path for a private-review workflow: the static site can generate a local XMTP wallet, send submissions by XMTP DM to a configured bouncer wallet, and the Python bouncer can relay reports into a private Signal group, gate Signal access by BUGZ balance, count Signal reactions after seven days, and pay BUGZ rewards from a funded payout wallet.
+The repo now also includes an XMTP bouncer path for a private-review workflow: the static site can generate a local XMTP wallet, send strict JSON submissions by XMTP DM to the default bouncer wallet, and the Python bouncer can validate, acknowledge, and relay reports into a private Signal group, gate access and submissions by BUGZ balance, count Signal reactions after seven days, and pay BUGZ rewards from a funded payout wallet.
 
 BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`. The static app reads connected-wallet balances directly from Base and exposes buy/sell controls as browser-signed Uniswap v4 transactions against the Clanker-created market. There is no token backend.
 
@@ -32,7 +32,9 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 ## XMTP Bouncer Flow
 
-Set `VITE_BOUNCER_XMTP_ADDRESS` to switch the submit route from the legacy onchain/IPFS path to XMTP DM submission. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
+The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BOUNCER_XMTP_ADDRESS` only when overriding that broker wallet. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
+
+Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The bouncer rejects malformed JSON, missing fields, invalid target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP that the JSON is valid, the fields are well formed, the target is valid, and the reporter credentials are valid before relaying the submission.
 
 Bot setup:
 
@@ -72,7 +74,7 @@ cp .env.example .env.local
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
 - optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY`, `VITE_BUGZ_MARKET_URL`, `VITE_BUGZ_HOLDERS_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard, daily-cached patrons board, and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional treasury display rows.
 - optional `VITE_THIRDWEB_CLIENT_ID` override for Thirdweb wallet login. A public default client id is committed for static deploys.
-- optional `VITE_BOUNCER_XMTP_ADDRESS` when submissions should be XMTP DMs to the bouncer instead of legacy onchain/IPFS filings
+- optional `VITE_BOUNCER_XMTP_ADDRESS` override when submissions should go to a non-default XMTP broker wallet
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
 
@@ -134,7 +136,7 @@ Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site s
 6. Reviewers publish verdicts as EAS onchain attestations on Base.
 7. The frontend reads the bug index contract for reports and the EAS GraphQL API for verdicts.
 
-With `VITE_BOUNCER_XMTP_ADDRESS` set, the submit route instead sends a structured XMTP DM to the bouncer wallet. The bouncer relays that message to Signal, records the Signal message timestamp in SQLite, counts active Signal emoji reactions after the configured review window, and transfers BUGZ to the reporter wallet.
+By default, the submit route sends a strict JSON XMTP DM to the bouncer wallet. The bouncer validates the JSON shape, target reference, BUGZ submission balance, and local reputation blocklist, then relays that message to Signal, records the Signal message timestamp in SQLite, counts active Signal emoji reactions after the configured review window, and transfers BUGZ to the reporter wallet.
 
 ## Environment Notes
 
@@ -182,6 +184,7 @@ The token launcher:
 - [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
 - [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
 - [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
+- [FEATURES.md](/home/pierce/projects/cheapbugs/FEATURES.md)
 - [src/xmtp/browser.ts](/home/pierce/projects/cheapbugs/src/xmtp/browser.ts)
 - [src/xmtp/bouncer.ts](/home/pierce/projects/cheapbugs/src/xmtp/bouncer.ts)
 - [scripts/bouncer-bot.py](/home/pierce/projects/cheapbugs/scripts/bouncer-bot.py)

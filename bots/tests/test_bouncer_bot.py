@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import tempfile
 import unittest
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-from cheapbugs_bouncer.commands import parse_command
+from cheapbugs_bouncer.commands import CommandError, parse_command, validate_submission_target
+from cheapbugs_bouncer.config import BouncerConfig
 from cheapbugs_bouncer.models import SignalReactionEvent, SubmissionCommand
 from cheapbugs_bouncer.rewards import reward_tokens, tokens_to_wei
+from cheapbugs_bouncer.service import BouncerBot
 from cheapbugs_bouncer.signal_cli import extract_reaction_events, parse_signal_timestamp
 from cheapbugs_bouncer.store import BouncerStore
 
@@ -16,9 +21,21 @@ WALLET = "0x1111111111111111111111111111111111111111"
 
 
 class CommandParsingTest(unittest.TestCase):
-    def test_parse_text_submission(self) -> None:
-        command = parse_command(
-            f"""!submit
+    def test_parse_strict_json_submission(self) -> None:
+        command = parse_command(json.dumps(valid_submission_payload()))
+
+        self.assertIsInstance(command, SubmissionCommand)
+        self.assertEqual(command.reporter_address, WALLET)
+        self.assertEqual(command.signal_recipient, "+15551234567")
+        self.assertEqual(command.title, "Parser overflow")
+        self.assertEqual(command.target_kind, "repo")
+        self.assertEqual(command.target_ref, "pierce403/cheapbugs")
+        self.assertEqual(command.tags, ("parser", "memory"))
+
+    def test_reject_text_submission(self) -> None:
+        with self.assertRaisesRegex(CommandError, "strict CheapBugs JSON schema"):
+            parse_command(
+                f"""!submit
 wallet: {WALLET}
 signal: +15551234567
 title: Parser overflow
@@ -26,13 +43,27 @@ summary: Public safe summary
 severity: high
 
 Private details go here.""",
-        )
+            )
+
+    def test_reject_missing_submission_fields(self) -> None:
+        payload = valid_submission_payload()
+        del payload["details"]
+
+        with self.assertRaisesRegex(CommandError, "details"):
+            parse_command(json.dumps(payload))
+
+    def test_validate_submission_target(self) -> None:
+        command = parse_command(json.dumps(valid_submission_payload(target={"kind": "contract", "reference": WALLET})))
 
         self.assertIsInstance(command, SubmissionCommand)
-        self.assertEqual(command.reporter_address, WALLET)
-        self.assertEqual(command.signal_recipient, "+15551234567")
-        self.assertEqual(command.title, "Parser overflow")
-        self.assertEqual(command.body, "Private details go here.")
+        validate_submission_target(command)
+
+    def test_reject_invalid_submission_target(self) -> None:
+        command = parse_command(json.dumps(valid_submission_payload(target={"kind": "repo", "reference": "not a repo"})))
+
+        self.assertIsInstance(command, SubmissionCommand)
+        with self.assertRaisesRegex(CommandError, "GitHub URL"):
+            validate_submission_target(command)
 
     def test_parse_json_access_uses_sender_wallet(self) -> None:
         command = parse_command('{"type":"access","signal":"u:alice.01"}', fallback_sender_address=WALLET)
@@ -113,6 +144,142 @@ class StoreTest(unittest.TestCase):
             self.assertEqual(store.support_score("group", 1760000000123), 1)
             self.assertEqual(store.mature_unpaid_submissions(now=106), [])
             self.assertEqual([item.id for item in store.mature_unpaid_submissions(now=107)], [record.id])
+
+
+class BouncerServiceTest(unittest.TestCase):
+    def test_submission_replies_with_validation_stages_before_relay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BouncerStore(Path(tmp) / "bouncer.sqlite")
+            store.init()
+            replies: list[str] = []
+            bot = BouncerBot(
+                config=test_config(Path(tmp) / "bouncer.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=2 * 10**18),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            asyncio.run(
+                bot.handle_xmtp_text(
+                    json.dumps(valid_submission_payload()),
+                    sender_address=WALLET,
+                    conversation_id="conversation",
+                    message_id="message",
+                    reply=reply,
+                )
+            )
+
+            self.assertIn("Submission JSON is valid", replies[0])
+            self.assertEqual(replies[1], "Submission fields are present and well formed.")
+            self.assertIn("Submission target is valid", replies[2])
+            self.assertIn("Submission credentials are valid", replies[3])
+            self.assertIn("Submission relayed", replies[4])
+
+    def test_submission_stops_when_credentials_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BouncerStore(Path(tmp) / "bouncer.sqlite")
+            store.init()
+            replies: list[str] = []
+            bot = BouncerBot(
+                config=test_config(Path(tmp) / "bouncer.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=0),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            asyncio.run(
+                bot.handle_xmtp_text(
+                    json.dumps(valid_submission_payload()),
+                    sender_address=WALLET,
+                    conversation_id="conversation",
+                    message_id="message",
+                    reply=reply,
+                )
+            )
+
+            self.assertIn("Submission credentials are invalid", replies[-1])
+            self.assertFalse(any("Submission relayed" in reply for reply in replies))
+
+
+def valid_submission_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema": "cheapbugs.bug_submission.v1",
+        "type": "submission",
+        "version": 1,
+        "reporter_address": WALLET,
+        "signal_recipient": "+15551234567",
+        "title": "Parser overflow",
+        "public_summary": "Public safe summary for reviewers.",
+        "details": "Private details go here.",
+        "repro_steps": "Run the attached proof of concept.",
+        "evidence": "Crash trace",
+        "suggested_severity": "high",
+        "target": {"kind": "repo", "reference": "pierce403/cheapbugs"},
+        "disclosure_mode": "private",
+        "tags": ["parser", "memory"],
+        "contact_hints": "",
+        "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_config(path: Path) -> BouncerConfig:
+    return BouncerConfig(
+        database_path=path,
+        xmtp_env="production",
+        xmtp_db_path=None,
+        signal_cli_path="signal-cli",
+        signal_account="+15550000000",
+        signal_group_id="group",
+        base_rpc_url="http://localhost:8545",
+        bugz_token_address=WALLET,
+        bugz_payout_private_key="",
+        access_min_balance_tokens=Decimal("1"),
+        submission_min_balance_tokens=Decimal("1"),
+        reputation_blocklist=frozenset(),
+        reward_base_tokens=Decimal("0"),
+        reward_per_reaction_tokens=Decimal("100"),
+        reward_max_tokens=Decimal("5000"),
+        review_window_seconds=7,
+        poll_seconds=30,
+        dry_run=True,
+    )
+
+
+class FakeToken:
+    def __init__(self, balance: int):
+        self.balance = balance
+
+    def decimals(self) -> int:
+        return 18
+
+    def balance_of(self, address: str) -> int:
+        self.last_balance_address = address
+        return self.balance
+
+    def transfer(self, to_address: str, amount_wei: int) -> str:
+        return f"dry-run:transfer:{to_address}:{amount_wei}"
+
+
+@dataclass(frozen=True)
+class FakeSentMessage:
+    sent_timestamp: int
+
+
+class FakeSignal:
+    def send_group_message(self, message: str) -> FakeSentMessage:
+        self.last_message = message
+        return FakeSentMessage(sent_timestamp=1760000000123)
+
+    def add_group_member(self, recipient: str) -> None:
+        self.last_member = recipient
 
 
 if __name__ == "__main__":

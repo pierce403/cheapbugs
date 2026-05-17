@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,14 @@ class SubmissionCommand:
     summary: str
     severity: str
     body: str
+    target_kind: str = "other"
+    target_ref: str = ""
+    disclosure_mode: str = "private"
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    details: str = ""
+    repro_steps: str = ""
+    evidence: str = ""
+    contact_hints: str = ""
 
 
 @dataclass(frozen=True)

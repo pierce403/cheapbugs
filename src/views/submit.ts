@@ -15,7 +15,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       <div class="panel-title">[ submit report ]</div>
       <p class="warning-copy">
         Never place sensitive bug details in the public summary unless you intentionally want them public. Private details are encrypted
-        in the browser before IPFS upload on the legacy path. XMTP submissions are sent directly to the bouncer inbox.
+        in the browser before IPFS upload on the legacy path. XMTP submissions are sent as strict JSON to the bouncer inbox.
       </p>
       ${
         isBouncerConfigured()
@@ -79,7 +79,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
             </p>`
       }
       <button class="button" type="submit" ${context.session.address ? "" : "disabled"}>
-        ${isBouncerConfigured() ? "send xmtp dm to bouncer" : "encrypt, upload, and file on base"}
+        ${isBouncerConfigured() ? "send structured xmtp dm" : "encrypt, upload, and file on base"}
       </button>
     </form>
   `,
