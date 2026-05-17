@@ -12,7 +12,7 @@ export type TokenDashboard = {
   connectedBalance: bigint | null;
   treasuryTokenBalance: bigint | null;
   treasuryNativeBalance: bigint | null;
-  buyUrl: string;
+  marketUrl: string;
   patronScanReady: boolean;
   patronScanStatus: string;
   errorMessage: string | null;

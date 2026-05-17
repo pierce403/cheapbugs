@@ -61,6 +61,10 @@ const setCached = <T>(key: string, value: T, ttlMs: number): T => {
   return value;
 };
 
+export const clearBugzTokenCache = (): void => {
+  cache.clear();
+};
+
 const bugzTokenAddress = (): `0x${string}` => {
   if (!chainConfig.bugzTokenAddress) {
     throw new Error("Set VITE_BUGZ_TOKEN_ADDRESS to the deployed BUGZ token contract.");

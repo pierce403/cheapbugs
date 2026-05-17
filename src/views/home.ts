@@ -62,9 +62,9 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
         )
         .join("")
     : `
-      <tr><td>01</td><td><a href="${context.router.href("/token")}" data-nav>token manager</a></td><td>-</td><td>deploy BUGZ first</td></tr>
-      <tr><td>02</td><td><a href="${context.router.href("/patrons")}" data-nav>patrons board</a></td><td>-</td><td>holder scan later</td></tr>
-      <tr><td>03</td><td>ens preferred</td><td>-</td><td>leaderboard placeholder</td></tr>
+      <tr><td>01</td><td><a href="${context.router.href("/token")}" data-nav>token manager</a></td><td>-</td><td>BUGZ trading live</td></tr>
+      <tr><td>02</td><td><a href="${context.router.href("/patrons")}" data-nav>patrons board</a></td><td>-</td><td>holder scan needs deployment block</td></tr>
+      <tr><td>03</td><td>ens preferred</td><td>-</td><td>connect wallet for balance</td></tr>
     `;
 
   return {

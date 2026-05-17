@@ -30,7 +30,7 @@ export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null)
       connectedBalance: null,
       treasuryTokenBalance: null,
       treasuryNativeBalance: null,
-      buyUrl: chainConfig.bugzBuyUrl,
+      marketUrl: chainConfig.bugzMarketUrl,
       patronScanReady: false,
       patronScanStatus,
       errorMessage: null
@@ -55,7 +55,7 @@ export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null)
       connectedBalance,
       treasuryTokenBalance: treasury?.tokenBalance ?? null,
       treasuryNativeBalance: treasury?.nativeBalance ?? null,
-      buyUrl: chainConfig.bugzBuyUrl,
+      marketUrl: chainConfig.bugzMarketUrl,
       patronScanReady: isBugzPatronScanConfigured(),
       patronScanStatus,
       errorMessage: null
@@ -72,7 +72,7 @@ export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null)
       connectedBalance: null,
       treasuryTokenBalance: null,
       treasuryNativeBalance: null,
-      buyUrl: chainConfig.bugzBuyUrl,
+      marketUrl: chainConfig.bugzMarketUrl,
       patronScanReady: isBugzPatronScanConfigured(),
       patronScanStatus,
       errorMessage: error instanceof Error ? error.message : "Token reads failed."
@@ -110,22 +110,4 @@ export const loadPatronLeaderboard = async (
       errorMessage: error instanceof Error ? error.message : "Patron leaderboard query failed."
     };
   }
-};
-
-export const buildBugzBuyUrl = (amount: string, destinationWallet: string): string => {
-  if (!chainConfig.bugzBuyUrl) {
-    return "";
-  }
-
-  const url = new URL(chainConfig.bugzBuyUrl, window.location.origin);
-  if (amount) {
-    url.searchParams.set("amount", amount);
-  }
-  if (destinationWallet) {
-    url.searchParams.set("wallet", destinationWallet);
-  }
-  url.searchParams.set("chainId", String(chainConfig.id));
-  url.searchParams.set("token", chainConfig.bugzTokenAddress);
-
-  return url.toString();
 };

@@ -322,6 +322,18 @@ button {
   padding: 8px;
 }
 
+.trade-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.trade-form {
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  padding: 8px;
+  background: #080808;
+}
+
 @media (max-width: 760px) {
   .shell {
     width: min(100vw - 14px, 1120px);
@@ -330,6 +342,7 @@ button {
 
   .banner,
   .two-column,
+  .trade-grid,
   .auth-grid,
   .inline-input {
     grid-template-columns: 1fr;

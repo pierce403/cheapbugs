@@ -33,5 +33,10 @@ export const chainConfig = {
   bugzTokenAddress: env.bugzTokenAddress,
   bugzTreasuryAddress: env.bugzTreasuryAddress,
   bugzTokenDeploymentBlock: env.bugzTokenDeploymentBlock,
-  bugzBuyUrl: env.bugzBuyUrl
+  bugzMarketUrl: env.bugzMarketUrl,
+  bugzV4PoolHook: env.bugzV4PoolHook,
+  bugzV4PoolId: env.bugzV4PoolId,
+  bugzV4PairedToken: env.bugzV4PairedToken,
+  bugzV4PoolFee: env.bugzV4PoolFee,
+  bugzV4TickSpacing: env.bugzV4TickSpacing
 } as const;

@@ -1,17 +1,34 @@
 import { chainConfig } from "../config/chains";
-import { buildBugzBuyUrl, loadTokenDashboard } from "../lib/token";
-import { escapeHtml, formatTokenAmount, textOrDash } from "../lib/utils";
+import { buyBugzOnchain, quoteBugzTrade, sellBugzOnchain, type BugzTradeQuote } from "../contracts/bugzTrade";
+import { loadTokenDashboard } from "../lib/token";
+import { escapeHtml, formatTokenAmount, shortHash, textOrDash } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
 
-const destinationValue = (context: AppViewContext): string => context.session.address ?? "";
+const tradeDisabled = (context: AppViewContext): string => (context.session.address ? "" : "disabled");
+
+const tokenAmount = (value: bigint | null, decimals: number, symbol: string): string =>
+  value !== null ? `${escapeHtml(formatTokenAmount(value, decimals))} ${escapeHtml(symbol)}` : "-";
+
+const poolFeeLabel = (fee: number): string => (fee === 0x800000 ? "dynamic hook fee" : `${fee / 10_000}%`);
+
+const quoteHtml = (quote: BugzTradeQuote): string => `
+  <strong>quote</strong>: ${escapeHtml(formatTokenAmount(quote.amountIn, quote.inputDecimals))} ${escapeHtml(
+    quote.inputSymbol
+  )}
+  -> ~${escapeHtml(formatTokenAmount(quote.amountOut, quote.outputDecimals))} ${escapeHtml(quote.outputSymbol)}<br />
+  minimum out: ${escapeHtml(formatTokenAmount(quote.amountOutMinimum, quote.outputDecimals))} ${escapeHtml(
+    quote.outputSymbol
+  )}<br />
+  pool: ${escapeHtml(shortHash(quote.pool.id || quote.pool.key.hooks, 12, 6))} / ${escapeHtml(
+    quote.pool.protocol
+  )} / ${escapeHtml(poolFeeLabel(quote.pool.key.fee))}
+`;
 
 export const renderTokenView = async (context: AppViewContext): Promise<ViewResult> => {
   const dashboard = await loadTokenDashboard(context.session.address);
   const warnings = [
-    !dashboard.isConfigured
-      ? "BUGZ is not deployed/configured in this build yet. The token manager and patrons view stay in placeholder mode until VITE_BUGZ_TOKEN_ADDRESS is set."
-      : "",
+    !dashboard.isConfigured ? "BUGZ is not configured in this build." : "",
     dashboard.treasuryAddress
       ? ""
       : "VITE_BUGZ_TREASURY_ADDRESS is unset, so treasury size cannot be resolved yet.",
@@ -21,6 +38,10 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
     .map((message) => `<p class="warning-copy">${escapeHtml(message)}</p>`)
     .join("");
 
+  const connectedBalance = context.session.address
+    ? tokenAmount(dashboard.connectedBalance, dashboard.decimals, dashboard.symbol)
+    : `<a href="${context.router.href("/login")}" data-nav>connect at /login</a>`;
+
   return {
     title: "Token",
     html: `
@@ -28,106 +49,145 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
         <div class="panel-title">[ bugz token manager ]</div>
         ${warnings}
         <p class="lede">
-          This route is the BUGZ control panel. It exposes holder balance, treasury state, and the future buy-flow entry point
-          without assuming the token sale contracts exist yet.
+          BUGZ is live on Base. Balances are read directly from the token contract, and buy/sell actions are browser-signed
+          transactions against the Base Uniswap v4 pool created by Clanker.
         </p>
         <table class="data-table compact-table">
           <tbody>
             <tr><th>token</th><td>${escapeHtml(textOrDash(dashboard.tokenAddress))}</td></tr>
             <tr><th>name</th><td>${escapeHtml(dashboard.name)}</td></tr>
             <tr><th>symbol</th><td>${escapeHtml(dashboard.symbol)}</td></tr>
-            <tr><th>total supply</th><td>${dashboard.totalSupply !== null ? `${escapeHtml(formatTokenAmount(dashboard.totalSupply, dashboard.decimals))} ${escapeHtml(dashboard.symbol)}` : "-"}</td></tr>
-            <tr><th>your balance</th><td>${context.session.address ? (dashboard.connectedBalance !== null ? `${escapeHtml(formatTokenAmount(dashboard.connectedBalance, dashboard.decimals))} ${escapeHtml(dashboard.symbol)}` : "-") : `<a href="${context.router.href("/login")}" data-nav>connect at /login</a>`}</td></tr>
+            <tr><th>total supply</th><td>${tokenAmount(dashboard.totalSupply, dashboard.decimals, dashboard.symbol)}</td></tr>
+            <tr><th>your balance</th><td>${connectedBalance}</td></tr>
             <tr><th>treasury</th><td>${escapeHtml(textOrDash(dashboard.treasuryAddress))}</td></tr>
-            <tr><th>treasury bugz</th><td>${dashboard.treasuryTokenBalance !== null ? `${escapeHtml(formatTokenAmount(dashboard.treasuryTokenBalance, dashboard.decimals))} ${escapeHtml(dashboard.symbol)}` : "-"}</td></tr>
-            <tr><th>treasury ${escapeHtml(chainConfig.nativeSymbol)}</th><td>${dashboard.treasuryNativeBalance !== null ? `${escapeHtml(formatTokenAmount(dashboard.treasuryNativeBalance, 18))} ${escapeHtml(chainConfig.nativeSymbol)}` : "-"}</td></tr>
+            <tr><th>treasury bugz</th><td>${tokenAmount(dashboard.treasuryTokenBalance, dashboard.decimals, dashboard.symbol)}</td></tr>
+            <tr><th>treasury ${escapeHtml(chainConfig.nativeSymbol)}</th><td>${
+              dashboard.treasuryNativeBalance !== null
+                ? `${escapeHtml(formatTokenAmount(dashboard.treasuryNativeBalance, 18))} ${escapeHtml(
+                    chainConfig.nativeSymbol
+                  )}`
+                : "-"
+            }</td></tr>
             <tr><th>holder scan</th><td>${escapeHtml(dashboard.patronScanStatus)}</td></tr>
+            <tr><th>clanker</th><td><a href="${escapeHtml(dashboard.marketUrl)}" target="_blank" rel="noreferrer">view market</a></td></tr>
           </tbody>
         </table>
       </section>
 
       <section class="panel">
-        <div class="panel-title">[ buy bugz ]</div>
+        <div class="panel-title">[ onchain trade ]</div>
         <p class="helper-copy">
-          This is a launch pad, not a live sale contract. It can hand off amount and wallet details to an external buy flow later,
-          but today it mostly serves as a clean placeholder.
+          These controls do not call a backend. Quotes use public Base RPC reads; trades are signed by your connected wallet
+          and sent to Uniswap v4 Universal Router on Base. Sells may first ask for ERC20 and Permit2 approvals.
         </p>
-        <form id="bugz-buy-form" class="stack-form narrow-form">
-          <div class="two-column">
+        <div class="trade-grid">
+          <form id="bugz-buy-form" class="stack-form trade-form">
+            <div class="panel-title">[ buy bugz ]</div>
             <label>
-              desired amount
-              <input name="amount" type="number" min="1" step="1" value="1000" />
+              ${escapeHtml(chainConfig.nativeSymbol)} amount
+              <input name="amount" type="number" min="0" step="0.000001" value="0.01" />
             </label>
             <label>
-              destination wallet
-              <input name="wallet" value="${escapeHtml(destinationValue(context))}" placeholder="0x..." />
+              max slippage %
+              <input name="slippage" type="number" min="0.01" max="50" step="0.01" value="5" />
             </label>
-          </div>
-          <div id="bugz-buy-preview" class="buy-preview"></div>
-          <div class="button-row">
-            <button class="button" type="submit" ${dashboard.buyUrl ? "" : "disabled"}>${dashboard.buyUrl ? "open buy flow" : "buy flow offline"}</button>
-            <button id="copy-buy-intent" class="button secondary" type="button">copy intent</button>
-          </div>
-        </form>
+            <div id="bugz-buy-preview" class="buy-preview">Quote before buying.</div>
+            <div class="button-row">
+              <button class="button secondary" type="button" data-quote="buy" ${tradeDisabled(context)}>quote</button>
+              <button class="button" type="submit" ${tradeDisabled(context)}>buy onchain</button>
+            </div>
+          </form>
+
+          <form id="bugz-sell-form" class="stack-form trade-form">
+            <div class="panel-title">[ sell bugz ]</div>
+            <label>
+              ${escapeHtml(dashboard.symbol)} amount
+              <input name="amount" type="number" min="0" step="1" value="1000" />
+            </label>
+            <label>
+              max slippage %
+              <input name="slippage" type="number" min="0.01" max="50" step="0.01" value="5" />
+            </label>
+            <div id="bugz-sell-preview" class="buy-preview">Quote before selling.</div>
+            <div class="button-row">
+              <button class="button secondary" type="button" data-quote="sell" ${tradeDisabled(context)}>quote</button>
+              <button class="button" type="submit" ${tradeDisabled(context)}>sell onchain</button>
+            </div>
+          </form>
+        </div>
       </section>
     `,
     afterRender: (root, appContext) => {
-      const form = root.querySelector<HTMLFormElement>("#bugz-buy-form");
-      const amountInput = form?.querySelector<HTMLInputElement>('input[name="amount"]') ?? null;
-      const walletInput = form?.querySelector<HTMLInputElement>('input[name="wallet"]') ?? null;
-      const preview = root.querySelector<HTMLElement>("#bugz-buy-preview");
-      const copyIntent = root.querySelector<HTMLButtonElement>("#copy-buy-intent");
-
-      const syncPreview = () => {
-        if (!preview) {
+      const setupTradeForm = (side: "buy" | "sell") => {
+        const form = root.querySelector<HTMLFormElement>(`#bugz-${side}-form`);
+        const preview = root.querySelector<HTMLElement>(`#bugz-${side}-preview`);
+        const quoteButton = root.querySelector<HTMLButtonElement>(`[data-quote="${side}"]`);
+        if (!form || !preview) {
           return;
         }
 
-        const amount = amountInput?.value || "0";
-        const wallet = walletInput?.value || "(wallet missing)";
-        preview.innerHTML = `
-          <strong>intent</strong>: buy ${escapeHtml(amount)} ${escapeHtml(dashboard.symbol)} for ${escapeHtml(wallet)}<br />
-          source: ${dashboard.buyUrl ? escapeHtml(dashboard.buyUrl) : "not configured yet"}
-        `;
+        const amountInput = form.querySelector<HTMLInputElement>('input[name="amount"]');
+        const slippageInput = form.querySelector<HTMLInputElement>('input[name="slippage"]');
+        const buttons = Array.from(form.querySelectorAll<HTMLButtonElement>("button"));
+
+        const setBusy = (busy: boolean) => {
+          buttons.forEach((button) => {
+            button.disabled = busy || !appContext.session.address;
+          });
+        };
+
+        const resolveQuote = async (): Promise<BugzTradeQuote | null> => {
+          try {
+            preview.textContent = "Reading pool quote...";
+            const quote = await quoteBugzTrade(side, amountInput?.value ?? "", slippageInput?.value ?? "5");
+            preview.innerHTML = quoteHtml(quote);
+            return quote;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Quote failed.";
+            preview.textContent = message;
+            appContext.notify("error", message);
+            return null;
+          }
+        };
+
+        quoteButton?.addEventListener("click", () => {
+          void resolveQuote();
+        });
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          if (!appContext.session.address) {
+            appContext.notify("error", "Connect a wallet before trading BUGZ.");
+            appContext.router.navigate("/login");
+            return;
+          }
+
+          setBusy(true);
+          try {
+            preview.textContent = side === "buy" ? "Buying BUGZ..." : "Selling BUGZ...";
+            const result =
+              side === "buy"
+                ? await buyBugzOnchain(amountInput?.value ?? "", slippageInput?.value ?? "5")
+                : await sellBugzOnchain(amountInput?.value ?? "", slippageInput?.value ?? "5");
+            preview.innerHTML = quoteHtml(result.quote);
+            const approvals = result.approvalTxHashes?.length
+              ? ` Approvals ${result.approvalTxHashes.map((hash) => shortHash(hash, 12, 6)).join(", ")}.`
+              : "";
+            appContext.notify(
+              "success",
+              `${side === "buy" ? "Buy" : "Sell"} transaction sent: ${shortHash(result.txHash, 12, 6)}.${approvals}`
+            );
+            await appContext.rerender();
+          } catch (error) {
+            appContext.notify("error", error instanceof Error ? error.message : "BUGZ trade failed.");
+          } finally {
+            setBusy(false);
+          }
+        });
       };
 
-      syncPreview();
-      amountInput?.addEventListener("input", syncPreview);
-      walletInput?.addEventListener("input", syncPreview);
-
-      copyIntent?.addEventListener("click", async () => {
-        const amount = amountInput?.value || "0";
-        const wallet = walletInput?.value || "";
-        const intent = [
-          "BUGZ buy intent",
-          `amount=${amount}`,
-          `wallet=${wallet || "(missing)"}`,
-          `token=${dashboard.tokenAddress || "(undeployed)"}`,
-          `chain=${appContext.session.address ? "Base connected" : "Base not connected"}`
-        ].join("\n");
-
-        try {
-          await navigator.clipboard.writeText(intent);
-          appContext.notify("success", "BUGZ buy intent copied.");
-        } catch (error) {
-          appContext.notify("error", error instanceof Error ? error.message : "Copy failed.");
-        }
-      });
-
-      form?.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const amount = amountInput?.value || "";
-        const wallet = walletInput?.value || destinationValue(appContext);
-        const buyUrl = buildBugzBuyUrl(amount, wallet);
-
-        if (!buyUrl) {
-          appContext.notify("info", "Buy flow is not configured yet. Deploy BUGZ and set VITE_BUGZ_BUY_URL to enable this button.");
-          return;
-        }
-
-        window.open(buyUrl, "_blank", "noopener,noreferrer");
-        appContext.notify("success", "Opened the external BUGZ buy flow.");
-      });
+      setupTradeForm("buy");
+      setupTradeForm("sell");
     }
   };
 };

@@ -69,6 +69,7 @@ npm run launch:token
 - `scripts/launch-token.mjs`: compile/deploy launcher for the BUGZ token contract
 - `src/contracts/bugIndex.ts`: frontend read/write adapter for the bug index contract
 - `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, balances, treasury state, and patron scans
+- `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
 - `src/auth/thirdweb.ts`: email login and external wallet connectivity
 - `src/auth/localIdentity.ts`: browser-stored generated XMTP wallet identity helper
@@ -100,13 +101,14 @@ npm run launch:token
 - The submit path writes public reports to the Base bug index contract, not to an EAS submission-pointer schema.
 - EAS is currently used for `ReviewVerdict` and a `PayoutRecord` placeholder only.
 - The bug index contract now includes reviewer-only onchain vote functions for contract-level testing and future extensions. The current frontend review state still comes from EAS.
-- The repo now includes a standalone `CheapBugsToken` ERC20 contract using OpenZeppelin. It mints 10,000,000 `BUGZ` to `BUGZ_INITIAL_HOLDER` or the deployer at launch time, but the live app does not depend on it yet.
+- BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` and is the default `VITE_BUGZ_TOKEN_ADDRESS`.
+- The `/token` route reads connected-wallet BUGZ balances and performs static, browser-signed buy/sell swaps through the Uniswap v4 Quoter and Universal Router 2.1.1 on Base. Do not replace this with a backend buy-flow.
 - The frontend nav is now `index`, `submit`, `review`, `token`, `patrons`, with login/session controls moved to the top-right header block.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
 - The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes.
 - Foundry is now configured with `contracts/` as the source directory, `script/` for deploy scripts, and `test/` for scenario coverage.
 - `forge-std` is tracked as the `lib/forge-std` git submodule, so fresh clones need `git submodule update --init --recursive` before `forge build` or `forge test`.
-- The BUGZ patrons leaderboard only works once both `VITE_BUGZ_TOKEN_ADDRESS` and `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` are configured. Treasury stats also need `VITE_BUGZ_TREASURY_ADDRESS`.
+- The BUGZ patrons leaderboard only works once `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` is configured. Treasury stats also need `VITE_BUGZ_TREASURY_ADDRESS`.
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
@@ -123,6 +125,9 @@ npm run launch:token
 - GitHub Actions run pages show top-level status and annotations publicly, but step logs require GitHub sign-in.
 - ENS avatar URLs are untrusted input. Only render sanitized HTTPS URLs or a local fallback badge.
 - Local XMTP wallet keys are browser-stored recovery material. Users must copy the recovery key before relying on that wallet for BUGZ rewards.
+- Local XMTP wallets can also sign BUGZ trade transactions from the browser via their stored private key; they still need Base ETH for gas and buys.
+- BUGZ trading is Base-only and uses the Clanker-created Uniswap v4 WETH/BUGZ pool key configured in `src/config/env.ts`. Buys wrap ETH in Universal Router; sells require Permit2 approval before the router can pull BUGZ.
+- The live BUGZ v4 pool was validated from Clanker `TokenCreated` block `46093316`: hook `0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC`, pool id `0x4c360c12ee8063e7170c344eba74f28ab0d3879c797ed46269202c3966234657`, dynamic fee flag `8388608`, tick spacing `200`, paired WETH.
 - Signal reactions are social support signals only; they are not sybil-resistant votes.
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
 - Real XMTP submission requires `VITE_BOUNCER_XMTP_ADDRESS` to point at an already registered bouncer XMTP inbox.

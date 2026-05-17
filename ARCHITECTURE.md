@@ -47,6 +47,8 @@ cheapbugs/
   |        +--------------> [IPFS via thirdweb Storage or Pinata presigned upload]
   |
   +-----------------------> [CheapBugsBugIndex on Base]
+  |
+  +-----------------------> [BUGZ + Uniswap v4 on Base]
 
 [Reporter Browser] --XMTP DM--> [Bouncer Bot] --signal-cli--> [Private Signal Group]
                                       |
@@ -68,7 +70,7 @@ System boundaries:
 
 Name: CheapBugs static web app
 
-Description: A narrow-layout, milw0rm-inspired frontend for login, report submission, public browsing, report review, a placeholder BUGZ token manager, a patrons leaderboard, and local decryption of private dossiers.
+Description: A narrow-layout, milw0rm-inspired frontend for login, report submission, public browsing, report review, live BUGZ balance/trading controls, a patrons leaderboard, and local decryption of private dossiers.
 
 Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, thirdweb SDK, ethers, viem, optional `@xmtp/browser-sdk`
 
@@ -90,7 +92,7 @@ Additional Notes: The contract now also includes reviewer-only onchain review-vo
 
 Name: `CheapBugsToken`
 
-Description: A standalone ERC20 extension contract for future token-gated or reward flows. It is not required by the current report submission or review runtime.
+Description: The original standalone ERC20 extension contract remains in the repo, but the live BUGZ token used by the frontend is the Base token deployed through Clanker at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`.
 
 Technologies: Solidity 0.8.24, OpenZeppelin ERC20, Base, viem deployment tooling
 
@@ -211,11 +213,17 @@ Base RPC:
 - Purpose: Contract reads, writes, and deployment
 - Integration Method: Configured in [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts) and consumed by the frontend and launchers
 
-BUGZ Read Layer:
+BUGZ Read And Trade Layer:
 
-- Purpose: Read ERC20 metadata, balances, treasury state, and patron balances without requiring backend infrastructure
-- Integration Method: [src/contracts/bugzToken.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzToken.ts) and [src/lib/token.ts](/home/pierce/projects/cheapbugs/src/lib/token.ts)
-- Constraint: Full patron enumeration depends on reconstructing balances from `Transfer` logs and therefore needs `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` after deployment
+- Purpose: Read ERC20 metadata, connected-wallet balances, treasury state, patron balances, and browser-sign buy/sell swaps without requiring backend infrastructure
+- Integration Method: [src/contracts/bugzToken.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzToken.ts), [src/contracts/bugzTrade.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTrade.ts), and [src/lib/token.ts](/home/pierce/projects/cheapbugs/src/lib/token.ts)
+- Trade Path: Configured Clanker WETH/BUGZ Uniswap v4 pool key, v4 Quoter reads, and Universal Router 2.1.1 transactions. Buys wrap ETH to WETH inside the router, swap to BUGZ, and send BUGZ to the wallet. Sells use ERC20 plus Permit2 approvals, swap BUGZ to WETH, and unwrap to ETH.
+- Constraint: Full patron enumeration depends on reconstructing balances from `Transfer` logs and therefore needs `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`.
+
+Clanker:
+
+- Purpose: Original BUGZ market creation and optional market page link
+- Integration Method: The app does not call a Clanker backend. It treats the Clanker market as onchain Base liquidity and trades through Uniswap v4 contracts from the browser.
 
 XMTP:
 
@@ -268,6 +276,7 @@ Authorization:
 - report submission requires a connected wallet on Base
 - bouncer submissions require an XMTP-capable identity
 - private Signal access requests require the requested wallet to hold at least `BOUNCER_ACCESS_MIN_BUGZ`
+- BUGZ buy/sell actions require a connected transaction signer, either a thirdweb wallet or the browser-stored local wallet with Base ETH for gas
 
 Data Encryption:
 
@@ -295,8 +304,8 @@ Local Setup Instructions:
 - copy `.env.example` to `.env.local`
 - optionally override `VITE_THIRDWEB_CLIENT_ID` or `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
-- optionally deploy the BUGZ token contract if you want the extension address recorded in env
-- optionally configure the BUGZ treasury address, deployment block, and external buy URL when the `/token` and `/patrons` routes should become live
+- BUGZ defaults to the Base Clanker token at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`
+- optionally configure the BUGZ treasury address, deployment block, market URL, and `VITE_BUGZ_V4_*` pool overrides when treasury stats, `/patrons` scans, or a different Clanker market should become live
 - optionally set `VITE_BOUNCER_XMTP_ADDRESS` and run `python scripts/bouncer-bot.py run` when the XMTP/Signal submission path should be live
 
 Testing / Verification Commands:
@@ -322,7 +331,7 @@ Code Quality Tools:
 
 - Replace the frontend reviewer allowlist with an onchain reviewer registry or resolver-backed trust model.
 - Add public payout records for bouncer settlements while keeping `PayoutRecord` as the public record layer.
-- Wire the deployed BUGZ token into treasury logic or governance only when those product areas are intentionally scoped.
+- Keep BUGZ trading static/client-side; do not introduce a backend market proxy.
 - Add patron leaderboard and governance as separate extensions.
 - Reduce thirdweb-driven bundle size with route or adapter-level code splitting.
 - Add automated CI and ABI drift checks.
@@ -335,7 +344,7 @@ Repository URL: `git@github.com:pierce403/cheapbugs.git`
 
 Primary Contact/Team: `pierce403`
 
-Date of Last Update: 2026-05-16
+Date of Last Update: 2026-05-17
 
 ## 11. Glossary / Acronyms
 

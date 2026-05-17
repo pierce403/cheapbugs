@@ -9,7 +9,8 @@ import { renderReviewView } from "./views/review";
 import { renderSubmitView } from "./views/submit";
 import { renderTokenView } from "./views/token";
 import { ENS_APP_URL } from "./lib/ens";
-import { escapeHtml, shortHash } from "./lib/utils";
+import { loadTokenDashboard } from "./lib/token";
+import { escapeHtml, formatTokenAmount, shortHash } from "./lib/utils";
 import { env } from "./config/env";
 import { chainConfig } from "./config/chains";
 import type { AppNotice } from "./types/domain";
@@ -54,6 +55,23 @@ const renderIdentityBlock = (session: SessionState): string => {
       </div>
     </div>
   `;
+};
+
+const renderBugzStatus = async (session: SessionState, tokenHref: string): Promise<string> => {
+  if (!session.address) {
+    return `<div>bugz: -</div>`;
+  }
+
+  try {
+    const dashboard = await loadTokenDashboard(session.address);
+    const balance =
+      dashboard.connectedBalance !== null
+        ? `${formatTokenAmount(dashboard.connectedBalance, dashboard.decimals)} ${dashboard.symbol}`
+        : "unavailable";
+    return `<div>bugz: <a href="${tokenHref}" data-nav>${escapeHtml(balance)}</a></div>`;
+  } catch {
+    return `<div>bugz: unavailable</div>`;
+  }
 };
 
 export class CheapBugsApp {
@@ -116,8 +134,9 @@ export class CheapBugsApp {
     }
   }
 
-  private shell(view: ViewResult, context: AppViewContext): string {
+  private async shell(view: ViewResult, context: AppViewContext): Promise<string> {
     const session = context.session;
+    const bugzStatus = await renderBugzStatus(session, context.router.href("/token"));
     const notices = context.notices
       .map(
         (notice) => `
@@ -154,6 +173,7 @@ export class CheapBugsApp {
             <div>chain: ${escapeHtml(chainConfig.name)} (${chainConfig.id})</div>
             <div>storage: ${escapeHtml(context.storage.id)}</div>
             <div>wallet: ${escapeHtml(shortHash(session.address, 12, 6))}</div>
+            ${bugzStatus}
             <div>reviewer: ${session.isReviewer ? "trusted" : "no"}</div>
           </div>
         </div>
@@ -167,6 +187,7 @@ export class CheapBugsApp {
             <div>chain: ${escapeHtml(chainConfig.name)} (${chainConfig.id})</div>
             <div>storage: ${escapeHtml(context.storage.id)}</div>
             <div>wallet: anonymous</div>
+            ${bugzStatus}
             <div>reviewer: no</div>
           </div>
         </div>
@@ -217,7 +238,7 @@ export class CheapBugsApp {
     }
 
     document.title = `${view.title} | ${env.appName}`;
-    this.root.innerHTML = this.shell(view, context);
+    this.root.innerHTML = await this.shell(view, context);
 
     this.root.querySelectorAll<HTMLAnchorElement>("[data-nav]").forEach((anchor) => {
       anchor.addEventListener("click", (event) => {

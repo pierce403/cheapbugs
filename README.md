@@ -6,9 +6,9 @@ The current MVP stores public-safe report records onchain in `CheapBugsBugIndex`
 
 The repo now also includes an XMTP bouncer path for a private-review workflow: the static site can generate a local XMTP wallet, send submissions by XMTP DM to a configured bouncer wallet, and the Python bouncer can relay reports into a private Signal group, gate Signal access by BUGZ balance, count Signal reactions after seven days, and pay BUGZ rewards from a funded payout wallet.
 
-The repo also includes a standalone `BUGZ` ERC20 contract and Base launcher as a clean extension point for token-gated and reward features. The static app still runs without a deployed token unless the bouncer and token routes are configured.
+BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`. The static app reads connected-wallet balances directly from Base and exposes buy/sell controls as browser-signed Uniswap v4 transactions against the Clanker-created market. There is no token backend.
 
-The frontend now reserves first-class routes for `index`, `submit`, `review`, `token`, and `patrons`. The token and patrons screens are safe to ship before BUGZ is deployed and fall back to placeholder mode until token config is present.
+The frontend now reserves first-class routes for `index`, `submit`, `review`, `token`, and `patrons`. The token screen is live by default for BUGZ; the patrons screen still needs `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` before full holder scans are practical.
 
 For contract development, the repo now also includes a Foundry workspace with a deploy script and scenario tests for bug submission and reviewer vote flows.
 
@@ -25,7 +25,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 ## What Is Not In Scope Yet
 
-- token sale
+- app-hosted token sale backend
 - treasury logic
 - Compound integration
 - DAO governance
@@ -47,6 +47,10 @@ BOUNCER_DRY_RUN=1 python scripts/bouncer-bot.py run
 
 The bot expects `xmtp==0.1.5`, `signal-cli`, a Signal account already joined/admin in the private group, `BUGZ_TOKEN_ADDRESS`, `BASE_RPC_URL`, `XMTP_WALLET_KEY`, and `BUGZ_PAYOUT_PRIVATE_KEY` for live payouts. `BOUNCER_DRY_RUN=1` prevents token transfers while still exercising the relay and scoring path.
 
+## BUGZ Trading
+
+The default BUGZ token is `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` on Base. The `/token` route is still static HTML/TypeScript: it uses the Clanker WETH/BUGZ Uniswap v4 pool key, quotes through the v4 Quoter, and submits Universal Router 2.1.1 transactions from the connected wallet. Buy wraps ETH to WETH inside the router, swaps for BUGZ, and sends BUGZ to the wallet. Sell may first request ERC20 and Permit2 approvals, swaps BUGZ to WETH, and unwraps to ETH for the connected wallet.
+
 ## Quick Start
 
 1. Install dependencies:
@@ -67,7 +71,7 @@ cp .env.example .env.local
 3. Fill the required values in `.env.local`:
 
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
-- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TREASURY_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, and `VITE_BUGZ_BUY_URL` when the token dashboard should go live
+- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TREASURY_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_BUGZ_MARKET_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard and static trade pool
 - optional `VITE_BOUNCER_XMTP_ADDRESS` when submissions should be XMTP DMs to the bouncer instead of legacy onchain/IPFS filings
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
@@ -89,7 +93,7 @@ npm run contracts:test
 npm run launch:bug-index
 ```
 
-Optional future-token deployment:
+Optional extension-token deployment for local experiments:
 
 ```bash
 npm run launch:token
@@ -155,6 +159,8 @@ The bug index launcher:
 - writes `artifacts/CheapBugsBugIndex.json`
 - refreshes [src/contracts/bugIndexAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndexAbi.ts) so the frontend ABI stays aligned with the deployed contract
 - the contract now also exposes reviewer-only `submitReviewVote` and vote query helpers so Foundry tests can cover report-rating scenarios onchain
+
+The token launcher deploys the repo's standalone ERC20 extension contract. The live production BUGZ token is the Clanker-deployed Base token above.
 
 The token launcher:
 
