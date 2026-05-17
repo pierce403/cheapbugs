@@ -171,6 +171,12 @@ button {
   align-content: start;
 }
 
+.bugz-chip {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
 .auth-actions {
   display: flex;
   gap: 8px;
@@ -184,6 +190,20 @@ button {
   gap: 8px;
   align-items: center;
   margin-bottom: 4px;
+}
+
+.identity-avatar-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  color: inherit;
+}
+
+.identity-avatar-button:focus-visible {
+  outline: 1px solid var(--success);
+  outline-offset: 2px;
 }
 
 .identity-avatar {
@@ -217,6 +237,68 @@ button {
 
 .identity-secondary a {
   color: var(--warning);
+}
+
+.profile-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.profile-modal {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.profile-modal-header,
+.profile-modal-body {
+  display: flex;
+  gap: 12px;
+}
+
+.profile-modal-header {
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.profile-modal-body {
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-soft);
+  object-fit: cover;
+  background: #0a0a0a;
+}
+
+.profile-summary {
+  min-width: 0;
+}
+
+.profile-summary .helper-copy {
+  margin: 4px 0 0;
+}
+
+.profile-table {
+  margin-bottom: 10px;
+}
+
+.profile-table code {
+  overflow-wrap: anywhere;
+}
+
+.profile-actions {
+  justify-content: flex-end;
 }
 
 .nav-row {
@@ -415,8 +497,10 @@ button {
     text-align: left;
   }
 
+  .bugz-chip,
   .auth-panel,
   .auth-actions {
+    text-align: left;
     justify-items: start;
     justify-content: flex-start;
   }

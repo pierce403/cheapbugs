@@ -7,6 +7,9 @@ import type { SessionState } from "../types/app";
 import { toGatewayUrl } from "./ipfs";
 
 export const ENS_APP_URL = "https://app.ens.domains/";
+export const ENS_REGISTER_URL = ENS_APP_URL;
+
+export const ensProfileUrl = (name: string): string => `${ENS_APP_URL}${encodeURIComponent(name)}`;
 
 type EnsProfile = Pick<SessionState, "ensName" | "ensAvatarUrl" | "ensLookupStatus">;
 

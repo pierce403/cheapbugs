@@ -197,8 +197,9 @@ Wallet Auth:
 
 ENS:
 
-- Purpose: Resolve connected wallet ENS name and avatar for the session UI
+- Purpose: Resolve connected wallet ENS name and avatar for the compact session UI and profile modal
 - Integration Method: Browser-side Ethereum mainnet RPC reads in [src/lib/ens.ts](/home/pierce/projects/cheapbugs/src/lib/ens.ts), surfaced through [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
+- Profile Editing: CheapBugs does not maintain a separate profile database. The avatar modal links resolved ENS names to the official ENS App for profile edits and prompts wallets without a primary ENS name to register there.
 - Configuration: defaults to a public Ethereum mainnet RPC and allows `VITE_ENS_RPC_URL` overrides
 
 EAS:
