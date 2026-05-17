@@ -29,9 +29,6 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
   const dashboard = await loadTokenDashboard(context.session.address);
   const warnings = [
     !dashboard.isConfigured ? "BUGZ is not configured in this build." : "",
-    dashboard.treasuryAddress
-      ? ""
-      : "VITE_BUGZ_TREASURY_ADDRESS is unset, so treasury size cannot be resolved yet.",
     dashboard.errorMessage ?? ""
   ]
     .filter(Boolean)
@@ -41,6 +38,20 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
   const connectedBalance = context.session.address
     ? tokenAmount(dashboard.connectedBalance, dashboard.decimals, dashboard.symbol)
     : `<a href="${context.router.href("/login")}" data-nav>connect at /login</a>`;
+
+  const treasuryRows = dashboard.treasuryAddress
+    ? `
+            <tr><th>treasury</th><td>${escapeHtml(textOrDash(dashboard.treasuryAddress))}</td></tr>
+            <tr><th>treasury bugz</th><td>${tokenAmount(dashboard.treasuryTokenBalance, dashboard.decimals, dashboard.symbol)}</td></tr>
+            <tr><th>treasury ${escapeHtml(chainConfig.nativeSymbol)}</th><td>${
+              dashboard.treasuryNativeBalance !== null
+                ? `${escapeHtml(formatTokenAmount(dashboard.treasuryNativeBalance, 18))} ${escapeHtml(
+                    chainConfig.nativeSymbol
+                  )}`
+                : "-"
+            }</td></tr>
+    `
+    : "";
 
   return {
     title: "Token",
@@ -59,15 +70,7 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
             <tr><th>symbol</th><td>${escapeHtml(dashboard.symbol)}</td></tr>
             <tr><th>total supply</th><td>${tokenAmount(dashboard.totalSupply, dashboard.decimals, dashboard.symbol)}</td></tr>
             <tr><th>your balance</th><td>${connectedBalance}</td></tr>
-            <tr><th>treasury</th><td>${escapeHtml(textOrDash(dashboard.treasuryAddress))}</td></tr>
-            <tr><th>treasury bugz</th><td>${tokenAmount(dashboard.treasuryTokenBalance, dashboard.decimals, dashboard.symbol)}</td></tr>
-            <tr><th>treasury ${escapeHtml(chainConfig.nativeSymbol)}</th><td>${
-              dashboard.treasuryNativeBalance !== null
-                ? `${escapeHtml(formatTokenAmount(dashboard.treasuryNativeBalance, 18))} ${escapeHtml(
-                    chainConfig.nativeSymbol
-                  )}`
-                : "-"
-            }</td></tr>
+            ${treasuryRows}
             <tr><th>holder scan</th><td>${escapeHtml(dashboard.patronScanStatus)}</td></tr>
             <tr><th>clanker</th><td><a href="${escapeHtml(dashboard.marketUrl)}" target="_blank" rel="noreferrer">view market</a></td></tr>
           </tbody>

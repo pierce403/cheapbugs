@@ -70,7 +70,7 @@ npm run launch:token
 - `scripts/launch-bug-index-forge.sh`: shell wrapper for the Forge bug index launcher
 - `scripts/launch-token.mjs`: compile/deploy launcher for the BUGZ token contract
 - `src/contracts/bugIndex.ts`: frontend read/write adapter for the bug index contract
-- `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, balances, treasury state, and patron scans
+- `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, connected-wallet balances, optional treasury stats, and patron scans
 - `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
 - `src/auth/thirdweb.ts`: email login and external wallet connectivity
@@ -110,7 +110,7 @@ npm run launch:token
 - The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes.
 - Foundry is now configured with `contracts/` as the source directory, `script/` for deploy scripts, and `test/` for scenario coverage.
 - `forge-std` is tracked as the `lib/forge-std` git submodule, so fresh clones need `git submodule update --init --recursive` before `forge build` or `forge test`.
-- The BUGZ patrons leaderboard only works once `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` is configured. Treasury stats also need `VITE_BUGZ_TREASURY_ADDRESS`.
+- The BUGZ patrons leaderboard only works once `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` is configured. Treasury stats are optional display-only rows and must stay hidden when `VITE_BUGZ_TREASURY_ADDRESS` is unset.
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
@@ -130,6 +130,7 @@ npm run launch:token
 - Local XMTP wallet keys are browser-stored recovery material. Users must copy the recovery key before relying on that wallet for BUGZ rewards.
 - Local XMTP wallets can also sign BUGZ trade transactions from the browser via their stored private key; they still need Base ETH for gas and buys.
 - BUGZ trading is Base-only and uses the Clanker-created Uniswap v4 WETH/BUGZ pool key configured in `src/config/env.ts`. Buys wrap ETH in Universal Router; sells require Permit2 approval before the router can pull BUGZ.
+- BUGZ buy/sell must not depend on `VITE_BUGZ_TREASURY_ADDRESS`; if a token read returns `missing revert data`, first check that the configured RPC is Base mainnet.
 - The live BUGZ v4 pool was validated from Clanker `TokenCreated` block `46093316`: hook `0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC`, pool id `0x4c360c12ee8063e7170c344eba74f28ab0d3879c797ed46269202c3966234657`, dynamic fee flag `8388608`, tick spacing `200`, paired WETH.
 - `ffmpeg` is available in the local environment and was used to derive favicon/OpenGraph PNG assets from `cheapbugs.png`.
 - Signal reactions are social support signals only; they are not sybil-resistant votes.

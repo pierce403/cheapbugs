@@ -94,6 +94,21 @@ export type BugzTradeResult = {
 const readProvider = new JsonRpcProvider(chainConfig.rpcUrl, chainConfig.id);
 let poolCache: { value: BugzPool; expiresAt: number } | null = null;
 
+const shortenError = (message: string): string => (message.length > 220 ? `${message.slice(0, 217)}...` : message);
+
+const tradeErrorMessage = (label: string, error: unknown): string => {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (
+    raw.includes("CALL_EXCEPTION") ||
+    raw.includes("missing revert data") ||
+    raw.includes("could not decode result data")
+  ) {
+    return `${label} failed. Check that the wallet and VITE_CHAIN_RPC_URL are on Base mainnet, then try a smaller amount or wider slippage.`;
+  }
+
+  return `${label} failed: ${shortenError(raw)}`;
+};
+
 const assertBaseTrading = () => {
   if (chainConfig.id !== BASE_CHAIN_ID) {
     throw new Error("BUGZ onchain trading is only configured for Base mainnet.");
@@ -202,13 +217,21 @@ const quoteV4ExactInput = async (pool: BugzPool, side: BugzTradeSide, amountIn: 
   return quoted[0];
 };
 
+const getTradeTokenMetadata = async () => {
+  try {
+    return await getBugzTokenMetadata();
+  } catch {
+    return null;
+  }
+};
+
 export const quoteBugzTrade = async (
   side: BugzTradeSide,
   rawAmount: string,
   rawSlippagePercent: string
 ): Promise<BugzTradeQuote> => {
   assertBaseTrading();
-  const metadata = await getBugzTokenMetadata();
+  const metadata = await getTradeTokenMetadata();
   const tokenDecimals = metadata?.decimals ?? 18;
   const pool = await getBugzTradingPool();
   const amountIn = side === "buy" ? parseEther(rawAmount || "0") : parseUnits(rawAmount || "0", tokenDecimals);
@@ -216,7 +239,12 @@ export const quoteBugzTrade = async (
     throw new Error("Enter an amount greater than zero.");
   }
 
-  const amountOut = await quoteV4ExactInput(pool, side, amountIn);
+  let amountOut: bigint;
+  try {
+    amountOut = await quoteV4ExactInput(pool, side, amountIn);
+  } catch (error) {
+    throw new Error(tradeErrorMessage("BUGZ pool quote", error));
+  }
   if (amountOut <= 0n) {
     throw new Error("The BUGZ pool returned a zero quote.");
   }
@@ -308,52 +336,60 @@ export const buyBugzOnchain = async (
   rawEthAmount: string,
   rawSlippagePercent: string
 ): Promise<BugzTradeResult> => {
-  const quote = await quoteBugzTrade("buy", rawEthAmount, rawSlippagePercent);
-  const signer = await getWriteSigner();
-  const router = new Contract(UNISWAP_UNIVERSAL_ROUTER_211_BASE, universalRouterAbi, signer);
-  const wrapInput = abiCoder.encode(["address", "uint256"], [ADDRESS_THIS, quote.amountIn]);
-  const swapInput = encodeV4Swap(`0x${ACTION_SWAP_EXACT_IN_SINGLE}${ACTION_SETTLE}${ACTION_TAKE_ALL}`, [
-    encodeExactInputSingle(quote),
-    abiCoder.encode(["address", "uint256", "bool"], [quote.pool.pairedToken, quote.amountIn, false]),
-    abiCoder.encode(["address", "uint256"], [chainConfig.bugzTokenAddress, quote.amountOutMinimum])
-  ]);
-  const tx = await router.execute(`0x${COMMAND_WRAP_ETH}${COMMAND_V4_SWAP}`, [wrapInput, swapInput], deadline(), {
-    value: quote.amountIn
-  });
-  const receipt = await tx.wait();
-  clearBugzTokenCache();
-  return {
-    txHash: normalizeAddress(receipt?.hash ?? tx.hash),
-    quote
-  };
+  try {
+    const quote = await quoteBugzTrade("buy", rawEthAmount, rawSlippagePercent);
+    const signer = await getWriteSigner();
+    const router = new Contract(UNISWAP_UNIVERSAL_ROUTER_211_BASE, universalRouterAbi, signer);
+    const wrapInput = abiCoder.encode(["address", "uint256"], [ADDRESS_THIS, quote.amountIn]);
+    const swapInput = encodeV4Swap(`0x${ACTION_SWAP_EXACT_IN_SINGLE}${ACTION_SETTLE}${ACTION_TAKE_ALL}`, [
+      encodeExactInputSingle(quote),
+      abiCoder.encode(["address", "uint256", "bool"], [quote.pool.pairedToken, quote.amountIn, false]),
+      abiCoder.encode(["address", "uint256"], [chainConfig.bugzTokenAddress, quote.amountOutMinimum])
+    ]);
+    const tx = await router.execute(`0x${COMMAND_WRAP_ETH}${COMMAND_V4_SWAP}`, [wrapInput, swapInput], deadline(), {
+      value: quote.amountIn
+    });
+    const receipt = await tx.wait();
+    clearBugzTokenCache();
+    return {
+      txHash: normalizeAddress(receipt?.hash ?? tx.hash),
+      quote
+    };
+  } catch (error) {
+    throw new Error(tradeErrorMessage("BUGZ buy", error));
+  }
 };
 
 export const sellBugzOnchain = async (
   rawBugzAmount: string,
   rawSlippagePercent: string
 ): Promise<BugzTradeResult> => {
-  const quote = await quoteBugzTrade("sell", rawBugzAmount, rawSlippagePercent);
-  const signer = await getWriteSigner();
-  const owner = connectedAddress();
-  const approvalTxHashes = [
-    await approveBugzForPermit2(owner, quote.amountIn, signer),
-    await approvePermit2ForRouter(owner, quote.amountIn, signer)
-  ].filter((hash): hash is HexString => Boolean(hash));
+  try {
+    const quote = await quoteBugzTrade("sell", rawBugzAmount, rawSlippagePercent);
+    const signer = await getWriteSigner();
+    const owner = connectedAddress();
+    const approvalTxHashes = [
+      await approveBugzForPermit2(owner, quote.amountIn, signer),
+      await approvePermit2ForRouter(owner, quote.amountIn, signer)
+    ].filter((hash): hash is HexString => Boolean(hash));
 
-  const router = new Contract(UNISWAP_UNIVERSAL_ROUTER_211_BASE, universalRouterAbi, signer);
-  const swapInput = encodeV4Swap(`0x${ACTION_SWAP_EXACT_IN_SINGLE}${ACTION_SETTLE_ALL}${ACTION_TAKE}`, [
-    encodeExactInputSingle(quote),
-    abiCoder.encode(["address", "uint256"], [chainConfig.bugzTokenAddress, quote.amountIn]),
-    abiCoder.encode(["address", "address", "uint256"], [quote.pool.pairedToken, ADDRESS_THIS, quote.amountOutMinimum])
-  ]);
-  const unwrapInput = abiCoder.encode(["address", "uint256"], [owner, quote.amountOutMinimum]);
-  const tx = await router.execute(`0x${COMMAND_V4_SWAP}${COMMAND_UNWRAP_WETH}`, [swapInput, unwrapInput], deadline());
-  const receipt = await tx.wait();
-  clearBugzTokenCache();
+    const router = new Contract(UNISWAP_UNIVERSAL_ROUTER_211_BASE, universalRouterAbi, signer);
+    const swapInput = encodeV4Swap(`0x${ACTION_SWAP_EXACT_IN_SINGLE}${ACTION_SETTLE_ALL}${ACTION_TAKE}`, [
+      encodeExactInputSingle(quote),
+      abiCoder.encode(["address", "uint256"], [chainConfig.bugzTokenAddress, quote.amountIn]),
+      abiCoder.encode(["address", "address", "uint256"], [quote.pool.pairedToken, ADDRESS_THIS, quote.amountOutMinimum])
+    ]);
+    const unwrapInput = abiCoder.encode(["address", "uint256"], [owner, quote.amountOutMinimum]);
+    const tx = await router.execute(`0x${COMMAND_V4_SWAP}${COMMAND_UNWRAP_WETH}`, [swapInput, unwrapInput], deadline());
+    const receipt = await tx.wait();
+    clearBugzTokenCache();
 
-  return {
-    txHash: normalizeAddress(receipt?.hash ?? tx.hash),
-    approvalTxHashes,
-    quote
-  };
+    return {
+      txHash: normalizeAddress(receipt?.hash ?? tx.hash),
+      approvalTxHashes,
+      quote
+    };
+  } catch (error) {
+    throw new Error(tradeErrorMessage("BUGZ sell", error));
+  }
 };

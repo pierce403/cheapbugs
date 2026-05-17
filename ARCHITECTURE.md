@@ -215,9 +215,10 @@ Base RPC:
 
 BUGZ Read And Trade Layer:
 
-- Purpose: Read ERC20 metadata, connected-wallet balances, treasury state, patron balances, and browser-sign buy/sell swaps without requiring backend infrastructure
+- Purpose: Read ERC20 metadata, connected-wallet balances, optional treasury display stats, patron balances, and browser-sign buy/sell swaps without requiring backend infrastructure
 - Integration Method: [src/contracts/bugzToken.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzToken.ts), [src/contracts/bugzTrade.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTrade.ts), and [src/lib/token.ts](/home/pierce/projects/cheapbugs/src/lib/token.ts)
 - Trade Path: Configured Clanker WETH/BUGZ Uniswap v4 pool key, v4 Quoter reads, and Universal Router 2.1.1 transactions. Buys wrap ETH to WETH inside the router, swap to BUGZ, and send BUGZ to the wallet. Sells use ERC20 plus Permit2 approvals, swap BUGZ to WETH, and unwrap to ETH.
+- Constraint: Buy/sell does not use a treasury address. `VITE_BUGZ_TREASURY_ADDRESS` only enables optional dashboard rows and should remain unset when there is no treasury to report.
 - Constraint: Full patron enumeration depends on reconstructing balances from `Transfer` logs and therefore needs `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`.
 
 Clanker:
@@ -305,7 +306,7 @@ Local Setup Instructions:
 - optionally override `VITE_THIRDWEB_CLIENT_ID` or `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
 - BUGZ defaults to the Base Clanker token at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`
-- optionally configure the BUGZ treasury address, deployment block, market URL, and `VITE_BUGZ_V4_*` pool overrides when treasury stats, `/patrons` scans, or a different Clanker market should become live
+- optionally configure the BUGZ deployment block, market URL, and `VITE_BUGZ_V4_*` pool overrides when `/patrons` scans or a different Clanker market should become live. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional dashboard stats.
 - optionally set `VITE_BOUNCER_XMTP_ADDRESS` and run `python scripts/bouncer-bot.py run` when the XMTP/Signal submission path should be live
 
 Testing / Verification Commands:

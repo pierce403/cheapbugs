@@ -8,7 +8,7 @@ Frontend values:
 
 - `VITE_BUG_INDEX_ADDRESS`
 - `VITE_BUGZ_TOKEN_ADDRESS` only if and when token-aware frontend features are added
-- `VITE_BUGZ_TREASURY_ADDRESS` when the token manager should report treasury size
+- `VITE_BUGZ_TREASURY_ADDRESS` only when the token manager should show optional treasury stats
 - `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` when the patrons leaderboard should reconstruct holder balances from Transfer logs
 - `VITE_BUGZ_BUY_URL` when the token manager should hand off to an external buy flow
 - `VITE_REVIEW_VERDICT_SCHEMA_UID`

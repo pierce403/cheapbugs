@@ -49,7 +49,7 @@ The bot expects `xmtp==0.1.5`, `signal-cli`, a Signal account already joined/adm
 
 ## BUGZ Trading
 
-The default BUGZ token is `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` on Base. The `/token` route is still static HTML/TypeScript: it uses the Clanker WETH/BUGZ Uniswap v4 pool key, quotes through the v4 Quoter, and submits Universal Router 2.1.1 transactions from the connected wallet. Buy wraps ETH to WETH inside the router, swaps for BUGZ, and sends BUGZ to the wallet. Sell may first request ERC20 and Permit2 approvals, swaps BUGZ to WETH, and unwraps to ETH for the connected wallet.
+The default BUGZ token is `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` on Base. The `/token` route is still static HTML/TypeScript: it uses the Clanker WETH/BUGZ Uniswap v4 pool key, quotes through the v4 Quoter, and submits Universal Router 2.1.1 transactions from the connected wallet. Buy wraps ETH to WETH inside the router, swaps for BUGZ, and sends BUGZ to the wallet. Sell may first request ERC20 and Permit2 approvals, swaps BUGZ to WETH, and unwraps to ETH for the connected wallet. No treasury address is needed for trading.
 
 ## Quick Start
 
@@ -71,7 +71,7 @@ cp .env.example .env.local
 3. Fill the required values in `.env.local`:
 
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
-- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TREASURY_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_BUGZ_MARKET_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard and static trade pool
+- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_BUGZ_MARKET_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional treasury display rows.
 - optional `VITE_BOUNCER_XMTP_ADDRESS` when submissions should be XMTP DMs to the bouncer instead of legacy onchain/IPFS filings
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
