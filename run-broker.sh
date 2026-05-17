@@ -54,6 +54,8 @@ export BROKER_XMTP_DB_PATH="${BROKER_XMTP_DB_PATH:-.broker/xmtp.db3}"
 export BROKER_DB_PATH="${BROKER_DB_PATH:-.broker/broker.sqlite}"
 export BROKER_DRY_RUN="${BROKER_DRY_RUN:-1}"
 export BROKER_SIGNAL_CLI="${BROKER_SIGNAL_CLI:-}"
+export BASE_RPC_URL="${BASE_RPC_URL:-https://mainnet.base.org}"
+export BUGZ_TOKEN_ADDRESS="${BUGZ_TOKEN_ADDRESS:-0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07}"
 
 missing=()
 require_env() {
@@ -66,9 +68,6 @@ require_env() {
 
 if [[ "$COMMAND" != "init-db" ]]; then
   require_env BROKER_KEY
-  require_env XMTP_DB_ENCRYPTION_KEY
-  require_env BASE_RPC_URL
-  require_env BUGZ_TOKEN_ADDRESS
 
   if ! is_truthy "$BROKER_DRY_RUN" && ! is_falsey "$BROKER_DRY_RUN"; then
     echo "BROKER_DRY_RUN must be one of 1, true, yes, on, 0, false, no, off." >&2

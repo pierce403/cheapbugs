@@ -125,7 +125,7 @@ class ConfigTest(unittest.TestCase):
     def test_runtime_requirements_allow_signal_disabled(self) -> None:
         config = test_config(Path("broker.sqlite"), signal_enabled=False)
 
-        with patch.dict("os.environ", {"XMTP_DB_ENCRYPTION_KEY": "0xabc"}, clear=True):
+        with patch.dict("os.environ", {}, clear=True):
             config.require_runtime()
 
     def test_runtime_requirements_require_signal_details_when_enabled(self) -> None:
@@ -138,25 +138,23 @@ class ConfigTest(unittest.TestCase):
             }
         )
 
-        with patch.dict("os.environ", {"XMTP_DB_ENCRYPTION_KEY": "0xabc"}, clear=True):
+        with patch.dict("os.environ", {}, clear=True):
             with self.assertRaisesRegex(ValueError, "BROKER_SIGNAL_ACCOUNT"):
                 config.require_runtime()
 
-    def test_from_env_uses_single_broker_key(self) -> None:
+    def test_from_env_uses_single_broker_key_and_static_defaults(self) -> None:
         with patch.dict(
             "os.environ",
             {
                 "BROKER_KEY": "0xbroker",
-                "BASE_RPC_URL": "http://localhost:8545",
-                "BUGZ_TOKEN_ADDRESS": WALLET,
             },
             clear=True,
         ):
             config = BrokerConfig.from_env()
 
         self.assertEqual(config.broker_key, "0xbroker")
-        self.assertEqual(config.base_rpc_url, "http://localhost:8545")
-        self.assertEqual(config.bugz_token_address, WALLET)
+        self.assertEqual(config.base_rpc_url, "https://mainnet.base.org")
+        self.assertEqual(config.bugz_token_address, "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07")
 
 
 class StoreTest(unittest.TestCase):

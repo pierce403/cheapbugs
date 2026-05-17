@@ -146,7 +146,7 @@ npm run launch:token
 - The broker replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
 - The Python broker uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
-- Use `./run-broker.sh` for local broker runtime startup. It expects a shell-compatible `.env`, defaults `BROKER_DRY_RUN=1`, requires `BROKER_KEY` plus `XMTP_DB_ENCRYPTION_KEY` for persistent XMTP state, and creates `.venv-broker`/`.broker`, which are gitignored. `.env*` is ignored except `.env.example`. If `BROKER_SIGNAL_CLI` is unset, Signal relay/reaction/reward support is disabled with a warning.
+- Use `./run-broker.sh` for local broker runtime startup. It expects a shell-compatible `.env`, defaults `BROKER_DRY_RUN=1`, requires only `BROKER_KEY` for the no-Signal path, and creates `.venv-broker`/`.broker`, which are gitignored. Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base token. If `BROKER_SIGNAL_CLI` is unset, Signal relay/reaction/reward support is disabled with a warning.
 - Broker rewards are ERC20 transfers from the wallet behind `BROKER_KEY`, not mints. `BROKER_KEY` is also the XMTP broker identity, so fund and cap that wallet intentionally before running without `BROKER_DRY_RUN=1`.
 
 ## Known Issues And Practical Tips

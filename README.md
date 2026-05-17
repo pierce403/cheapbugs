@@ -42,7 +42,7 @@ Bot setup:
 ./run-broker.sh
 ```
 
-`run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.5`, `BROKER_KEY`, `XMTP_DB_ENCRYPTION_KEY`, `BUGZ_TOKEN_ADDRESS`, and `BASE_RPC_URL`. `BROKER_KEY` is the broker wallet key used for both the XMTP identity and BUGZ payouts. `BROKER_DRY_RUN` defaults to `1`, which prevents token transfers while still exercising the validation path; set `BROKER_DRY_RUN=0` only when the broker wallet is intentionally funded.
+`run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.5` and `BROKER_KEY`. `BROKER_KEY` is the broker wallet key used for both the XMTP identity and BUGZ payouts. Base RPC and BUGZ token settings default to Base mainnet and the live BUGZ token, and can be overridden with `BASE_RPC_URL` and `BUGZ_TOKEN_ADDRESS`. `BROKER_DRY_RUN` defaults to `1`, which prevents token transfers while still exercising the validation path; set `BROKER_DRY_RUN=0` only when the broker wallet is intentionally funded.
 
 Signal is optional for local broker testing. If `BROKER_SIGNAL_CLI` is unset, `run-broker.sh` prints a warning and starts the broker without Signal relay, Signal reaction syncing, or reward settlement.
 
@@ -50,9 +50,6 @@ Minimal `.env` shape:
 
 ```bash
 BROKER_KEY=0x...
-XMTP_DB_ENCRYPTION_KEY=0x...
-BASE_RPC_URL=https://mainnet.base.org
-BUGZ_TOKEN_ADDRESS=0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07
 BROKER_DRY_RUN=1
 ```
 

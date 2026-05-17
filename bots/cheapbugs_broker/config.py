@@ -8,6 +8,10 @@ from decimal import Decimal
 from pathlib import Path
 
 
+DEFAULT_BASE_RPC_URL = "https://mainnet.base.org"
+DEFAULT_BUGZ_TOKEN_ADDRESS = "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07"
+
+
 def _env_first(*names: str, default: str = "") -> str:
     for name in names:
         value = os.getenv(name)
@@ -85,8 +89,8 @@ class BrokerConfig:
             signal_cli_path=_env_first("BROKER_SIGNAL_CLI"),
             signal_account=_env_first("BROKER_SIGNAL_ACCOUNT"),
             signal_group_id=_env_first("BROKER_SIGNAL_GROUP_ID"),
-            base_rpc_url=_env_first("BASE_RPC_URL"),
-            bugz_token_address=_env_first("BUGZ_TOKEN_ADDRESS"),
+            base_rpc_url=_env_first("BASE_RPC_URL", default=DEFAULT_BASE_RPC_URL),
+            bugz_token_address=_env_first("BUGZ_TOKEN_ADDRESS", default=DEFAULT_BUGZ_TOKEN_ADDRESS),
             access_min_balance_tokens=_env_decimal_any(("BROKER_ACCESS_MIN_BUGZ",), "1"),
             submission_min_balance_tokens=_env_decimal_any(("BROKER_SUBMISSION_MIN_BUGZ",), "1"),
             reputation_blocklist=_env_address_set_any(("BROKER_REPUTATION_BLOCKLIST",)),
@@ -102,15 +106,9 @@ class BrokerConfig:
         missing: list[str] = []
         if not self.broker_key:
             missing.append("BROKER_KEY")
-        if not os.getenv("XMTP_DB_ENCRYPTION_KEY", "").strip():
-            missing.append("XMTP_DB_ENCRYPTION_KEY")
         if self.signal_enabled and not self.signal_account:
             missing.append("BROKER_SIGNAL_ACCOUNT")
         if self.signal_enabled and not self.signal_group_id:
             missing.append("BROKER_SIGNAL_GROUP_ID")
-        if not self.base_rpc_url:
-            missing.append("BASE_RPC_URL")
-        if not self.bugz_token_address:
-            missing.append("BUGZ_TOKEN_ADDRESS")
         if missing:
             raise ValueError(f"Missing required broker env vars: {', '.join(missing)}")

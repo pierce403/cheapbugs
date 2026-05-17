@@ -151,7 +151,8 @@ cheapbugs/
 - **Description**: Optional Python runtime receives XMTP DMs, validates commands, optionally relays accepted submissions to a private Signal group, stores broker state in SQLite, tracks Signal reactions, and pays BUGZ rewards when Signal is configured.
 - **Properties**:
   - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`.
-  - `run-broker.sh` loads `.env`, validates mandatory XMTP, Base RPC, and BUGZ token settings, prepares `.venv-broker`, initializes the SQLite store, and runs the broker.
+  - `run-broker.sh` loads `.env`, validates mandatory `BROKER_KEY`, prepares `.venv-broker`, initializes the SQLite store, and runs the broker.
+  - Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base BUGZ token and can be overridden for local testing.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; disable it only when the broker wallet is intentionally funded for live payouts.
