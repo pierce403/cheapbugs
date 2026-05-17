@@ -39,7 +39,7 @@ Current architecture:
 - public-safe report metadata is written onchain to the `CheapBugsBugIndex` contract on Base
 - private report details are encrypted in the browser and uploaded to IPFS
 - reviewer verdicts are written as EAS attestations on Base
-- auth and wallet connectivity use thirdweb
+- auth and wallet connectivity use injected browser wallets plus direct WalletConnect QR
 
 ## Verified Commands
 
@@ -73,11 +73,11 @@ npm run launch:token
 - `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, connected-wallet balances, optional treasury stats, and patron scans
 - `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
-- `src/auth/thirdweb.ts`: email login and external wallet connectivity
+- `src/auth/wallet.ts`: injected wallet, WalletConnect QR, persisted wallet session, and signer adapter
 - `src/auth/localIdentity.ts`: browser-stored generated XMTP wallet identity helper
 - `src/xmtp/browser.ts`: browser XMTP SDK adapter for local/external wallet signers
 - `src/xmtp/bouncer.ts`: structured bouncer submission DM helper
-- `src/storage/thirdweb.ts`: default static-friendly IPFS storage provider
+- `src/storage/gateway.ts`: static IPFS gateway reader and disabled-upload fallback
 - `src/storage/pinata.ts`: presigned-upload Pinata adapter
 - `src/attest/eas.ts`: EAS write adapter for verdicts and payout placeholders
 - `src/lib/reports.ts`: submission, loading, decryption, and review orchestration
@@ -89,7 +89,6 @@ npm run launch:token
 ## Project Conventions
 
 - Keep the app deployable as static assets. Do not introduce SSR or a backend database.
-- Keep browser-side thirdweb usage limited to `clientId`. Never expose a `secretKey` in client code.
 - Keep Pinata credentials out of the browser. Use only presigned upload URLs if Pinata is enabled.
 - Treat all IPFS content and EAS note content as untrusted user input.
 - Never upload sensitive bug details publicly in plaintext.
@@ -114,7 +113,8 @@ npm run launch:token
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
-- The default public thirdweb client ID is committed in config; deployments may override it with `VITE_THIRDWEB_CLIENT_ID`.
+- Wallet auth persists the last selected connector in `cheapbugs.walletSession.v1`; injected sessions restore only when the wallet still exposes authorized accounts, while WalletConnect sessions restore from the provider's persisted session.
+- WalletConnect QR login needs `VITE_WALLETCONNECT_PROJECT_ID`; browsers with injected web3 can connect without it.
 - Connected wallet UI now resolves ENS name/avatar from Ethereum mainnet and should prompt users to create an ENS name when none is found.
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
 - `VITE_BOUNCER_XMTP_ADDRESS` switches the submit route to XMTP DM submission. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
@@ -124,7 +124,7 @@ npm run launch:token
 
 ## Known Issues And Practical Tips
 
-- `npm run build` currently succeeds but emits large-chunk warnings because of the thirdweb dependency graph.
+- `npm run build` currently succeeds but emits large-chunk warnings because of the WalletConnect/XMTP dependency graph.
 - GitHub Actions run pages show top-level status and annotations publicly, but step logs require GitHub sign-in.
 - ENS avatar URLs are untrusted input. Only render sanitized HTTPS URLs or a local fallback badge.
 - Local XMTP wallet keys are browser-stored recovery material. Users must copy the recovery key before relying on that wallet for BUGZ rewards.

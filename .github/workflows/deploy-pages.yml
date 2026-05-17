@@ -42,7 +42,7 @@ jobs:
           VITE_BASE_PATH: /
           VITE_ROUTER_MODE: hash
           VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
-          VITE_THIRDWEB_CLIENT_ID: ${{ vars.VITE_THIRDWEB_CLIENT_ID }}
+          VITE_WALLETCONNECT_PROJECT_ID: ${{ vars.VITE_WALLETCONNECT_PROJECT_ID }}
           VITE_CHAIN_ID: ${{ vars.VITE_CHAIN_ID }}
           VITE_CHAIN_NAME: ${{ vars.VITE_CHAIN_NAME }}
           VITE_CHAIN_RPC_URL: ${{ vars.VITE_CHAIN_RPC_URL }}

@@ -37,39 +37,20 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
       ${
         authController.isConfigured()
           ? ""
-          : `<p class="warning-copy">This deploy is missing VITE_THIRDWEB_CLIENT_ID, so login and uploads are disabled until the GitHub Pages environment is configured.</p>`
+          : `<p class="warning-copy">No browser wallet was detected and VITE_WALLETCONNECT_PROJECT_ID is unset, so WalletConnect QR login is disabled.</p>`
       }
       <p class="lede">
-        Use thirdweb email verification for an in-app wallet, or connect an external wallet directly. Browser code only uses the
-        configured clientId.
+        Connect with the wallet built into this browser. If this browser has no web3 provider, use WalletConnect QR.
       </p>
-      <div class="auth-grid">
-        <form id="email-code-form" class="stack-form">
-          <label>
-            email
-            <input name="email" type="email" required autocomplete="email" placeholder="researcher@host.tld" />
-          </label>
-          <button class="button" type="submit" ${authController.isConfigured() ? "" : "disabled"}>send verification code</button>
-        </form>
-
-        <form id="email-login-form" class="stack-form">
-          <label>
-            email
-            <input name="email" type="email" required autocomplete="email" placeholder="researcher@host.tld" />
-          </label>
-          <label>
-            code
-            <input name="code" type="text" required inputmode="numeric" placeholder="123456" />
-          </label>
-          <button class="button" type="submit" ${authController.isConfigured() ? "" : "disabled"}>verify and connect</button>
-        </form>
+      <div class="button-row">
+        <button id="connect-primary-wallet" type="button" class="button" ${authController.isConfigured() ? "" : "disabled"}>connect wallet</button>
       </div>
     </section>
 
-      <section class="panel">
+    <section class="panel">
       <div class="panel-title">[ external wallets ]</div>
       <div class="button-row">
-        ${externalButtons() || `<span class="muted-copy">No external wallets available while auth is disabled.</span>`}
+        ${externalButtons() || `<span class="muted-copy">No browser wallet detected. Configure VITE_WALLETCONNECT_PROJECT_ID to enable QR login.</span>`}
       </div>
     </section>
 
@@ -94,7 +75,6 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
           <tr><th>ens status</th><td>${escapeHtml(context.session.ensLookupStatus)}</td></tr>
           <tr><th>ens</th><td>${escapeHtml(context.session.ensName ?? "-")}</td></tr>
           <tr><th>avatar</th><td>${context.session.ensAvatarUrl ? `<a href="${escapeHtml(context.session.ensAvatarUrl)}" target="_blank" rel="noreferrer">loaded</a>` : "-"}</td></tr>
-          <tr><th>email</th><td>${escapeHtml(context.session.email ?? "-")}</td></tr>
           <tr><th>reviewer</th><td>${context.session.isReviewer ? "trusted" : "no"}</td></tr>
           <tr><th>error</th><td>${escapeHtml(context.session.lastError ?? "-")}</td></tr>
         </tbody>
@@ -106,8 +86,7 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
     const useLocalButton = root.querySelector<HTMLButtonElement>("#use-local-identity");
     const copyLocalButton = root.querySelector<HTMLButtonElement>("#copy-local-recovery");
     const forgetLocalButton = root.querySelector<HTMLButtonElement>("#forget-local-identity");
-    const codeForm = root.querySelector<HTMLFormElement>("#email-code-form");
-    const loginForm = root.querySelector<HTMLFormElement>("#email-login-form");
+    const connectPrimaryButton = root.querySelector<HTMLButtonElement>("#connect-primary-wallet");
 
     createLocalButton?.addEventListener("click", async () => {
       try {
@@ -153,29 +132,13 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
       appContext.router.navigate("/login");
     });
 
-    codeForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(codeForm);
-      const email = String(formData.get("email") || "");
+    connectPrimaryButton?.addEventListener("click", async () => {
       try {
-        await authController.sendEmailCode(email);
-        appContext.notify("success", `Verification code sent to ${email}.`);
+        await authController.connectPrimary();
+        appContext.notify("success", "Wallet connected.");
+        appContext.router.navigate("/");
       } catch (error) {
-        appContext.notify("error", error instanceof Error ? error.message : "Failed to send verification code.");
-      }
-    });
-
-    loginForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(loginForm);
-      const email = String(formData.get("email") || "");
-      const code = String(formData.get("code") || "");
-      try {
-        await authController.connectEmail(email, code);
-        appContext.notify("success", "In-app wallet connected.");
-        appContext.router.navigate("/submit");
-      } catch (error) {
-        appContext.notify("error", error instanceof Error ? error.message : "Email login failed.");
+        appContext.notify("error", error instanceof Error ? error.message : "Wallet connection failed.");
       }
     });
 
@@ -188,7 +151,7 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
 
         try {
           await authController.connectExternal(walletId);
-          appContext.notify("success", `Connected ${walletId}.`);
+          appContext.notify("success", `Connected ${authController.walletLabel(walletId)}.`);
           appContext.router.navigate("/");
         } catch (error) {
           appContext.notify("error", error instanceof Error ? error.message : "Wallet connection failed.");

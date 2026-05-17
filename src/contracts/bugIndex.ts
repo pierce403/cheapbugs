@@ -1,7 +1,6 @@
 import { Contract, JsonRpcProvider } from "ethers";
-import { ethers6Adapter } from "thirdweb/adapters/ethers6";
 
-import { appChain, chainConfig } from "../config/chains";
+import { chainConfig } from "../config/chains";
 import type { SubmissionPublic } from "../types/submission";
 import { authController } from "../services";
 import {
@@ -44,17 +43,7 @@ const readProvider = new JsonRpcProvider(chainConfig.rpcUrl, chainConfig.id);
 const readContract = () => new Contract(bugIndexAddress(), bugIndexAbi, readProvider);
 
 const writeContract = async (): Promise<Contract> => {
-  const account = authController.getActiveAccount();
-  if (!account) {
-    throw new Error("Connect a wallet before submitting onchain reports.");
-  }
-
-  const signer = await ethers6Adapter.signer.toEthers({
-    client: authController.requireClient(),
-    chain: appChain,
-    account
-  });
-
+  const signer = await authController.getSigner();
   return new Contract(bugIndexAddress(), bugIndexAbi, signer);
 };
 

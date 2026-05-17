@@ -12,8 +12,7 @@ export type SessionState = {
   status: "idle" | "loading" | "connected" | "error";
   walletId: string | null;
   address: `0x${string}` | null;
-  email: string | null;
-  mode: "email" | "external" | "local" | null;
+  mode: "injected" | "walletconnect" | "local" | null;
   ensName: string | null;
   ensAvatarUrl: string | null;
   ensLookupStatus: "idle" | "loading" | "resolved" | "missing" | "error";

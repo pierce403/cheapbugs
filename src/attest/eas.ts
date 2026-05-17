@@ -1,8 +1,7 @@
 import { EAS, NO_EXPIRATION, SchemaEncoder, SchemaRegistry } from "@ethereum-attestation-service/eas-sdk";
-import { ethers6Adapter } from "thirdweb/adapters/ethers6";
 
 import { authController } from "../services";
-import { chainConfig, appChain } from "../config/chains";
+import { chainConfig } from "../config/chains";
 import { EAS_SCHEMAS, ZERO_ADDRESS, ZERO_BYTES32 } from "../lib/constants";
 import { getSchemaUid, setSchemaUidOverride } from "../lib/schema-overrides";
 import { clamp, impactToIndex, payoutTypeToIndex, rewardClassToIndex, validityToIndex } from "../lib/utils";
@@ -12,18 +11,7 @@ import type { ReviewVerdict } from "../types/review";
 const reviewEncoder = new SchemaEncoder(EAS_SCHEMAS.ReviewVerdict.definition);
 const payoutEncoder = new SchemaEncoder(EAS_SCHEMAS.PayoutRecord.definition);
 
-const toSigner = async () => {
-  const account = authController.getActiveAccount();
-  if (!account) {
-    throw new Error("Connect a wallet first.");
-  }
-
-  return ethers6Adapter.signer.toEthers({
-    client: authController.requireClient(),
-    chain: appChain,
-    account
-  });
-};
+const toSigner = async () => authController.getSigner();
 
 const easClient = async (): Promise<EAS> => {
   const signer = await toSigner();

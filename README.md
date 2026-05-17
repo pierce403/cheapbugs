@@ -14,8 +14,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 ## What Is In Scope
 
-- thirdweb login with email verification code flow and in-app wallet
-- external wallet connect for advanced users
+- injected browser wallet login with WalletConnect QR fallback
 - Base-only onchain report index contract
 - encrypted private report uploads to IPFS
 - EAS review verdict attestations
@@ -33,7 +32,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 ## XMTP Bouncer Flow
 
-Set `VITE_BOUNCER_XMTP_ADDRESS` to switch the submit route from the legacy onchain/IPFS path to XMTP DM submission. Users can connect with an existing thirdweb wallet or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
+Set `VITE_BOUNCER_XMTP_ADDRESS` to switch the submit route from the legacy onchain/IPFS path to XMTP DM submission. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
 
 Bot setup:
 
@@ -72,11 +71,10 @@ cp .env.example .env.local
 
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
 - optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_BUGZ_MARKET_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional treasury display rows.
+- `VITE_WALLETCONNECT_PROJECT_ID` when browsers without injected web3 should use WalletConnect QR login
 - optional `VITE_BOUNCER_XMTP_ADDRESS` when submissions should be XMTP DMs to the bouncer instead of legacy onchain/IPFS filings
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
-
-`VITE_THIRDWEB_CLIENT_ID` already defaults to the current public thirdweb client ID in source and can be overridden if needed.
 
 4. Dry-run the contract launcher:
 
@@ -123,11 +121,11 @@ Set these repository variables before relying on the Pages deploy:
 
 The workflow lives at [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml).
 It builds with `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain and `hash` routing so GitHub Pages can serve SPA routes without a custom origin server.
-The build defaults to the current public thirdweb client ID and can still be overridden with `VITE_THIRDWEB_CLIENT_ID`.
+Set `VITE_WALLETCONNECT_PROJECT_ID` as a repository variable if WalletConnect QR should work on the hosted site.
 
 ## How Reports Work
 
-1. A reporter signs in with thirdweb using either email verification or an external wallet.
+1. A reporter connects an injected browser wallet, scans a WalletConnect QR code, or uses a site-local XMTP wallet.
 2. The browser builds `SubmissionPrivate` and `SubmissionPublic`.
 3. `SubmissionPrivate` is encrypted locally in the browser.
 4. The encrypted private dossier is uploaded to IPFS through the configured storage provider.
@@ -139,10 +137,11 @@ With `VITE_BOUNCER_XMTP_ADDRESS` set, the submit route instead sends a structure
 
 ## Environment Notes
 
-- The browser initializes thirdweb with `clientId` only.
-- Do not place any thirdweb `secretKey` in client code.
+- Wallet sessions are remembered in browser local storage and restored after refresh when the wallet still authorizes the site.
+- WalletConnect QR login requires `VITE_WALLETCONNECT_PROJECT_ID`.
 - Do not place Pinata API keys in browser code.
 - Pinata is supported only through a presigned upload endpoint.
+- Without a Pinata presign endpoint, the default IPFS gateway provider can read existing IPFS JSON but cannot upload new legacy onchain dossiers.
 - ENS identity lookups use Ethereum mainnet RPC and can be overridden with `VITE_ENS_RPC_URL`.
 - Site-generated XMTP wallets are stored locally in the browser under `cheapbugs.localXmtpIdentity.v1`; users must keep the copied recovery key if that wallet will hold BUGZ.
 - Base-specific values are isolated in [src/config/chains.ts](/home/pierce/projects/cheapbugs/src/config/chains.ts) and [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts).
@@ -180,13 +179,13 @@ The token launcher:
 - [test/CheapBugsBugIndex.t.sol](/home/pierce/projects/cheapbugs/test/CheapBugsBugIndex.t.sol)
 - [src/contracts/bugIndex.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndex.ts)
 - [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
-- [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
+- [src/auth/wallet.ts](/home/pierce/projects/cheapbugs/src/auth/wallet.ts)
 - [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
 - [src/xmtp/browser.ts](/home/pierce/projects/cheapbugs/src/xmtp/browser.ts)
 - [src/xmtp/bouncer.ts](/home/pierce/projects/cheapbugs/src/xmtp/bouncer.ts)
 - [scripts/bouncer-bot.py](/home/pierce/projects/cheapbugs/scripts/bouncer-bot.py)
 - [bots/cheapbugs_bouncer/](/home/pierce/projects/cheapbugs/bots/cheapbugs_bouncer)
-- [src/storage/thirdweb.ts](/home/pierce/projects/cheapbugs/src/storage/thirdweb.ts)
+- [src/storage/gateway.ts](/home/pierce/projects/cheapbugs/src/storage/gateway.ts)
 - [src/storage/pinata.ts](/home/pierce/projects/cheapbugs/src/storage/pinata.ts)
 - [src/attest/eas.ts](/home/pierce/projects/cheapbugs/src/attest/eas.ts)
 - [src/lib/reports.ts](/home/pierce/projects/cheapbugs/src/lib/reports.ts)
@@ -194,9 +193,7 @@ The token launcher:
 
 ## References
 
-- thirdweb TypeScript client: https://portal.thirdweb.com/typescript/v5/client
-- thirdweb in-app wallets: https://portal.thirdweb.com/typescript/v5/in-app-wallet/get-started
-- thirdweb storage: https://portal.thirdweb.com/references/typescript/v4/download
+- WalletConnect Ethereum Provider: https://github.com/WalletConnect/walletconnect-monorepo/tree/master/packages/ethereum-provider
 - Pinata presigned uploads: https://docs.pinata.cloud/files/presigned-urls
 - EAS indexing service repo: https://github.com/ethereum-attestation-service/eas-indexing-service
 - IPFS web app guidance: https://docs.ipfs.tech/how-to/ipfs-in-web-apps/

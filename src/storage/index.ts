@@ -1,18 +1,18 @@
 import { env } from "../config/env";
 import type { StorageProvider } from "../types/storage";
 
+import { GatewayStorageProvider } from "./gateway";
 import { PinataStorageProvider } from "./pinata";
-import { ThirdwebStorageProvider } from "./thirdweb";
 
-const thirdwebProvider = new ThirdwebStorageProvider();
+const gatewayProvider = new GatewayStorageProvider();
 const pinataProvider = new PinataStorageProvider();
 
-export const storageProviders: StorageProvider[] = [thirdwebProvider, pinataProvider];
+export const storageProviders: StorageProvider[] = [gatewayProvider, pinataProvider];
 
 export const activeStorageProvider = (): StorageProvider => {
   if (env.storageProvider === "pinata" && pinataProvider.isConfigured()) {
     return pinataProvider;
   }
 
-  return thirdwebProvider;
+  return gatewayProvider;
 };

@@ -19,7 +19,7 @@ cheapbugs/
 ├── public/                 # Static assets and SPA hosting helpers
 ├── src/
 │   ├── attest/             # EAS write adapters
-│   ├── auth/               # thirdweb auth and wallet connectivity
+│   ├── auth/               # injected wallet, WalletConnect QR, and local XMTP identity helpers
 │   ├── config/             # chain, env, and reviewer configuration
 │   ├── contracts/          # frontend contract ABI and adapters
 │   ├── lib/                # core domain logic, crypto, IPFS, caching, utilities
@@ -44,7 +44,7 @@ cheapbugs/
   |        |         |
   |        |         +--> [EAS on Base] <--> [EAS GraphQL API]
   |        |
-  |        +--------------> [IPFS via thirdweb Storage or Pinata presigned upload]
+  |        +--------------> [IPFS via gateway reads or Pinata presigned upload]
   |
   +-----------------------> [CheapBugsBugIndex on Base]
   |
@@ -72,7 +72,7 @@ Name: CheapBugs static web app
 
 Description: A narrow-layout, milw0rm-inspired frontend for login, report submission, public browsing, report review, live BUGZ balance/trading controls, a patrons leaderboard, and local decryption of private dossiers.
 
-Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, thirdweb SDK, ethers, viem, optional `@xmtp/browser-sdk`
+Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, ethers, WalletConnect Ethereum Provider, viem, optional `@xmtp/browser-sdk`
 
 Deployment: Static assets from `dist/`, suitable for Netlify, Cloudflare Pages, Vercel static hosting, GitHub Pages, or IPFS-aware static hosting
 
@@ -112,9 +112,9 @@ Deployment: External network dependency on Base EAS contracts and EAS Scan index
 
 Name: StorageProvider abstraction
 
-Description: Provides pluggable upload/download support for encrypted dossier JSON and optional public reviewer notes. Default path is thirdweb storage. Pinata is available only behind a presigned-upload helper.
+Description: Provides pluggable upload/download support for encrypted dossier JSON and optional public reviewer notes. The default gateway provider can read IPFS JSON but cannot upload; Pinata is available only behind a presigned-upload helper.
 
-Technologies: thirdweb storage SDK, Pinata presigned uploads, IPFS gateways
+Technologies: Pinata presigned uploads, IPFS gateways
 
 Deployment: Browser-side integration; no app-owned storage server in the MVP
 
@@ -186,16 +186,16 @@ Key Records:
 
 ## 5. External Integrations / APIs
 
-thirdweb:
+Wallet Auth:
 
-- Purpose: Email login, in-app wallet creation, external wallet connectivity, and default IPFS upload/download
-- Integration Method: SDK in [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts) and [src/storage/thirdweb.ts](/home/pierce/projects/cheapbugs/src/storage/thirdweb.ts)
-- Configuration: the app ships with a committed public `clientId` default and still allows `VITE_THIRDWEB_CLIENT_ID` overrides
+- Purpose: Connect injected browser wallets, open WalletConnect QR for browsers without injected web3, restore the last authorized wallet session after refresh, and expose ethers signers to contract adapters
+- Integration Method: [src/auth/wallet.ts](/home/pierce/projects/cheapbugs/src/auth/wallet.ts) with ethers `BrowserProvider`, direct `@walletconnect/ethereum-provider`, and site-local XMTP identities from [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
+- Configuration: `VITE_WALLETCONNECT_PROJECT_ID` enables WalletConnect QR. Injected browser wallets work without a project ID.
 
 ENS:
 
 - Purpose: Resolve connected wallet ENS name and avatar for the session UI
-- Integration Method: Browser-side Ethereum mainnet RPC reads in [src/lib/ens.ts](/home/pierce/projects/cheapbugs/src/lib/ens.ts), surfaced through [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
+- Integration Method: Browser-side Ethereum mainnet RPC reads in [src/lib/ens.ts](/home/pierce/projects/cheapbugs/src/lib/ens.ts), surfaced through [src/auth/wallet.ts](/home/pierce/projects/cheapbugs/src/auth/wallet.ts)
 - Configuration: defaults to a public Ethereum mainnet RPC and allows `VITE_ENS_RPC_URL` overrides
 
 EAS:
@@ -253,13 +253,13 @@ Key Services Used:
 - GitHub Pages
 - optional worker host for `scripts/bouncer-bot.py`
 - Base RPC endpoint
-- thirdweb client infrastructure
+- WalletConnect relay infrastructure when QR login is enabled
 - EAS contracts and indexing
 - IPFS storage/gateway infrastructure
 - XMTP network
 - Signal account and group reachable by `signal-cli`
 
-CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`, with GitHub Pages configured for workflow-based publishing, a root `/` asset base for the `cheapbugs.net` custom domain, and a committed public thirdweb `clientId` by default
+CI/CD Pipeline: GitHub Actions builds and deploys `dist/` to GitHub Pages on pushes to `main`, with GitHub Pages configured for workflow-based publishing, a root `/` asset base for the `cheapbugs.net` custom domain, hash routing, and optional `VITE_WALLETCONNECT_PROJECT_ID`
 
 Monitoring & Logging: Browser console and wallet/provider errors only in the current MVP
 
@@ -267,8 +267,8 @@ Monitoring & Logging: Browser console and wallet/provider errors only in the cur
 
 Authentication:
 
-- thirdweb email verification flow with in-app wallet support
-- external wallet connect for advanced users
+- injected browser wallet connect
+- WalletConnect QR connect when `VITE_WALLETCONNECT_PROJECT_ID` is configured
 - site-generated local XMTP wallet using a browser-stored EVM private key
 
 Authorization:
@@ -277,7 +277,7 @@ Authorization:
 - report submission requires a connected wallet on Base
 - bouncer submissions require an XMTP-capable identity
 - private Signal access requests require the requested wallet to hold at least `BOUNCER_ACCESS_MIN_BUGZ`
-- BUGZ buy/sell actions require a connected transaction signer, either a thirdweb wallet or the browser-stored local wallet with Base ETH for gas
+- BUGZ buy/sell actions require a connected transaction signer, either an injected wallet, WalletConnect wallet, or the browser-stored local wallet with Base ETH for gas
 
 Data Encryption:
 
@@ -287,7 +287,6 @@ Data Encryption:
 
 Key Security Practices:
 
-- never place thirdweb `secretKey` in browser code
 - never place Pinata API credentials in browser code
 - treat all IPFS and EAS note content as untrusted input
 - store only redacted/public-safe metadata onchain
@@ -303,7 +302,7 @@ Local Setup Instructions:
 - sync the Foundry library submodule with `git submodule update --init --recursive`
 - install `forge` if you want the Solidity-native build, test, or launch path
 - copy `.env.example` to `.env.local`
-- optionally override `VITE_THIRDWEB_CLIENT_ID` or `VITE_ENS_RPC_URL`
+- optionally set `VITE_WALLETCONNECT_PROJECT_ID` for WalletConnect QR login or override `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
 - BUGZ defaults to the Base Clanker token at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`
 - optionally configure the BUGZ deployment block, market URL, and `VITE_BUGZ_V4_*` pool overrides when `/patrons` scans or a different Clanker market should become live. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional dashboard stats.
@@ -334,7 +333,7 @@ Code Quality Tools:
 - Add public payout records for bouncer settlements while keeping `PayoutRecord` as the public record layer.
 - Keep BUGZ trading static/client-side; do not introduce a backend market proxy.
 - Add patron leaderboard and governance as separate extensions.
-- Reduce thirdweb-driven bundle size with route or adapter-level code splitting.
+- Reduce WalletConnect/XMTP bundle size with route or adapter-level code splitting.
 - Add automated CI and ABI drift checks.
 
 ## 10. Project Identification

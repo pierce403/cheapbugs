@@ -1,4 +1,3 @@
-import { ThirdwebAuthController, thirdwebClient } from "./auth/thirdweb";
+import { WalletAuthController } from "./auth/wallet";
 
-export const authController = new ThirdwebAuthController();
-export { thirdwebClient };
+export const authController = new WalletAuthController();

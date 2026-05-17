@@ -1,14 +1,14 @@
 import {
   AbiCoder,
+  BrowserProvider,
   Contract,
   JsonRpcProvider,
   Wallet,
   parseEther,
   parseUnits
 } from "ethers";
-import { ethers6Adapter } from "thirdweb/adapters/ethers6";
 
-import { appChain, chainConfig } from "../config/chains";
+import { chainConfig } from "../config/chains";
 import { authController } from "../services";
 import type { HexString } from "../types/domain";
 import { normalizeAddress } from "../lib/utils";
@@ -127,22 +127,18 @@ const connectedAddress = (): HexString => {
 };
 
 const getWriteSigner = async () => {
-  const account = authController.getActiveAccount();
-  if (account) {
-    return ethers6Adapter.signer.toEthers({
-      client: authController.requireClient(),
-      chain: appChain,
-      account
-    });
-  }
-
   const session = authController.getSession();
   const localIdentity = authController.getLocalIdentity();
   if (session.mode === "local" && localIdentity && session.address === localIdentity.address) {
     return new Wallet(localIdentity.privateKey, readProvider);
   }
 
-  throw new Error("Connect with a wallet that can sign Base transactions before trading BUGZ.");
+  const activeProvider = authController.getActiveProvider();
+  if (!activeProvider || !session.address) {
+    throw new Error("Connect with a wallet that can sign Base transactions before trading BUGZ.");
+  }
+
+  return new BrowserProvider(activeProvider).getSigner(session.address);
 };
 
 const addressAsBigInt = (value: string): bigint => BigInt(value.toLowerCase());
