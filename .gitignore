@@ -13,6 +13,7 @@ cache
 out
 broadcast
 .bouncer
+.codex
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
