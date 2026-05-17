@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterable
 from uuid import uuid4
@@ -69,12 +70,21 @@ class BrokerStore:
         conn.row_factory = sqlite3.Row
         return conn
 
+    @contextmanager
+    def session(self):
+        conn = self.connect()
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
+
     def init(self) -> None:
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.executescript(SCHEMA)
 
     def message_seen(self, message_id: str) -> bool:
-        with self.connect() as conn:
+        with self.session() as conn:
             row = conn.execute(
                 "SELECT 1 FROM processed_xmtp_messages WHERE message_id = ?",
                 (message_id,),
@@ -83,7 +93,7 @@ class BrokerStore:
 
     def mark_message_processed(self, message_id: str, command_type: str, now: int | None = None) -> None:
         observed_at = now or int(time.time())
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO processed_xmtp_messages (message_id, command_type, processed_at)
@@ -100,11 +110,12 @@ class BrokerStore:
         signal_group_id: str,
         signal_message_timestamp: int,
         review_window_seconds: int,
+        status: str = "relayed",
         now: int | None = None,
     ) -> SubmissionRecord:
         created_at = now or int(time.time())
         record_id = uuid4().hex
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.execute(
                 """
                 INSERT INTO submissions (
@@ -112,7 +123,7 @@ class BrokerStore:
                   xmtp_conversation_id, xmtp_message_id, signal_group_id,
                   signal_message_timestamp, status, created_at, matures_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'relayed', ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -126,6 +137,7 @@ class BrokerStore:
                     xmtp_message_id,
                     signal_group_id,
                     signal_message_timestamp,
+                    status,
                     created_at,
                     created_at + review_window_seconds,
                     created_at,
@@ -137,7 +149,7 @@ class BrokerStore:
         return record
 
     def get_submission(self, record_id: str) -> SubmissionRecord | None:
-        with self.connect() as conn:
+        with self.session() as conn:
             row = conn.execute("SELECT * FROM submissions WHERE id = ?", (record_id,)).fetchone()
         return _record_from_row(row) if row is not None else None
 
@@ -146,7 +158,7 @@ class BrokerStore:
         signal_group_id: str,
         signal_message_timestamp: int,
     ) -> SubmissionRecord | None:
-        with self.connect() as conn:
+        with self.session() as conn:
             row = conn.execute(
                 """
                 SELECT * FROM submissions
@@ -157,7 +169,7 @@ class BrokerStore:
         return _record_from_row(row) if row is not None else None
 
     def upsert_reaction(self, event: SignalReactionEvent) -> None:
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.execute(
                 """
                 INSERT INTO signal_reactions (
@@ -185,7 +197,7 @@ class BrokerStore:
         return count
 
     def support_score(self, signal_group_id: str, signal_message_timestamp: int) -> int:
-        with self.connect() as conn:
+        with self.session() as conn:
             row = conn.execute(
                 """
                 SELECT COUNT(*) AS support_score
@@ -200,7 +212,7 @@ class BrokerStore:
 
     def mature_unpaid_submissions(self, now: int | None = None) -> list[SubmissionRecord]:
         cutoff = now or int(time.time())
-        with self.connect() as conn:
+        with self.session() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM submissions
@@ -213,7 +225,7 @@ class BrokerStore:
 
     def mark_paid(self, record_id: str, support_score: int, payout_amount_wei: int, tx_hash: str) -> None:
         now = int(time.time())
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.execute(
                 """
                 UPDATE submissions
@@ -230,7 +242,7 @@ class BrokerStore:
 
     def mark_failed(self, record_id: str, support_score: int, error: str) -> None:
         now = int(time.time())
-        with self.connect() as conn:
+        with self.session() as conn:
             conn.execute(
                 """
                 UPDATE submissions

@@ -23,7 +23,11 @@ from cheapbugs_broker.xmtp_runner import run_xmtp_broker
 def build_bot(config: BrokerConfig) -> BrokerBot:
     store = BrokerStore(config.database_path)
     store.init()
-    signal = SignalCli(config.signal_cli_path, config.signal_account, config.signal_group_id)
+    signal = (
+        SignalCli(config.signal_cli_path, config.signal_account, config.signal_group_id)
+        if config.signal_enabled
+        else None
+    )
     token = BugzTokenClient(
         rpc_url=config.base_rpc_url,
         token_address=config.bugz_token_address,

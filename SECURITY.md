@@ -58,6 +58,7 @@ Until this exists, the broker must not create bug-index records that claim to be
 - The broker is not trusted to choose the reporter address for onchain attribution.
 - Broker compromise can expose submissions it has received, review keys it holds, Signal relay data, SQLite state, and payout keys available to the process.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
+- Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
 - Broker payout wallets must be deliberately funded and capped. Rewards are ERC20 transfers, not mints.
 
 ### IPFS And Pinata

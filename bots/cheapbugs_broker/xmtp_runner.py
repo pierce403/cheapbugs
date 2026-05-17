@@ -37,7 +37,13 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
 
     logging.getLogger(__name__).info("Starting XMTP broker agent on %s.", config.xmtp_env)
     await agent.start()
-    await asyncio.gather(bot.poll_signal_forever(), bot.settle_forever())
+    if config.signal_enabled:
+        await asyncio.gather(bot.poll_signal_forever(), bot.settle_forever())
+    else:
+        logging.getLogger(__name__).warning(
+            "Signal is not configured; broker will validate XMTP submissions without Signal relay or reward settlement."
+        )
+        await asyncio.Event().wait()
 
 
 run_xmtp_bouncer = run_xmtp_broker

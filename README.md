@@ -42,7 +42,9 @@ Bot setup:
 ./run-broker.sh
 ```
 
-`run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.5`, `signal-cli`, a Signal account already joined/admin in the private group, `XMTP_WALLET_KEY`, `XMTP_DB_ENCRYPTION_KEY`, `BUGZ_TOKEN_ADDRESS`, and `BASE_RPC_URL`. `BROKER_DRY_RUN` defaults to `1`, which prevents token transfers while still exercising the relay and scoring path; set `BROKER_DRY_RUN=0` only with `BUGZ_PAYOUT_PRIVATE_KEY`. The old `BOUNCER_*` runtime variables and `scripts/bouncer-bot.py` still work as compatibility aliases.
+`run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.5`, `XMTP_WALLET_KEY`, `XMTP_DB_ENCRYPTION_KEY`, `BUGZ_TOKEN_ADDRESS`, and `BASE_RPC_URL`. `BROKER_DRY_RUN` defaults to `1`, which prevents token transfers while still exercising the validation path; set `BROKER_DRY_RUN=0` only with `BUGZ_PAYOUT_PRIVATE_KEY`. The old `BOUNCER_*` runtime variables and `scripts/bouncer-bot.py` still work as compatibility aliases.
+
+Signal is optional for local broker testing. If `BROKER_SIGNAL_CLI` is unset, `run-broker.sh` prints a warning and starts the broker without Signal relay, Signal reaction syncing, or reward settlement.
 
 Minimal `.env` shape:
 
@@ -54,6 +56,14 @@ BROKER_SIGNAL_GROUP_ID=...
 BASE_RPC_URL=https://mainnet.base.org
 BUGZ_TOKEN_ADDRESS=0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07
 BROKER_DRY_RUN=1
+```
+
+Optional Signal relay:
+
+```bash
+BROKER_SIGNAL_CLI=/path/to/signal-cli
+BROKER_SIGNAL_ACCOUNT=+15555550123
+BROKER_SIGNAL_GROUP_ID=...
 ```
 
 ## BUGZ Trading

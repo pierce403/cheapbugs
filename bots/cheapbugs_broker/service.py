@@ -24,7 +24,7 @@ class BrokerBot:
         self,
         config: BrokerConfig,
         store: BrokerStore,
-        signal: SignalCli,
+        signal: SignalCli | None,
         token: BugzTokenClient,
         logger: logging.Logger | None = None,
     ):
@@ -57,6 +57,14 @@ class BrokerBot:
         await self._handle_submission(command, conversation_id, message_id, reply)
 
     async def _handle_access(self, command: AccessCommand, message_id: str, reply: ReplyFn) -> None:
+        if self.signal is None:
+            await reply(
+                "Access request unavailable: Signal is not configured. "
+                "Set BROKER_SIGNAL_CLI, BROKER_SIGNAL_ACCOUNT, and BROKER_SIGNAL_GROUP_ID on the broker."
+            )
+            self.store.mark_message_processed(message_id, "access_signal_disabled")
+            return
+
         min_balance = tokens_to_wei(self.config.access_min_balance_tokens, self.token.decimals())
         balance = self.token.balance_of(command.wallet_address)
         if balance < min_balance:
@@ -100,6 +108,23 @@ class BrokerBot:
             return
         await reply(f"Submission credentials are valid: {credential_summary}.")
 
+        if self.signal is None:
+            record = self.store.create_submission(
+                command=command,
+                xmtp_conversation_id=conversation_id,
+                xmtp_message_id=message_id,
+                signal_group_id="signal-disabled",
+                signal_message_timestamp=0,
+                review_window_seconds=0,
+                status="accepted",
+            )
+            self.store.mark_message_processed(message_id, "submission_signal_disabled")
+            await reply(
+                "Signal is not configured, so this submission was validated and recorded locally "
+                f"but not relayed to a reviewer channel. Broker id: {record.id}."
+            )
+            return
+
         signal_message = format_signal_submission(command)
         sent = self.signal.send_group_message(signal_message)
         record = self.store.create_submission(
@@ -136,6 +161,9 @@ class BrokerBot:
         )
 
     def sync_signal_once(self) -> int:
+        if self.signal is None:
+            self.logger.warning("Signal is not configured; skipping Signal reaction sync.")
+            return 0
         raw_events = self.signal.receive_json(self.config.poll_seconds)
         reactions = extract_reaction_events(raw_events, self.config.signal_group_id)
         count = self.store.upsert_reactions(reactions)
@@ -144,6 +172,9 @@ class BrokerBot:
         return count
 
     def settle_matured_once(self) -> int:
+        if self.signal is None:
+            self.logger.warning("Signal is not configured; skipping reward settlement.")
+            return 0
         paid = 0
         decimals = self.token.decimals()
         for submission in self.store.mature_unpaid_submissions():

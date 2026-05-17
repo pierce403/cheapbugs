@@ -70,6 +70,10 @@ class BrokerConfig:
     poll_seconds: int
     dry_run: bool
 
+    @property
+    def signal_enabled(self) -> bool:
+        return bool(self.signal_cli_path)
+
     @classmethod
     def from_env(cls) -> "BrokerConfig":
         xmtp_db_path = _env_first("BROKER_XMTP_DB_PATH", "BOUNCER_XMTP_DB_PATH") or None
@@ -77,7 +81,7 @@ class BrokerConfig:
             database_path=Path(_env_first("BROKER_DB_PATH", "BOUNCER_DB_PATH", default=".broker/broker.sqlite")),
             xmtp_env=_env_first("BROKER_XMTP_ENV", "BOUNCER_XMTP_ENV", "XMTP_ENV", default="production"),
             xmtp_db_path=xmtp_db_path,
-            signal_cli_path=_env_first("BROKER_SIGNAL_CLI", "BOUNCER_SIGNAL_CLI", default="signal-cli"),
+            signal_cli_path=_env_first("BROKER_SIGNAL_CLI", "BOUNCER_SIGNAL_CLI"),
             signal_account=_env_first("BROKER_SIGNAL_ACCOUNT", "BOUNCER_SIGNAL_ACCOUNT"),
             signal_group_id=_env_first("BROKER_SIGNAL_GROUP_ID", "BOUNCER_SIGNAL_GROUP_ID"),
             base_rpc_url=_env_first("BASE_RPC_URL", "VITE_CHAIN_RPC_URL"),
@@ -107,9 +111,9 @@ class BrokerConfig:
         missing: list[str] = []
         if not os.getenv("XMTP_WALLET_KEY", "").strip():
             missing.append("XMTP_WALLET_KEY")
-        if not self.signal_account:
+        if self.signal_enabled and not self.signal_account:
             missing.append("BROKER_SIGNAL_ACCOUNT")
-        if not self.signal_group_id:
+        if self.signal_enabled and not self.signal_group_id:
             missing.append("BROKER_SIGNAL_GROUP_ID")
         if not self.base_rpc_url:
             missing.append("BASE_RPC_URL")

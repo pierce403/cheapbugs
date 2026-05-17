@@ -71,7 +71,7 @@ export BROKER_XMTP_ENV="${BROKER_XMTP_ENV:-${BOUNCER_XMTP_ENV:-${XMTP_ENV:-produ
 export BROKER_XMTP_DB_PATH="${BROKER_XMTP_DB_PATH:-${BOUNCER_XMTP_DB_PATH:-.broker/xmtp.db3}}"
 export BROKER_DB_PATH="${BROKER_DB_PATH:-${BOUNCER_DB_PATH:-.broker/broker.sqlite}}"
 export BROKER_DRY_RUN="${BROKER_DRY_RUN:-${BOUNCER_DRY_RUN:-1}}"
-export BROKER_SIGNAL_CLI="${BROKER_SIGNAL_CLI:-${BOUNCER_SIGNAL_CLI:-signal-cli}}"
+export BROKER_SIGNAL_CLI="${BROKER_SIGNAL_CLI:-${BOUNCER_SIGNAL_CLI:-}}"
 
 copy_if_empty BROKER_SIGNAL_ACCOUNT BOUNCER_SIGNAL_ACCOUNT
 copy_if_empty BROKER_SIGNAL_GROUP_ID BOUNCER_SIGNAL_GROUP_ID
@@ -90,8 +90,6 @@ require_env() {
 if [[ "$COMMAND" != "init-db" ]]; then
   require_env XMTP_WALLET_KEY
   require_env XMTP_DB_ENCRYPTION_KEY
-  require_env BROKER_SIGNAL_ACCOUNT
-  require_env BROKER_SIGNAL_GROUP_ID
   require_env BASE_RPC_URL
   require_env BUGZ_TOKEN_ADDRESS
 
@@ -110,14 +108,48 @@ if [[ "$COMMAND" != "init-db" ]]; then
     exit 2
   fi
 
-  if [[ "$BROKER_SIGNAL_CLI" == */* ]]; then
-    if [[ ! -x "$BROKER_SIGNAL_CLI" ]]; then
-      echo "BROKER_SIGNAL_CLI is not executable: $BROKER_SIGNAL_CLI" >&2
+  if [[ -z "${BROKER_SIGNAL_CLI//[[:space:]]/}" ]]; then
+    red=""
+    bold=""
+    reset=""
+    if [[ -t 2 ]]; then
+      red="$(printf '\033[31m')"
+      bold="$(printf '\033[1m')"
+      reset="$(printf '\033[0m')"
+    fi
+    {
+      echo "${red}${bold}================================================================${reset}"
+      echo "${red}${bold}WARNING: SIGNAL IS NOT CONFIGURED${reset}"
+      echo "${red}${bold}================================================================${reset}"
+      echo "BROKER_SIGNAL_CLI is not set, so the broker will run without Signal support."
+      echo "Submissions can still be received, validated, credential-checked, and recorded locally."
+      echo "They will NOT be relayed to Signal, Signal reactions will not be synced, and rewards will not settle."
+      echo
+      echo "To enable Signal support, set these in $ENV_FILE:"
+      echo "  BROKER_SIGNAL_CLI=/path/to/signal-cli"
+      echo "  BROKER_SIGNAL_ACCOUNT=+15555550123"
+      echo "  BROKER_SIGNAL_GROUP_ID=<signal group id>"
+      echo "${red}${bold}================================================================${reset}"
+    } >&2
+  else
+    require_env BROKER_SIGNAL_ACCOUNT
+    require_env BROKER_SIGNAL_GROUP_ID
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      echo "Missing required Signal env var(s): ${missing[*]}" >&2
+      echo "Set BROKER_SIGNAL_ACCOUNT and BROKER_SIGNAL_GROUP_ID in $ENV_FILE, or unset BROKER_SIGNAL_CLI to run without Signal support." >&2
       exit 2
     fi
-  elif ! command -v "$BROKER_SIGNAL_CLI" >/dev/null 2>&1; then
-    echo "BROKER_SIGNAL_CLI command was not found on PATH: $BROKER_SIGNAL_CLI" >&2
-    exit 2
+
+    if [[ "$BROKER_SIGNAL_CLI" == */* ]]; then
+      if [[ ! -x "$BROKER_SIGNAL_CLI" ]]; then
+        echo "BROKER_SIGNAL_CLI is not executable: $BROKER_SIGNAL_CLI" >&2
+        exit 2
+      fi
+    elif ! command -v "$BROKER_SIGNAL_CLI" >/dev/null 2>&1; then
+      echo "BROKER_SIGNAL_CLI command was not found on PATH: $BROKER_SIGNAL_CLI" >&2
+      exit 2
+    fi
   fi
 fi
 

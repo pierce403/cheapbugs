@@ -7,6 +7,7 @@ import unittest
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
 from cheapbugs_broker.config import BrokerConfig
@@ -120,6 +121,28 @@ class SignalParsingTest(unittest.TestCase):
         self.assertEqual(events[0].emoji, "\U0001f44d")
 
 
+class ConfigTest(unittest.TestCase):
+    def test_runtime_requirements_allow_signal_disabled(self) -> None:
+        config = test_config(Path("broker.sqlite"), signal_enabled=False)
+
+        with patch.dict("os.environ", {"XMTP_WALLET_KEY": "0xabc"}, clear=True):
+            config.require_runtime()
+
+    def test_runtime_requirements_require_signal_details_when_enabled(self) -> None:
+        config = test_config(Path("broker.sqlite"), signal_enabled=True)
+        config = BrokerConfig(
+            **{
+                **config.__dict__,
+                "signal_account": "",
+                "signal_group_id": "",
+            }
+        )
+
+        with patch.dict("os.environ", {"XMTP_WALLET_KEY": "0xabc"}, clear=True):
+            with self.assertRaisesRegex(ValueError, "BROKER_SIGNAL_ACCOUNT"):
+                config.require_runtime()
+
+
 class StoreTest(unittest.TestCase):
     def test_reaction_count_and_maturity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -218,6 +241,66 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertIn("Submission credentials are invalid", replies[-1])
             self.assertFalse(any("Submission relayed" in reply for reply in replies))
 
+    def test_submission_records_without_signal_support(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            config = test_config(Path(tmp) / "broker.sqlite", signal_enabled=False)
+            bot = BrokerBot(
+                config=config,
+                store=store,
+                signal=None,
+                token=FakeToken(balance=2 * 10**18),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            asyncio.run(
+                bot.handle_xmtp_text(
+                    json.dumps(valid_submission_payload()),
+                    sender_address=WALLET,
+                    conversation_id="conversation",
+                    message_id="message",
+                    reply=reply,
+                )
+            )
+
+            self.assertIn("Submission credentials are valid", replies[3])
+            self.assertIn("Signal is not configured", replies[4])
+            self.assertTrue(store.message_seen("message"))
+            records = store.mature_unpaid_submissions(now=10_000)
+            self.assertEqual(records, [])
+
+    def test_access_request_replies_without_signal_support(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=2 * 10**18),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            asyncio.run(
+                bot.handle_xmtp_text(
+                    '{"type":"access","signal":"+15551234567"}',
+                    sender_address=WALLET,
+                    conversation_id="conversation",
+                    message_id="access-message",
+                    reply=reply,
+                )
+            )
+
+            self.assertIn("Signal is not configured", replies[0])
+            self.assertTrue(store.message_seen("access-message"))
+
 
 def valid_submission_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
@@ -257,14 +340,14 @@ def minimal_submission_payload(**overrides: object) -> dict[str, object]:
     return payload
 
 
-def test_config(path: Path) -> BrokerConfig:
+def test_config(path: Path, signal_enabled: bool = True) -> BrokerConfig:
     return BrokerConfig(
         database_path=path,
         xmtp_env="production",
         xmtp_db_path=None,
-        signal_cli_path="signal-cli",
-        signal_account="+15550000000",
-        signal_group_id="group",
+        signal_cli_path="signal-cli" if signal_enabled else "",
+        signal_account="+15550000000" if signal_enabled else "",
+        signal_group_id="group" if signal_enabled else "",
         base_rpc_url="http://localhost:8545",
         bugz_token_address=WALLET,
         bugz_payout_private_key="",
