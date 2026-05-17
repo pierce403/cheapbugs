@@ -68,8 +68,9 @@ cheapbugs/
   - External wallet reconnect hints are stored in `cheapbugs.walletSession.v1`; SIWE proofs are stored in `cheapbugs.siweSession.v1`.
   - Local XMTP identities are stored in `cheapbugs.localXmtpIdentity.v1` and can sign XMTP messages and Base transactions.
   - ENS avatars are read from the raw `avatar` text record and sanitized to HTTPS or IPFS gateway URLs.
+  - ENS profile results cache in `cheapbugs.ensProfileCache.v1` for 24 hours so page reloads do not re-query mainnet ENS, with a profile-modal refresh button for manual cache bypass.
 - **Test Criteria**:
-  - [x] Playwright covers ENS-backed profile modal behavior and avatar URL handling.
+  - [x] Playwright covers ENS-backed profile modal behavior, avatar URL handling, local ENS cache reuse, and manual ENS refresh.
   - [x] `npm run build` catches Thirdweb/XMTP integration type drift.
 
 ### Onchain Bug Index

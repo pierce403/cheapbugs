@@ -132,6 +132,7 @@ const renderProfileModal = (session: SessionState, bugzStatus: string): string =
   const ensPrompt = session.ensName
     ? "CheapBugs reads this name and avatar from ENS. Profile edits happen in the ENS App."
     : "No ENS primary name was found for this wallet. Register one to show a name and avatar here.";
+  const refreshDisabled = session.ensLookupStatus === "loading" ? "disabled" : "";
 
   return `
     <div class="profile-modal-backdrop" data-profile-modal-close>
@@ -159,6 +160,7 @@ const renderProfileModal = (session: SessionState, bugzStatus: string): string =
         </table>
         <div class="button-row profile-actions">
           ${ensAction}
+          <button id="refresh-ens-profile" class="button secondary" type="button" ${refreshDisabled}>refresh ENS profile</button>
           <button class="button secondary" type="button" data-profile-modal-close>close</button>
         </div>
       </section>
@@ -396,6 +398,17 @@ export class CheapBugsApp {
         this.profileModalOpen = false;
         void this.render();
       });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("#refresh-ens-profile")?.addEventListener("click", async () => {
+      appLog.info("ui: profile ENS refresh click");
+      try {
+        await authController.refreshEnsProfile();
+        context.notify("success", "ENS profile refreshed.");
+      } catch (error) {
+        appLog.warn("ui: profile ENS refresh failed", error);
+        context.notify("error", error instanceof Error ? error.message : "ENS profile refresh failed.");
+      }
     });
 
     this.root.querySelector<HTMLButtonElement>("#disconnect-wallet")?.addEventListener("click", async () => {

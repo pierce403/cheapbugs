@@ -7,7 +7,7 @@ import { appChain, chainConfig } from "../config/chains";
 import { env } from "../config/env";
 import { isTrustedReviewer } from "../config/reviewers";
 import { APP_METADATA } from "../lib/constants";
-import { emptyEnsProfile, resolveEnsProfile } from "../lib/ens";
+import { emptyEnsProfile, refreshEnsProfile as refreshEnsProfileFromNetwork, resolveEnsProfile } from "../lib/ens";
 import { appLog } from "../lib/logger";
 import { normalizeAddress, shortHash } from "../lib/utils";
 import type { SessionState } from "../types/app";
@@ -447,9 +447,9 @@ export class ThirdwebAuthController {
     return emptyEnsProfile(address ? "loading" : "idle");
   }
 
-  private async hydrateEnsProfile(address: HexString): Promise<void> {
+  private async hydrateEnsProfile(address: HexString, options: { refresh?: boolean } = {}): Promise<void> {
     const lookupToken = ++this.ensLookupToken;
-    const profile = await resolveEnsProfile(address);
+    const profile = await resolveEnsProfile(address, options);
 
     if (lookupToken !== this.ensLookupToken || this.session.address !== address) {
       return;
@@ -460,6 +460,35 @@ export class ThirdwebAuthController {
       ...profile
     };
     this.emit();
+  }
+
+  async refreshEnsProfile(): Promise<void> {
+    const address = this.session.address;
+    if (!address) {
+      throw new Error("Connect a wallet before refreshing ENS.");
+    }
+
+    appLog.info("ens: manual profile refresh requested", { address: shortHash(address, 10, 6) });
+    const lookupToken = ++this.ensLookupToken;
+    this.session = {
+      ...this.session,
+      ...emptyEnsProfile("loading")
+    };
+    this.emit();
+
+    const profile = await refreshEnsProfileFromNetwork(address);
+    if (lookupToken !== this.ensLookupToken || this.session.address !== address) {
+      return;
+    }
+
+    this.session = {
+      ...this.session,
+      ...profile
+    };
+    this.emit();
+    if (profile.ensLookupStatus === "error") {
+      throw new Error("ENS lookup is unavailable right now.");
+    }
   }
 
   private setLoading(): void {

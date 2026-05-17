@@ -91,7 +91,8 @@ const mockEnsRpc = async (
     ensName: string | null;
     avatarUrl?: string;
   }
-): Promise<void> => {
+): Promise<{ counts: { reverse: number; avatar: number } }> => {
+  const counts = { reverse: 0, avatar: 0 };
   await fulfillRpc(page, "https://ethereum-rpc.publicnode.com/**", (request) => {
     switch (request.method) {
       case "eth_chainId":
@@ -101,6 +102,7 @@ const mockEnsRpc = async (
         const selector = call.data?.slice(0, 10).toLowerCase();
 
         if (selector === reverseSelector) {
+          counts.reverse += 1;
           return {
             id: request.id,
             jsonrpc: "2.0",
@@ -109,6 +111,7 @@ const mockEnsRpc = async (
         }
 
         if (selector === resolveSelector) {
+          counts.avatar += 1;
           const avatarResult = abiCoder.encode(["string"], [options.avatarUrl ?? ""]);
           return {
             id: request.id,
@@ -123,6 +126,7 @@ const mockEnsRpc = async (
         return { id: request.id, jsonrpc: "2.0", result: "0x" };
     }
   });
+  return { counts };
 };
 
 test("opens an ENS-backed profile modal from the avatar", async ({ page }) => {
@@ -192,6 +196,47 @@ test("loads ENS avatar text records without depending on a HEAD probe", async ({
 
   await page.getByRole("button", { name: "open profile" }).click();
   await expect(page.getByTestId("profile-avatar-media")).toHaveAttribute("src", gatewayUrl);
+});
+
+test("caches ENS profile across reloads and refreshes from the profile modal", async ({ page }) => {
+  const firstAvatarUrl = "https://example.com/cheapbugs-avatar.png";
+  const freshAvatarUrl = "https://example.com/freshbugs-avatar.png";
+  const ensState = { ensName: "cheapbugs.eth", avatarUrl: firstAvatarUrl };
+  await seedLocalIdentity(page);
+  await mockBaseRpc(page);
+  const ensRpc = await mockEnsRpc(page, ensState);
+  await page.route("https://example.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "image/png" },
+      body: ""
+    });
+  });
+
+  await page.goto("/");
+
+  const authPanel = page.locator(".auth-panel");
+  await expect(authPanel).toContainText("cheapbugs.eth");
+  await expect(page.getByTestId("identity-avatar-media")).toHaveAttribute("src", firstAvatarUrl);
+  expect(ensRpc.counts.reverse).toBe(1);
+  expect(ensRpc.counts.avatar).toBe(1);
+
+  await page.reload();
+  await expect(authPanel).toContainText("cheapbugs.eth");
+  await expect(page.getByTestId("identity-avatar-media")).toHaveAttribute("src", firstAvatarUrl);
+  expect(ensRpc.counts.reverse).toBe(1);
+  expect(ensRpc.counts.avatar).toBe(1);
+
+  ensState.ensName = "freshbugs.eth";
+  ensState.avatarUrl = freshAvatarUrl;
+  await page.getByRole("button", { name: "open profile" }).click();
+  await page.getByRole("button", { name: "refresh ENS profile" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "profile" });
+  await expect(dialog).toContainText("freshbugs.eth");
+  await expect(dialog.getByTestId("profile-avatar-media")).toHaveAttribute("src", freshAvatarUrl);
+  expect(ensRpc.counts.reverse).toBe(2);
+  expect(ensRpc.counts.avatar).toBe(2);
 });
 
 test("prompts connected wallets without ENS to register a name", async ({ page }) => {

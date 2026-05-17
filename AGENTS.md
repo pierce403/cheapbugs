@@ -130,6 +130,7 @@ npm run launch:token
 - Browser console logging through `appLog` is intentionally verbose around auth clicks, Thirdweb provider selection, WalletConnect fallback, SIWE prompts, session restore, and failures so users can inspect what login is doing.
 - Thirdweb was removed in `f7b7bca` and restored afterward; compare against `f7b7bca^` when looking for the last pre-direct-WalletConnect implementation.
 - Connected wallet UI resolves ENS name/avatar from Ethereum mainnet. The header avatar opens a profile modal; editing/registering profile data should route users to the official ENS App instead of creating a local CheapBugs profile store.
+- ENS profile lookups cache resolved and missing profiles for 24 hours in `cheapbugs.ensProfileCache.v1` and keep a same-session memory cache in `src/lib/ens.ts`; the profile modal has a refresh button that bypasses the cache.
 - ENS avatars are read from the raw `avatar` text record with `ensClient.getEnsText({ key: "avatar" })`, then sanitized to HTTPS or an IPFS gateway URL with paths preserved. Do not switch this back to `getEnsAvatar`; viem's avatar parser HEAD-probes image URLs and can hide otherwise valid avatars when hosts reject HEAD/CORS.
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
 - The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views.
