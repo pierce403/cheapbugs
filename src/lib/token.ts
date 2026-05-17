@@ -8,6 +8,7 @@ import {
   isBugzTokenConfigured
 } from "../contracts/bugzToken";
 import { resolveEnsProfile } from "./ens";
+import { appLog } from "./logger";
 
 import type { PatronEntry, TokenDashboard } from "../types/token";
 
@@ -17,6 +18,8 @@ type DashboardRead<T> = {
 };
 
 const shortenError = (message: string): string => (message.length > 220 ? `${message.slice(0, 217)}...` : message);
+
+const retryDelay = (ms: number): Promise<void> => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 
 const tokenReadErrorMessage = (label: string, error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error);
@@ -32,17 +35,36 @@ const tokenReadErrorMessage = (label: string, error: unknown): string => {
 };
 
 const readDashboardValue = async <T>(label: string, read: () => Promise<T | null>): Promise<DashboardRead<T>> => {
-  try {
-    return {
-      value: await read(),
-      errorMessage: null
-    };
-  } catch (error) {
-    return {
-      value: null,
-      errorMessage: tokenReadErrorMessage(label, error)
-    };
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const value = await read();
+      if (attempt > 1) {
+        appLog.info("token: dashboard read recovered after retry", { label, attempt });
+      }
+      return {
+        value,
+        errorMessage: null
+      };
+    } catch (error) {
+      lastError = error;
+      appLog.warn("token: dashboard read failed", {
+        label,
+        attempt,
+        errorMessage: tokenReadErrorMessage(label, error),
+        error
+      });
+      if (attempt < 2) {
+        await retryDelay(450);
+      }
+    }
   }
+
+  return {
+    value: null,
+    errorMessage: tokenReadErrorMessage(label, lastError)
+  };
 };
 
 export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null): Promise<TokenDashboard> => {

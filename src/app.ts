@@ -69,8 +69,12 @@ const renderBugzStatus = async (session: SessionState, tokenHref: string): Promi
       dashboard.connectedBalance !== null
         ? `${formatTokenAmount(dashboard.connectedBalance, dashboard.decimals)} ${dashboard.symbol}`
         : "unavailable";
-    return `<div>bugz: <a href="${tokenHref}" data-nav>${escapeHtml(balance)}</a></div>`;
-  } catch {
+    if (dashboard.errorMessage) {
+      appLog.warn("token: header balance read unavailable", { errorMessage: dashboard.errorMessage });
+    }
+    return `<div title="${escapeHtml(dashboard.errorMessage ?? "")}">bugz: <a href="${tokenHref}" data-nav>${escapeHtml(balance)}</a></div>`;
+  } catch (error) {
+    appLog.warn("token: header dashboard read threw", { error });
     return `<div>bugz: unavailable</div>`;
   }
 };
