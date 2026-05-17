@@ -136,16 +136,28 @@ button {
 }
 
 .brand-github {
-  color: var(--success);
-  font-size: 12px;
-  text-transform: lowercase;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: #ff8b3d;
   text-decoration: none;
 }
 
 .brand-github:hover,
 .brand-github:focus-visible {
-  color: #d7ffd0;
-  text-decoration: underline;
+  color: #ffb06d;
+}
+
+.brand-github:focus-visible {
+  outline: 1px solid var(--success);
+  outline-offset: 2px;
+}
+
+.brand-github-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .brand-block {

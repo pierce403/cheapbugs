@@ -18,13 +18,15 @@ test("shows the development banner across app routes", async ({ page }) => {
   }
 });
 
-test("shows the GitHub repository link beside the brand", async ({ page }) => {
+test("shows the GitHub repository icon link beside the brand", async ({ page }) => {
   await page.goto("/");
 
   const brandBlock = page.locator(".brand-block");
   await expect(brandBlock.locator(".brand")).toHaveText("cheapbugs");
-  await expect(brandBlock.getByRole("link", { name: "github" })).toHaveAttribute(
+  await expect(brandBlock.getByText("github", { exact: true })).toHaveCount(0);
+  await expect(brandBlock.getByRole("link", { name: "GitHub repository" })).toHaveAttribute(
     "href",
     "https://github.com/pierce403/cheapbugs"
   );
+  await expect(brandBlock.locator(".brand-github-icon")).toBeVisible();
 });

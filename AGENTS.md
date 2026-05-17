@@ -109,7 +109,7 @@ npm run launch:token
 - BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` and is the default `VITE_BUGZ_TOKEN_ADDRESS`.
 - The `/token` route reads connected-wallet BUGZ balances and performs static, browser-signed buy/sell swaps through the Uniswap v4 Quoter and Universal Router 2.1.1 on Base. Do not replace this with a backend buy-flow.
 - The frontend nav is now `index`, `submit`, `review`, `token`, `patrons`, with compact login/session controls in the top-right header block. Do not re-add the old chain/storage/wallet/SIWE debug block to the header.
-- The header brand row includes a compact external `github` link to `https://github.com/pierce403/cheapbugs` immediately to the right of the `cheapbugs` wordmark.
+- The header brand row includes a compact orange GitHub icon link to `https://github.com/pierce403/cheapbugs` immediately to the right of the `cheapbugs` wordmark.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
 - The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes.
 - The JS launchers use `forge build` plus Foundry artifacts from `out/...` instead of npm `solc`; keep npm `solc` out of `package.json` unless its audit footprint has been reviewed.
