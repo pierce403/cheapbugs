@@ -31,6 +31,7 @@ cheapbugs/
 ├── README.md
 ├── DEPLOY.md
 ├── TODO.md
+├── run-broker.sh
 ├── AGENTS.md
 ├── SECURITY.md
 └── FEATURES.md
@@ -150,6 +151,8 @@ cheapbugs/
 - **Description**: Optional Python runtime receives XMTP DMs, validates commands, relays accepted submissions to a private Signal group, stores broker state in SQLite, tracks Signal reactions, and pays BUGZ rewards.
 - **Properties**:
   - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`, with `BouncerConfig` kept as a compatibility alias.
+  - `run-broker.sh` loads `.env`, validates mandatory XMTP, Signal, Base RPC, and BUGZ token settings, prepares `.venv-broker`, initializes the SQLite store, and runs the broker.
+  - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; `BUGZ_PAYOUT_PRIVATE_KEY` is mandatory only when dry-run is disabled.
   - `BOUNCER_*` environment variables and `scripts/bouncer-bot.py` are compatibility aliases for older local configs.
   - SQLite tracks processed XMTP message IDs, relayed submissions, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
   - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ`.
@@ -157,6 +160,7 @@ cheapbugs/
 - **Test Criteria**:
   - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, SQLite maturity, reaction parsing, and reward math.
   - [x] `python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py` checks Python syntax.
+  - [x] `bash -n run-broker.sh` checks the root launcher syntax.
   - [ ] Add integration smoke tests with a disposable XMTP wallet and Signal group before production broker launch.
 
 ### EAS Reviewer Verdicts
@@ -225,6 +229,7 @@ cheapbugs/
   - [x] `npm run contracts:test`
   - [x] `python3 -m unittest discover -s bots/tests -t bots`
   - [x] `python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py`
+  - [x] `bash -n run-broker.sh`
 
 ## External Integrations
 

@@ -3,7 +3,12 @@ artifacts
 playwright-report
 test-results
 node_modules
+.env
+.env.*
+!.env.example
 .env.local
+.venv-broker
+.broker
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
