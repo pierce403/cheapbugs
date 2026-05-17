@@ -10,6 +10,15 @@ from .config import BrokerConfig
 from .service import BrokerBot
 
 
+def plain_text_status_sender(ctx):
+    """Return a broker status sender that avoids XMTP reply-content encoding."""
+
+    async def send_status(text: str) -> None:
+        await ctx.send_text(text)
+
+    return send_status
+
+
 async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
     logger = logging.getLogger(__name__)
     try:
@@ -42,7 +51,7 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
             sender_address=sender_address,
             conversation_id=ctx.message.conversation_id.hex(),
             message_id=ctx.message.id.hex(),
-            reply=ctx.send_text_reply,
+            reply=plain_text_status_sender(ctx),
         )
 
     logger.info("starting xmtp broker agent env=%s", config.xmtp_env)

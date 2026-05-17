@@ -18,7 +18,7 @@ This broker-relay claim is not implemented yet.
 - The current broker XMTP payload includes `reporter_address`, but it is not yet signed as an application-level submission envelope.
 - The browser sends broker submissions as XMTP DMs to the configured broker wallet.
 - The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, blocked reporters, and insufficient BUGZ balance.
-- The broker sends staged XMTP replies after successful validation stages.
+- The broker sends staged plain text XMTP status messages after successful validation stages.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
 ## Planned Reporter-Signed Broker Relay

@@ -119,10 +119,11 @@ cheapbugs/
   - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.
   - The broker owns review-key generation and retention for this flow.
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid provided target references, and invalid reporter credentials.
-  - The broker replies over XMTP after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
+  - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
+  - Broker status messages intentionally avoid XMTP reply-content encoding while `xmtp==0.1.5` can crash in the UniFFI reply-content path.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:
-  - [x] Python unit tests cover strict JSON parsing, required fields, target validation, staged replies, and credential failure.
+  - [x] Python unit tests cover strict JSON parsing, required fields, target validation, staged status messages, and credential failure.
   - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, and structured XMTP submit UI.
   - [ ] Add reporter-signed payload envelopes before the broker can submit user-attributed records onchain.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
@@ -243,7 +244,7 @@ cheapbugs/
 - **ENS**: mainnet name/avatar resolution for session UI.
 - **IPFS / Pinata**: encrypted dossier storage and gateway reads.
 - **EAS**: reviewer verdict attestations and indexed reads.
-- **XMTP**: browser-to-broker report submission and broker replies.
+- **XMTP**: browser-to-broker report submission and broker status messages.
 - **Signal**: private reviewer channel relay and reaction source.
 - **Uniswap v4 / Clanker**: browser-signed BUGZ market trading.
 - **Foundry**: contract builds, tests, and Solidity-native deployment.

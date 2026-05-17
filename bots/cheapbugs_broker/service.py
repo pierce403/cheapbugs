@@ -231,7 +231,7 @@ class BrokerBot:
         )
 
     async def _reply(self, reply: ReplyFn, message_id: str, stage: str, message: str) -> None:
-        self.logger.info("xmtp reply queued message_id=%s stage=%s chars=%s", message_id, stage, len(message))
+        self.logger.info("xmtp status queued message_id=%s stage=%s chars=%s", message_id, stage, len(message))
         await reply(message)
 
     def _validate_submission_credentials(self, command: SubmissionCommand) -> str:
