@@ -4,8 +4,6 @@ import { mainnet } from "viem/chains";
 import { env } from "../config/env";
 import type { SessionState } from "../types/app";
 
-import { toGatewayUrl } from "./ipfs";
-
 export const ENS_APP_URL = "https://app.ens.domains/";
 export const ENS_REGISTER_URL = ENS_APP_URL;
 
@@ -20,16 +18,30 @@ const ensClient = createPublicClient({
 
 const ensCache = new Map<string, EnsProfile>();
 
+const toIpfsGatewayUrl = (value: string): string => {
+  const path = value.replace(/^ipfs:\/\//, "").replace(/^ipfs\//, "");
+  return `https://ipfs.io/ipfs/${path}`;
+};
+
 const sanitizeAvatarUrl = (value: string | null): string | null => {
   if (!value) {
     return null;
   }
 
-  const normalized = value.startsWith("ipfs://") ? toGatewayUrl(value) : value;
+  const trimmed = value.trim();
+  const normalized = trimmed.startsWith("ipfs://") ? toIpfsGatewayUrl(trimmed) : trimmed;
 
   try {
     const url = new URL(normalized);
     return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+};
+
+const resolveEnsAvatarUrl = async (ensName: string): Promise<string | null> => {
+  try {
+    return sanitizeAvatarUrl(await ensClient.getEnsText({ name: ensName, key: "avatar" }));
   } catch {
     return null;
   }
@@ -59,7 +71,7 @@ export const resolveEnsProfile = async (address: `0x${string}`): Promise<EnsProf
 
     const profile: EnsProfile = {
       ensName,
-      ensAvatarUrl: sanitizeAvatarUrl(await ensClient.getEnsAvatar({ name: ensName })),
+      ensAvatarUrl: await resolveEnsAvatarUrl(ensName),
       ensLookupStatus: "resolved"
     };
 

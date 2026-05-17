@@ -131,6 +131,11 @@ test("opens an ENS-backed profile modal from the avatar", async ({ page }) => {
   await mockBaseRpc(page);
   await mockEnsRpc(page, { ensName: "cheapbugs.eth", avatarUrl });
   await page.route(avatarUrl, async (route) => {
+    if (route.request().method() === "HEAD") {
+      await route.fulfill({ status: 405 });
+      return;
+    }
+
     await route.fulfill({
       status: 200,
       headers: { "content-type": "image/png" },
@@ -160,6 +165,33 @@ test("opens an ENS-backed profile modal from the avatar", async ({ page }) => {
     "href",
     "https://app.ens.domains/cheapbugs.eth"
   );
+});
+
+test("loads ENS avatar text records without depending on a HEAD probe", async ({ page }) => {
+  const avatarRecord = "ipfs://bafybeigdyrztuuvq6wtr4djs5h7kyf4e7d6hhi5m67zv6yn5m4cq/avatar.png";
+  const gatewayUrl = "https://ipfs.io/ipfs/bafybeigdyrztuuvq6wtr4djs5h7kyf4e7d6hhi5m67zv6yn5m4cq/avatar.png";
+  await seedLocalIdentity(page);
+  await mockBaseRpc(page);
+  await mockEnsRpc(page, { ensName: "cheapbugs.eth", avatarUrl: avatarRecord });
+  await page.route(gatewayUrl, async (route) => {
+    if (route.request().method() === "HEAD") {
+      await route.fulfill({ status: 405 });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "image/png" },
+      body: ""
+    });
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByTestId("identity-avatar-media")).toHaveAttribute("src", gatewayUrl);
+
+  await page.getByRole("button", { name: "open profile" }).click();
+  await expect(page.getByTestId("profile-avatar-media")).toHaveAttribute("src", gatewayUrl);
 });
 
 test("prompts connected wallets without ENS to register a name", async ({ page }) => {
