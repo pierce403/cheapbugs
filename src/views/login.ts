@@ -1,5 +1,6 @@
 import { authController } from "../services";
-import { escapeHtml, shortHash } from "../lib/utils";
+import { appLog } from "../lib/logger";
+import { escapeHtml, formatDate, shortHash } from "../lib/utils";
 import { ENS_APP_URL } from "../lib/ens";
 
 import type { AppViewContext, ViewResult } from "./types";
@@ -40,10 +41,10 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
           : `<p class="warning-copy">No browser wallet was detected and VITE_WALLETCONNECT_PROJECT_ID is unset, so WalletConnect QR login is disabled.</p>`
       }
       <p class="lede">
-        Connect with the wallet built into this browser. If this browser has no web3 provider, use WalletConnect QR.
+        Sign in with the wallet built into this browser. If this browser has no web3 provider, use WalletConnect QR.
       </p>
       <div class="button-row">
-        <button id="connect-primary-wallet" type="button" class="button" ${authController.isConfigured() ? "" : "disabled"}>connect wallet</button>
+        <button id="connect-primary-wallet" type="button" class="button" ${authController.isConfigured() ? "" : "disabled"}>sign in with wallet</button>
       </div>
     </section>
 
@@ -75,6 +76,7 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
           <tr><th>ens status</th><td>${escapeHtml(context.session.ensLookupStatus)}</td></tr>
           <tr><th>ens</th><td>${escapeHtml(context.session.ensName ?? "-")}</td></tr>
           <tr><th>avatar</th><td>${context.session.ensAvatarUrl ? `<a href="${escapeHtml(context.session.ensAvatarUrl)}" target="_blank" rel="noreferrer">loaded</a>` : "-"}</td></tr>
+          <tr><th>siwe</th><td>${escapeHtml(context.session.siweIssuedAt ? `signed ${formatDate(context.session.siweIssuedAt)}` : context.session.mode === "local" ? "not required for local xmtp" : "-")}</td></tr>
           <tr><th>reviewer</th><td>${context.session.isReviewer ? "trusted" : "no"}</td></tr>
           <tr><th>error</th><td>${escapeHtml(context.session.lastError ?? "-")}</td></tr>
         </tbody>
@@ -89,26 +91,31 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
     const connectPrimaryButton = root.querySelector<HTMLButtonElement>("#connect-primary-wallet");
 
     createLocalButton?.addEventListener("click", async () => {
+      appLog.info("ui: create local XMTP identity click");
       try {
         const identity = await authController.createLocalIdentity();
         appContext.notify("success", `Local XMTP wallet created: ${identity.address}.`);
         appContext.router.navigate("/submit");
       } catch (error) {
+        appLog.error("ui: create local XMTP identity failed", error);
         appContext.notify("error", error instanceof Error ? error.message : "Failed to create local XMTP wallet.");
       }
     });
 
     useLocalButton?.addEventListener("click", async () => {
+      appLog.info("ui: use local XMTP identity click");
       try {
         const identity = await authController.useLocalIdentity();
         appContext.notify("success", `Using local XMTP wallet ${identity.address}.`);
         appContext.router.navigate("/submit");
       } catch (error) {
+        appLog.error("ui: use local XMTP identity failed", error);
         appContext.notify("error", error instanceof Error ? error.message : "Failed to load local XMTP wallet.");
       }
     });
 
     copyLocalButton?.addEventListener("click", async () => {
+      appLog.info("ui: copy local XMTP recovery click");
       const identity = authController.getLocalIdentity();
       const recovery = identity?.mnemonic || identity?.privateKey;
       if (!recovery) {
@@ -118,13 +125,16 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
       try {
         await navigator.clipboard.writeText(recovery);
         appContext.notify("success", "Local XMTP recovery key copied.");
-      } catch {
+      } catch (error) {
+        appLog.error("ui: copy local XMTP recovery failed", error);
         appContext.notify("error", "Clipboard write failed.");
       }
     });
 
     forgetLocalButton?.addEventListener("click", () => {
+      appLog.info("ui: forget local XMTP identity click");
       if (!window.confirm("Forget the stored XMTP wallet from this browser? Funds at that address will require the recovery key.")) {
+        appLog.info("ui: forget local XMTP identity cancelled");
         return;
       }
       authController.forgetLocalIdentity();
@@ -133,11 +143,13 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
     });
 
     connectPrimaryButton?.addEventListener("click", async () => {
+      appLog.info("ui: session view primary login click");
       try {
         await authController.connectPrimary();
-        appContext.notify("success", "Wallet connected.");
+        appContext.notify("success", "Signed in with wallet.");
         appContext.router.navigate("/");
       } catch (error) {
+        appLog.error("ui: session view primary login failed", error);
         appContext.notify("error", error instanceof Error ? error.message : "Wallet connection failed.");
       }
     });
@@ -149,11 +161,13 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
           return;
         }
 
+        appLog.info("ui: external wallet button click", { walletId });
         try {
           await authController.connectExternal(walletId);
-          appContext.notify("success", `Connected ${authController.walletLabel(walletId)}.`);
+          appContext.notify("success", `Signed in with ${authController.walletLabel(walletId)}.`);
           appContext.router.navigate("/");
         } catch (error) {
+          appLog.error("ui: external wallet login failed", { walletId, error });
           appContext.notify("error", error instanceof Error ? error.message : "Wallet connection failed.");
         }
       });

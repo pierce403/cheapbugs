@@ -9,6 +9,7 @@ import { renderReviewView } from "./views/review";
 import { renderSubmitView } from "./views/submit";
 import { renderTokenView } from "./views/token";
 import { ENS_APP_URL } from "./lib/ens";
+import { appLog } from "./lib/logger";
 import { loadTokenDashboard } from "./lib/token";
 import { escapeHtml, formatTokenAmount, shortHash } from "./lib/utils";
 import { env } from "./config/env";
@@ -173,6 +174,7 @@ export class CheapBugsApp {
             <div>chain: ${escapeHtml(chainConfig.name)} (${chainConfig.id})</div>
             <div>storage: ${escapeHtml(context.storage.id)}</div>
             <div>wallet: ${escapeHtml(shortHash(session.address, 12, 6))}</div>
+            <div>siwe: ${session.mode === "local" ? "local" : session.siweIssuedAt ? "signed" : "unsigned"}</div>
             ${bugzStatus}
             <div>reviewer: ${session.isReviewer ? "trusted" : "no"}</div>
           </div>
@@ -181,7 +183,7 @@ export class CheapBugsApp {
       : `
         <div class="auth-panel auth-panel-guest">
           <div class="auth-actions">
-            <a href="${context.router.href("/login")}" data-nav class="button">login</a>
+            <button id="connect-wallet" class="button" type="button">login</button>
           </div>
           <div class="status-block">
             <div>chain: ${escapeHtml(chainConfig.name)} (${chainConfig.id})</div>
@@ -242,12 +244,19 @@ export class CheapBugsApp {
 
     document.title = `${view.title} | ${env.appName}`;
     this.root.innerHTML = await this.shell(view, context);
+    appLog.info("app: rendered route", {
+      route: context.route.name,
+      path: context.route.path,
+      sessionStatus: context.session.status,
+      wallet: context.session.address ? shortHash(context.session.address, 10, 6) : "anonymous"
+    });
 
     this.root.querySelectorAll<HTMLAnchorElement>("[data-nav]").forEach((anchor) => {
       anchor.addEventListener("click", (event) => {
         event.preventDefault();
         const href = anchor.getAttribute("href");
         if (href) {
+          appLog.info("ui: navigation click", { href, label: anchor.textContent?.trim() ?? "" });
           this.router.navigate(href.replace(/^#/, ""));
         }
       });
@@ -257,12 +266,25 @@ export class CheapBugsApp {
       button.addEventListener("click", () => {
         const id = button.dataset.dismissNotice;
         if (id) {
+          appLog.info("ui: notice dismissed", { id });
           context.dismissNotice(id);
         }
       });
     });
 
+    this.root.querySelector<HTMLButtonElement>("#connect-wallet")?.addEventListener("click", async () => {
+      appLog.info("ui: header login click");
+      try {
+        await authController.connectPrimary();
+        context.notify("success", "Signed in with wallet.");
+      } catch (error) {
+        appLog.error("ui: header login failed", error);
+        context.notify("error", error instanceof Error ? error.message : "Wallet login failed.");
+      }
+    });
+
     this.root.querySelector<HTMLButtonElement>("#disconnect-wallet")?.addEventListener("click", async () => {
+      appLog.info("ui: disconnect click");
       await authController.disconnect();
       context.notify("info", "Wallet disconnected.");
       this.router.navigate("/");

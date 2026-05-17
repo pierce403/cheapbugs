@@ -16,6 +16,9 @@ export type SessionState = {
   ensName: string | null;
   ensAvatarUrl: string | null;
   ensLookupStatus: "idle" | "loading" | "resolved" | "missing" | "error";
+  siweMessage: string | null;
+  siweSignature: `0x${string}` | null;
+  siweIssuedAt: string | null;
   isReviewer: boolean;
   lastError: string | null;
 };

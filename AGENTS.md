@@ -75,6 +75,7 @@ npm run launch:token
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
 - `src/auth/wallet.ts`: injected wallet, WalletConnect QR, persisted wallet session, and signer adapter
 - `src/auth/localIdentity.ts`: browser-stored generated XMTP wallet identity helper
+- `src/lib/logger.ts`: namespaced browser console logging helper for click/auth/debug breadcrumbs
 - `src/xmtp/browser.ts`: browser XMTP SDK adapter for local/external wallet signers
 - `src/xmtp/bouncer.ts`: structured bouncer submission DM helper
 - `src/storage/gateway.ts`: static IPFS gateway reader and disabled-upload fallback
@@ -113,8 +114,10 @@ npm run launch:token
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
-- Wallet auth persists the last selected connector in `cheapbugs.walletSession.v1`; injected sessions restore only when the wallet still exposes authorized accounts, while WalletConnect sessions restore from the provider's persisted session.
+- The header login button calls `authController.connectPrimary()` directly instead of routing to `/login`. It prompts injected browser-wallet SIWE first, then falls back to WalletConnect QR when browser login fails or no provider exists.
+- Wallet auth persists the last selected connector in `cheapbugs.walletSession.v1`; injected sessions restore only when the wallet still exposes authorized accounts, while WalletConnect sessions restore from the provider's persisted session. External wallet SIWE proofs are stored locally in `cheapbugs.siweSession.v1` and restored without re-prompting after refresh when the wallet/domain/chain still match.
 - WalletConnect QR login needs `VITE_WALLETCONNECT_PROJECT_ID`; browsers with injected web3 can connect without it.
+- Browser console logging through `appLog` is intentionally verbose around auth clicks, provider selection, WalletConnect fallback, SIWE prompts, session restore, and failures so users can inspect what login is doing.
 - Connected wallet UI now resolves ENS name/avatar from Ethereum mainnet and should prompt users to create an ENS name when none is found.
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
 - `VITE_BOUNCER_XMTP_ADDRESS` switches the submit route to XMTP DM submission. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.

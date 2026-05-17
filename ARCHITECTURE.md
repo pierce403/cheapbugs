@@ -188,9 +188,11 @@ Key Records:
 
 Wallet Auth:
 
-- Purpose: Connect injected browser wallets, open WalletConnect QR for browsers without injected web3, restore the last authorized wallet session after refresh, and expose ethers signers to contract adapters
+- Purpose: Connect injected browser wallets, prompt a local SIWE-style signature for external-wallet login, fall back to WalletConnect QR when browser web3 is unavailable or fails, restore the last authorized wallet session after refresh, and expose ethers signers to contract adapters
 - Integration Method: [src/auth/wallet.ts](/home/pierce/projects/cheapbugs/src/auth/wallet.ts) with ethers `BrowserProvider`, direct `@walletconnect/ethereum-provider`, and site-local XMTP identities from [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
+- Persistence: Connector choice lives in `cheapbugs.walletSession.v1`; external-wallet SIWE message/signature proofs live in `cheapbugs.siweSession.v1` and are reused on refresh when address, connector, Base chain id, domain, and origin still match.
 - Configuration: `VITE_WALLETCONNECT_PROJECT_ID` enables WalletConnect QR. Injected browser wallets work without a project ID.
+- Debugging: [src/lib/logger.ts](/home/pierce/projects/cheapbugs/src/lib/logger.ts) emits namespaced console breadcrumbs for auth clicks, provider choices, WalletConnect fallback, SIWE prompts, session restore, and failures.
 
 ENS:
 
