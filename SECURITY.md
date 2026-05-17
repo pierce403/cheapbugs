@@ -56,10 +56,11 @@ Until this exists, the broker must not create bug-index records that claim to be
 
 - The broker is trusted to receive private submissions, hold review keys, pin private material to IPFS, optionally create EAS attestations, and relay accepted reports.
 - The broker is not trusted to choose the reporter address for onchain attribution.
-- Broker compromise can expose submissions it has received, review keys it holds, Signal relay data, SQLite state, and payout keys available to the process.
+- Broker compromise can expose submissions it has received, review keys it holds, Signal relay data, SQLite state, and the `BROKER_KEY` available to the process.
+- `BROKER_KEY` is the single broker wallet key. It controls the broker XMTP identity and signs BUGZ payout transfers.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
 - Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
-- Broker payout wallets must be deliberately funded and capped. Rewards are ERC20 transfers, not mints.
+- The broker wallet must be deliberately funded and capped before live payouts. Rewards are ERC20 transfers, not mints.
 
 ### IPFS And Pinata
 

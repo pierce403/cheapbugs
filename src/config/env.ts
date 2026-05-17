@@ -23,9 +23,7 @@ const configuredBugzTokenAddress =
   (import.meta.env.VITE_BUGZ_TOKEN_ADDRESS as `0x${string}` | undefined) || defaultBugzTokenAddress;
 const usesDefaultBugzToken = configuredBugzTokenAddress.toLowerCase() === defaultBugzTokenAddress.toLowerCase();
 const configuredBrokerXmtpAddress =
-  (import.meta.env.VITE_BROKER_XMTP_ADDRESS as `0x${string}` | undefined) ||
-  (import.meta.env.VITE_BOUNCER_XMTP_ADDRESS as `0x${string}` | undefined) ||
-  defaultBrokerXmtpAddress;
+  (import.meta.env.VITE_BROKER_XMTP_ADDRESS as `0x${string}` | undefined) || defaultBrokerXmtpAddress;
 
 export const env = {
   appName: import.meta.env.VITE_APP_NAME || "CheapBugs",

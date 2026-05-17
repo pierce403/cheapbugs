@@ -93,9 +93,7 @@ npm run launch:token
 - `SECURITY.md`: living security model, trust boundaries, implemented guarantees, and planned claims
 - `run-broker.sh`: root broker launcher that loads `.env`, validates required XMTP/Base/Bugz variables, optionally enables Signal when `BROKER_SIGNAL_CLI` is set, prepares `.venv-broker`, initializes SQLite, and runs `scripts/broker-bot.py`
 - `scripts/broker-bot.py`: Python XMTP-to-Signal broker runner
-- `scripts/bouncer-bot.py`: legacy alias for the broker runner
-- `bots/cheapbugs_broker/`: broker command parsing, SQLite store, Signal CLI, and BUGZ payout adapters
-- `bots/cheapbugs_bouncer/`: legacy import compatibility wrappers for the broker package
+- `bots/cheapbugs_broker/`: broker command parsing, SQLite store, optional Signal CLI, and BUGZ payout adapters
 
 ## Project Conventions
 
@@ -138,18 +136,18 @@ npm run launch:token
 - ENS avatars are read from the raw `avatar` text record with `ensClient.getEnsText({ key: "avatar" })`, then sanitized to HTTPS or an IPFS gateway URL with paths preserved. Do not switch this back to `getEnsAvatar`; viem's avatar parser HEAD-probes image URLs and can hide otherwise valid avatars when hosts reject HEAD/CORS.
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
 - The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views.
-- The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BROKER_XMTP_ADDRESS` overrides that broker and `VITE_BOUNCER_XMTP_ADDRESS` remains a legacy alias. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
+- The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BROKER_XMTP_ADDRESS` overrides that broker. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
 - Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/broker.ts`; the current submit form only collects title, public summary, and private details. Do not re-add repro/evidence/severity/Signal/target/tags/review-access-key fields unless the product direction changes.
 - Browser-to-broker submissions are not yet reporter-signed. Do not let the broker create user-attributed onchain bug-index records until `CheapBugsBugIndex` has a reporter-signed broker-relay path that verifies EIP-712/ECDSA and prevents replay.
 - The broker generates and holds the review key for XMTP submissions; do not expose a frontend review access key on the broker path.
 - The submit route has an inline `#xmtp-status` indicator for XMTP wallet readiness, registration-signature progress, success, and failure. During external-wallet XMTP signature waits it also shows `#xmtp-signature-modal` so WalletConnect/mobile approvals are visible. Keep `submit to broker` clickable while disconnected so it can show the wallet-required status instead of doing nothing.
 - Browser XMTP registration can require a wallet signature before any broker message is sent. `src/xmtp/browser.ts` caches identical signature requests, skips redundant registration when the SDK reports the installation is already registered, and checks broker inboxes with both stripped and `0x` Ethereum identifier forms.
 - The Python parser rejects text `!submit` messages, missing core fields, unexpected fields, and invalid provided target references.
-- The broker replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`; `BOUNCER_*` names are accepted only for legacy compatibility.
+- The broker replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
 - The Python broker uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
-- Use `./run-broker.sh` for local broker runtime startup. It expects a shell-compatible `.env`, defaults `BROKER_DRY_RUN=1`, requires `XMTP_DB_ENCRYPTION_KEY` for persistent XMTP state, and creates `.venv-broker`/`.broker`, which are gitignored. `.env*` is ignored except `.env.example`. If `BROKER_SIGNAL_CLI` is unset, Signal relay/reaction/reward support is disabled with a warning.
-- Broker rewards are ERC20 transfers from `BUGZ_PAYOUT_PRIVATE_KEY`, not mints. Fund and cap that wallet intentionally before running without `BROKER_DRY_RUN=1`.
+- Use `./run-broker.sh` for local broker runtime startup. It expects a shell-compatible `.env`, defaults `BROKER_DRY_RUN=1`, requires `BROKER_KEY` plus `XMTP_DB_ENCRYPTION_KEY` for persistent XMTP state, and creates `.venv-broker`/`.broker`, which are gitignored. `.env*` is ignored except `.env.example`. If `BROKER_SIGNAL_CLI` is unset, Signal relay/reaction/reward support is disabled with a warning.
+- Broker rewards are ERC20 transfers from the wallet behind `BROKER_KEY`, not mints. `BROKER_KEY` is also the XMTP broker identity, so fund and cap that wallet intentionally before running without `BROKER_DRY_RUN=1`.
 
 ## Known Issues And Practical Tips
 

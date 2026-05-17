@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 from .config import BrokerConfig
 from .service import BrokerBot
@@ -22,6 +23,7 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
         disable_history_sync=True,
         logging_level=LogLevel.WARN,
     )
+    os.environ["XMTP_WALLET_KEY"] = config.broker_key
     agent = await Agent.create_from_env(options)
 
     @agent.on("text")
@@ -44,6 +46,3 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
             "Signal is not configured; broker will validate XMTP submissions without Signal relay or reward settlement."
         )
         await asyncio.Event().wait()
-
-
-run_xmtp_bouncer = run_xmtp_broker

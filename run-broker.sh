@@ -35,24 +35,6 @@ set -a
 . "$ENV_FILE"
 set +a
 
-copy_if_empty() {
-  local target="$1"
-  shift
-  local current="${!target:-}"
-  if [[ -n "${current//[[:space:]]/}" ]]; then
-    return
-  fi
-
-  local source
-  for source in "$@"; do
-    local value="${!source:-}"
-    if [[ -n "${value//[[:space:]]/}" ]]; then
-      export "$target=$value"
-      return
-    fi
-  done
-}
-
 is_truthy() {
   case "${1,,}" in
     1|true|yes|on) return 0 ;;
@@ -67,16 +49,11 @@ is_falsey() {
   esac
 }
 
-export BROKER_XMTP_ENV="${BROKER_XMTP_ENV:-${BOUNCER_XMTP_ENV:-${XMTP_ENV:-production}}}"
-export BROKER_XMTP_DB_PATH="${BROKER_XMTP_DB_PATH:-${BOUNCER_XMTP_DB_PATH:-.broker/xmtp.db3}}"
-export BROKER_DB_PATH="${BROKER_DB_PATH:-${BOUNCER_DB_PATH:-.broker/broker.sqlite}}"
-export BROKER_DRY_RUN="${BROKER_DRY_RUN:-${BOUNCER_DRY_RUN:-1}}"
-export BROKER_SIGNAL_CLI="${BROKER_SIGNAL_CLI:-${BOUNCER_SIGNAL_CLI:-}}"
-
-copy_if_empty BROKER_SIGNAL_ACCOUNT BOUNCER_SIGNAL_ACCOUNT
-copy_if_empty BROKER_SIGNAL_GROUP_ID BOUNCER_SIGNAL_GROUP_ID
-copy_if_empty BASE_RPC_URL VITE_CHAIN_RPC_URL
-copy_if_empty BUGZ_TOKEN_ADDRESS VITE_BUGZ_TOKEN_ADDRESS
+export BROKER_XMTP_ENV="${BROKER_XMTP_ENV:-production}"
+export BROKER_XMTP_DB_PATH="${BROKER_XMTP_DB_PATH:-.broker/xmtp.db3}"
+export BROKER_DB_PATH="${BROKER_DB_PATH:-.broker/broker.sqlite}"
+export BROKER_DRY_RUN="${BROKER_DRY_RUN:-1}"
+export BROKER_SIGNAL_CLI="${BROKER_SIGNAL_CLI:-}"
 
 missing=()
 require_env() {
@@ -88,7 +65,7 @@ require_env() {
 }
 
 if [[ "$COMMAND" != "init-db" ]]; then
-  require_env XMTP_WALLET_KEY
+  require_env BROKER_KEY
   require_env XMTP_DB_ENCRYPTION_KEY
   require_env BASE_RPC_URL
   require_env BUGZ_TOKEN_ADDRESS
@@ -98,13 +75,9 @@ if [[ "$COMMAND" != "init-db" ]]; then
     exit 2
   fi
 
-  if ! is_truthy "$BROKER_DRY_RUN"; then
-    require_env BUGZ_PAYOUT_PRIVATE_KEY
-  fi
-
   if [[ ${#missing[@]} -gt 0 ]]; then
     echo "Missing required broker env var(s): ${missing[*]}" >&2
-    echo "Set them in $ENV_FILE. BROKER_DRY_RUN defaults to 1; set BROKER_DRY_RUN=0 only with BUGZ_PAYOUT_PRIVATE_KEY." >&2
+    echo "Set them in $ENV_FILE. BROKER_KEY is the broker XMTP identity and the BUGZ payout key." >&2
     exit 2
   fi
 

@@ -31,7 +31,7 @@ def build_bot(config: BrokerConfig) -> BrokerBot:
     token = BugzTokenClient(
         rpc_url=config.base_rpc_url,
         token_address=config.bugz_token_address,
-        payout_private_key=config.bugz_payout_private_key,
+        broker_key=config.broker_key,
         dry_run=config.dry_run,
     )
     return BrokerBot(config=config, store=store, signal=signal, token=token)

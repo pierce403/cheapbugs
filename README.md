@@ -32,7 +32,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 ## XMTP Broker Flow
 
-The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BROKER_XMTP_ADDRESS` only when overriding that broker wallet. `VITE_BOUNCER_XMTP_ADDRESS` is still accepted as a legacy alias. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
+The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BROKER_XMTP_ADDRESS` only when overriding that broker wallet. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
 
 Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The site currently asks only for title, public summary, and private details; the broker owns review-key generation and fills omitted triage metadata internally. The broker rejects malformed JSON, missing core fields, invalid provided target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP that the JSON is valid, the fields are well formed, the target is valid, and the reporter credentials are valid before relaying the submission.
 
@@ -42,17 +42,15 @@ Bot setup:
 ./run-broker.sh
 ```
 
-`run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.5`, `XMTP_WALLET_KEY`, `XMTP_DB_ENCRYPTION_KEY`, `BUGZ_TOKEN_ADDRESS`, and `BASE_RPC_URL`. `BROKER_DRY_RUN` defaults to `1`, which prevents token transfers while still exercising the validation path; set `BROKER_DRY_RUN=0` only with `BUGZ_PAYOUT_PRIVATE_KEY`. The old `BOUNCER_*` runtime variables and `scripts/bouncer-bot.py` still work as compatibility aliases.
+`run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.5`, `BROKER_KEY`, `XMTP_DB_ENCRYPTION_KEY`, `BUGZ_TOKEN_ADDRESS`, and `BASE_RPC_URL`. `BROKER_KEY` is the broker wallet key used for both the XMTP identity and BUGZ payouts. `BROKER_DRY_RUN` defaults to `1`, which prevents token transfers while still exercising the validation path; set `BROKER_DRY_RUN=0` only when the broker wallet is intentionally funded.
 
 Signal is optional for local broker testing. If `BROKER_SIGNAL_CLI` is unset, `run-broker.sh` prints a warning and starts the broker without Signal relay, Signal reaction syncing, or reward settlement.
 
 Minimal `.env` shape:
 
 ```bash
-XMTP_WALLET_KEY=0x...
+BROKER_KEY=0x...
 XMTP_DB_ENCRYPTION_KEY=0x...
-BROKER_SIGNAL_ACCOUNT=+15555550123
-BROKER_SIGNAL_GROUP_ID=...
 BASE_RPC_URL=https://mainnet.base.org
 BUGZ_TOKEN_ADDRESS=0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07
 BROKER_DRY_RUN=1
@@ -207,7 +205,6 @@ The token launcher:
 - [src/xmtp/broker.ts](/home/pierce/projects/cheapbugs/src/xmtp/broker.ts)
 - [scripts/broker-bot.py](/home/pierce/projects/cheapbugs/scripts/broker-bot.py)
 - [bots/cheapbugs_broker/](/home/pierce/projects/cheapbugs/bots/cheapbugs_broker)
-- [bots/cheapbugs_bouncer/](/home/pierce/projects/cheapbugs/bots/cheapbugs_bouncer) legacy import compatibility wrappers
 - [src/storage/gateway.ts](/home/pierce/projects/cheapbugs/src/storage/gateway.ts)
 - [src/storage/pinata.ts](/home/pierce/projects/cheapbugs/src/storage/pinata.ts)
 - [src/attest/eas.ts](/home/pierce/projects/cheapbugs/src/attest/eas.ts)

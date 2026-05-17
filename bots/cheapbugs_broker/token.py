@@ -32,10 +32,10 @@ ERC20_ABI = [
 
 
 class BugzTokenClient:
-    def __init__(self, rpc_url: str, token_address: str, payout_private_key: str, dry_run: bool = False):
+    def __init__(self, rpc_url: str, token_address: str, broker_key: str, dry_run: bool = False):
         self.rpc_url = rpc_url
         self.token_address = token_address
-        self.payout_private_key = payout_private_key
+        self.broker_key = broker_key
         self.dry_run = dry_run
         self._web3 = None
         self._contract = None
@@ -64,9 +64,9 @@ class BugzTokenClient:
     @property
     def account(self):
         if self._account is None:
-            if not self.payout_private_key:
-                raise RuntimeError("BUGZ_PAYOUT_PRIVATE_KEY is required for live payouts.")
-            self._account = self.web3.eth.account.from_key(self.payout_private_key)
+            if not self.broker_key:
+                raise RuntimeError("BROKER_KEY is required for live payouts.")
+            self._account = self.web3.eth.account.from_key(self.broker_key)
         return self._account
 
     def decimals(self) -> int:

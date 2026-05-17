@@ -125,7 +125,7 @@ class ConfigTest(unittest.TestCase):
     def test_runtime_requirements_allow_signal_disabled(self) -> None:
         config = test_config(Path("broker.sqlite"), signal_enabled=False)
 
-        with patch.dict("os.environ", {"XMTP_WALLET_KEY": "0xabc"}, clear=True):
+        with patch.dict("os.environ", {"XMTP_DB_ENCRYPTION_KEY": "0xabc"}, clear=True):
             config.require_runtime()
 
     def test_runtime_requirements_require_signal_details_when_enabled(self) -> None:
@@ -138,9 +138,25 @@ class ConfigTest(unittest.TestCase):
             }
         )
 
-        with patch.dict("os.environ", {"XMTP_WALLET_KEY": "0xabc"}, clear=True):
+        with patch.dict("os.environ", {"XMTP_DB_ENCRYPTION_KEY": "0xabc"}, clear=True):
             with self.assertRaisesRegex(ValueError, "BROKER_SIGNAL_ACCOUNT"):
                 config.require_runtime()
+
+    def test_from_env_uses_single_broker_key(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "BROKER_KEY": "0xbroker",
+                "BASE_RPC_URL": "http://localhost:8545",
+                "BUGZ_TOKEN_ADDRESS": WALLET,
+            },
+            clear=True,
+        ):
+            config = BrokerConfig.from_env()
+
+        self.assertEqual(config.broker_key, "0xbroker")
+        self.assertEqual(config.base_rpc_url, "http://localhost:8545")
+        self.assertEqual(config.bugz_token_address, WALLET)
 
 
 class StoreTest(unittest.TestCase):
@@ -345,12 +361,12 @@ def test_config(path: Path, signal_enabled: bool = True) -> BrokerConfig:
         database_path=path,
         xmtp_env="production",
         xmtp_db_path=None,
+        broker_key="0xabc",
         signal_cli_path="signal-cli" if signal_enabled else "",
         signal_account="+15550000000" if signal_enabled else "",
         signal_group_id="group" if signal_enabled else "",
         base_rpc_url="http://localhost:8545",
         bugz_token_address=WALLET,
-        bugz_payout_private_key="",
         access_min_balance_tokens=Decimal("1"),
         submission_min_balance_tokens=Decimal("1"),
         reputation_blocklist=frozenset(),

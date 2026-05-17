@@ -107,7 +107,7 @@ cheapbugs/
 - **Stability**: in-progress
 - **Description**: The submit route sends bug submissions as strict JSON XMTP DMs to the default broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`.
 - **Properties**:
-  - `VITE_BROKER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed; `VITE_BOUNCER_XMTP_ADDRESS` is a legacy alias.
+  - `VITE_BROKER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed.
   - The frontend form currently collects only title, public summary, and private details; repro steps, evidence, severity, Signal recipient, contact hints, target fields, tags, and review access keys are intentionally not user-facing.
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, title, public summary, private details, and client metadata.
   - The frontend does not yet attach a reporter signature over the submission payload; broker-relayed onchain attribution must stay disabled until the reporter-signed relay feature exists.
@@ -119,7 +119,7 @@ cheapbugs/
   - The broker owns review-key generation and retention for this flow.
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid provided target references, and invalid reporter credentials.
   - The broker replies over XMTP after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
-  - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`; the old `BOUNCER_*` names are accepted as aliases.
+  - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:
   - [x] Python unit tests cover strict JSON parsing, required fields, target validation, staged replies, and credential failure.
   - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, and structured XMTP submit UI.
@@ -150,17 +150,17 @@ cheapbugs/
 - **Stability**: in-progress
 - **Description**: Optional Python runtime receives XMTP DMs, validates commands, optionally relays accepted submissions to a private Signal group, stores broker state in SQLite, tracks Signal reactions, and pays BUGZ rewards when Signal is configured.
 - **Properties**:
-  - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`, with `BouncerConfig` kept as a compatibility alias.
+  - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`.
   - `run-broker.sh` loads `.env`, validates mandatory XMTP, Base RPC, and BUGZ token settings, prepares `.venv-broker`, initializes the SQLite store, and runs the broker.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
-  - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; `BUGZ_PAYOUT_PRIVATE_KEY` is mandatory only when dry-run is disabled.
-  - `BOUNCER_*` environment variables and `scripts/bouncer-bot.py` are compatibility aliases for older local configs.
+  - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
+  - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; disable it only when the broker wallet is intentionally funded for live payouts.
   - SQLite tracks processed XMTP message IDs, relayed submissions, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
   - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ`.
-  - Live payouts require `BUGZ_PAYOUT_PRIVATE_KEY` and should run only from an intentionally funded wallet.
+  - Live payouts spend from the broker wallet and should run only from an intentionally funded wallet.
 - **Test Criteria**:
   - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, SQLite maturity, reaction parsing, and reward math.
-  - [x] `python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py` checks Python syntax.
+  - [x] `python3 -m compileall bots scripts/broker-bot.py` checks Python syntax.
   - [x] `bash -n run-broker.sh` checks the root launcher syntax.
   - [ ] Add integration smoke tests with a disposable XMTP wallet and Signal group before production broker launch.
 
@@ -229,7 +229,7 @@ cheapbugs/
   - [x] `npm run contracts:build`
   - [x] `npm run contracts:test`
   - [x] `python3 -m unittest discover -s bots/tests -t bots`
-  - [x] `python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py`
+  - [x] `python3 -m compileall bots scripts/broker-bot.py`
   - [x] `bash -n run-broker.sh`
 
 ## External Integrations
@@ -257,7 +257,7 @@ npm run launch:bug-index:dry-run
 npm run launch:bug-index:forge:dry-run
 npm run launch:token:dry-run
 python3 -m unittest discover -s bots/tests -t bots
-python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py
+python3 -m compileall bots scripts/broker-bot.py
 ```
 
 ## Future Milestones
