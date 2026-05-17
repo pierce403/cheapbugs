@@ -4,7 +4,7 @@ CheapBugs is a static Vite + TypeScript app for Base-native bug intake and revie
 
 The current MVP stores public-safe report records onchain in `CheapBugsBugIndex` on Base, keeps the private dossier encrypted client-side before uploading it to IPFS, and uses EAS on Base for reviewer verdict attestations and payout-record placeholders.
 
-The repo now also includes an XMTP bouncer path for a private-review workflow: the static site can generate a local XMTP wallet, send strict JSON submissions by XMTP DM to the default bouncer wallet, and the Python bouncer can validate, acknowledge, and relay reports into a private Signal group, gate access and submissions by BUGZ balance, count Signal reactions after seven days, and pay BUGZ rewards from a funded payout wallet.
+The repo now also includes an XMTP broker path for a private-review workflow: the static site can generate a local XMTP wallet, send strict JSON submissions by XMTP DM to the default broker wallet, and the Python broker can validate, acknowledge, and relay reports into a private Signal group, gate access and submissions by BUGZ balance, count Signal reactions after seven days, and pay BUGZ rewards from a funded payout wallet.
 
 BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`. The static app reads connected-wallet balances directly from Base and exposes buy/sell controls as browser-signed Uniswap v4 transactions against the Clanker-created market. There is no token backend.
 
@@ -20,7 +20,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 - EAS review verdict attestations
 - public browsing, report pages, and reviewer queue
 - static deployment with no backend database
-- optional XMTP bouncer bot runtime for private Signal review and BUGZ rewards
+- optional XMTP broker bot runtime for private Signal review and BUGZ rewards
 
 ## What Is Not In Scope Yet
 
@@ -30,23 +30,23 @@ For contract development, the repo now also includes a Foundry workspace with a 
 - DAO governance
 - onchain treasury-managed payout execution
 
-## XMTP Bouncer Flow
+## XMTP Broker Flow
 
-The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BOUNCER_XMTP_ADDRESS` only when overriding that broker wallet. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
+The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BROKER_XMTP_ADDRESS` only when overriding that broker wallet. `VITE_BOUNCER_XMTP_ADDRESS` is still accepted as a legacy alias. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
 
-Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The site currently asks only for title, public summary, and private details; the broker owns review-key generation and fills omitted triage metadata internally. The bouncer rejects malformed JSON, missing core fields, invalid provided target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP that the JSON is valid, the fields are well formed, the target is valid, and the reporter credentials are valid before relaying the submission.
+Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The site currently asks only for title, public summary, and private details; the broker owns review-key generation and fills omitted triage metadata internally. The broker rejects malformed JSON, missing core fields, invalid provided target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP that the JSON is valid, the fields are well formed, the target is valid, and the reporter credentials are valid before relaying the submission.
 
 Bot setup:
 
 ```bash
-python3 -m venv .venv-bouncer
-source .venv-bouncer/bin/activate
-pip install -r requirements-bouncer.txt
-python scripts/bouncer-bot.py init-db
-BOUNCER_DRY_RUN=1 python scripts/bouncer-bot.py run
+python3 -m venv .venv-broker
+source .venv-broker/bin/activate
+pip install -r requirements-broker.txt
+python scripts/broker-bot.py init-db
+BROKER_DRY_RUN=1 python scripts/broker-bot.py run
 ```
 
-The bot expects `xmtp==0.1.5`, `signal-cli`, a Signal account already joined/admin in the private group, `BUGZ_TOKEN_ADDRESS`, `BASE_RPC_URL`, `XMTP_WALLET_KEY`, and `BUGZ_PAYOUT_PRIVATE_KEY` for live payouts. `BOUNCER_DRY_RUN=1` prevents token transfers while still exercising the relay and scoring path.
+The bot expects `xmtp==0.1.5`, `signal-cli`, a Signal account already joined/admin in the private group, `BUGZ_TOKEN_ADDRESS`, `BASE_RPC_URL`, `XMTP_WALLET_KEY`, and `BUGZ_PAYOUT_PRIVATE_KEY` for live payouts. `BROKER_DRY_RUN=1` prevents token transfers while still exercising the relay and scoring path. The old `BOUNCER_*` runtime variables and `scripts/bouncer-bot.py` still work as compatibility aliases.
 
 ## BUGZ Trading
 
@@ -74,7 +74,7 @@ cp .env.example .env.local
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
 - optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY`, `VITE_BUGZ_MARKET_URL`, `VITE_BUGZ_HOLDERS_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard, daily-cached patrons board, and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional treasury display rows.
 - optional `VITE_THIRDWEB_CLIENT_ID` override for Thirdweb wallet login. A public default client id is committed for static deploys.
-- optional `VITE_BOUNCER_XMTP_ADDRESS` override when submissions should go to a non-default XMTP broker wallet
+- optional `VITE_BROKER_XMTP_ADDRESS` override when submissions should go to a non-default XMTP broker wallet
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema
 - `VITE_REVIEWER_ADDRESSES` for trusted reviewers
 
@@ -136,7 +136,7 @@ Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site s
 6. Reviewers publish verdicts as EAS onchain attestations on Base.
 7. The frontend reads the bug index contract for reports and the EAS GraphQL API for verdicts.
 
-By default, the submit route sends a minimal strict JSON XMTP DM to the bouncer wallet. The bouncer validates the JSON shape, any provided target reference, BUGZ submission balance, and local reputation blocklist, then relays that message to Signal, records the Signal message timestamp in SQLite, counts active Signal emoji reactions after the configured review window, and transfers BUGZ to the reporter wallet.
+By default, the submit route sends a minimal strict JSON XMTP DM to the broker wallet. The broker validates the JSON shape, any provided target reference, BUGZ submission balance, and local reputation blocklist, then relays that message to Signal, records the Signal message timestamp in SQLite, counts active Signal emoji reactions after the configured review window, and transfers BUGZ to the reporter wallet.
 
 ## Environment Notes
 
@@ -186,9 +186,10 @@ The token launcher:
 - [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
 - [FEATURES.md](/home/pierce/projects/cheapbugs/FEATURES.md)
 - [src/xmtp/browser.ts](/home/pierce/projects/cheapbugs/src/xmtp/browser.ts)
-- [src/xmtp/bouncer.ts](/home/pierce/projects/cheapbugs/src/xmtp/bouncer.ts)
-- [scripts/bouncer-bot.py](/home/pierce/projects/cheapbugs/scripts/bouncer-bot.py)
-- [bots/cheapbugs_bouncer/](/home/pierce/projects/cheapbugs/bots/cheapbugs_bouncer)
+- [src/xmtp/broker.ts](/home/pierce/projects/cheapbugs/src/xmtp/broker.ts)
+- [scripts/broker-bot.py](/home/pierce/projects/cheapbugs/scripts/broker-bot.py)
+- [bots/cheapbugs_broker/](/home/pierce/projects/cheapbugs/bots/cheapbugs_broker)
+- [bots/cheapbugs_bouncer/](/home/pierce/projects/cheapbugs/bots/cheapbugs_bouncer) legacy import compatibility wrappers
 - [src/storage/gateway.ts](/home/pierce/projects/cheapbugs/src/storage/gateway.ts)
 - [src/storage/pinata.ts](/home/pierce/projects/cheapbugs/src/storage/pinata.ts)
 - [src/attest/eas.ts](/home/pierce/projects/cheapbugs/src/attest/eas.ts)

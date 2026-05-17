@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-from cheapbugs_bouncer.commands import CommandError, parse_command, validate_submission_target
-from cheapbugs_bouncer.config import BouncerConfig
-from cheapbugs_bouncer.models import SignalReactionEvent, SubmissionCommand
-from cheapbugs_bouncer.rewards import reward_tokens, tokens_to_wei
-from cheapbugs_bouncer.service import BouncerBot
-from cheapbugs_bouncer.signal_cli import extract_reaction_events, parse_signal_timestamp
-from cheapbugs_bouncer.store import BouncerStore
+from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
+from cheapbugs_broker.config import BrokerConfig
+from cheapbugs_broker.models import SignalReactionEvent, SubmissionCommand
+from cheapbugs_broker.rewards import reward_tokens, tokens_to_wei
+from cheapbugs_broker.service import BrokerBot
+from cheapbugs_broker.signal_cli import extract_reaction_events, parse_signal_timestamp
+from cheapbugs_broker.store import BrokerStore
 
 
 WALLET = "0x1111111111111111111111111111111111111111"
@@ -123,7 +123,7 @@ class SignalParsingTest(unittest.TestCase):
 class StoreTest(unittest.TestCase):
     def test_reaction_count_and_maturity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            store = BouncerStore(Path(tmp) / "bouncer.sqlite")
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
             store.init()
             command = SubmissionCommand(
                 reporter_address=WALLET,
@@ -158,14 +158,14 @@ class StoreTest(unittest.TestCase):
             self.assertEqual([item.id for item in store.mature_unpaid_submissions(now=107)], [record.id])
 
 
-class BouncerServiceTest(unittest.TestCase):
+class BrokerServiceTest(unittest.TestCase):
     def test_submission_replies_with_validation_stages_before_relay(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            store = BouncerStore(Path(tmp) / "bouncer.sqlite")
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
             store.init()
             replies: list[str] = []
-            bot = BouncerBot(
-                config=test_config(Path(tmp) / "bouncer.sqlite"),
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
                 store=store,
                 signal=FakeSignal(),
                 token=FakeToken(balance=2 * 10**18),
@@ -192,11 +192,11 @@ class BouncerServiceTest(unittest.TestCase):
 
     def test_submission_stops_when_credentials_fail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            store = BouncerStore(Path(tmp) / "bouncer.sqlite")
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
             store.init()
             replies: list[str] = []
-            bot = BouncerBot(
-                config=test_config(Path(tmp) / "bouncer.sqlite"),
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
                 store=store,
                 signal=FakeSignal(),
                 token=FakeToken(balance=0),
@@ -257,8 +257,8 @@ def minimal_submission_payload(**overrides: object) -> dict[str, object]:
     return payload
 
 
-def test_config(path: Path) -> BouncerConfig:
-    return BouncerConfig(
+def test_config(path: Path) -> BrokerConfig:
+    return BrokerConfig(
         database_path=path,
         xmtp_env="production",
         xmtp_db_path=None,

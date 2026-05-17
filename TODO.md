@@ -13,7 +13,7 @@
 - Replace the frontend reviewer allowlist with an onchain registry.
 - Add an optional EAS resolver contract for verdict policy enforcement.
 - Add reviewer key-sharing workflow improvements around encrypted dossier access.
-- Add public payout-record attestations for bouncer-paid BUGZ rewards.
+- Add public payout-record attestations for broker-paid BUGZ rewards.
 - Define a stronger support-scoring policy than raw Signal emoji reaction counts before treating rewards as adversarially robust.
 
 ## Storage

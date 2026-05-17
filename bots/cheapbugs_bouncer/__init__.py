@@ -1,5 +1,3 @@
-"""CheapBugs XMTP-to-Signal bouncer bot."""
+"""Compatibility package for the renamed cheapbugs_broker runtime."""
 
-__all__ = ["__version__"]
-
-__version__ = "0.1.0"
+from cheapbugs_broker import *  # noqa: F401,F403

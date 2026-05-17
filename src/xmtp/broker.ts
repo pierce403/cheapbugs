@@ -4,19 +4,19 @@ import { stableStringify } from "../lib/utils";
 
 import { sendXmtpDm, type BrowserXmtpIdentity } from "./browser";
 
-export const BOUNCER_SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1";
-export const BOUNCER_SUBMISSION_VERSION = 1;
+export const BROKER_SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1";
+export const BROKER_SUBMISSION_VERSION = 1;
 
-export const isBouncerConfigured = (): boolean => Boolean(env.bouncerXmtpAddress);
+export const isBrokerConfigured = (): boolean => Boolean(env.brokerXmtpAddress);
 
-export const buildBouncerSubmissionMessage = (
+export const buildBrokerSubmissionMessage = (
   input: SubmissionFormInput,
   reporterAddress: `0x${string}`
 ): string =>
   stableStringify({
-    schema: BOUNCER_SUBMISSION_SCHEMA,
+    schema: BROKER_SUBMISSION_SCHEMA,
     type: "submission",
-    version: BOUNCER_SUBMISSION_VERSION,
+    version: BROKER_SUBMISSION_VERSION,
     reporter_address: reporterAddress.toLowerCase(),
     title: input.title.trim(),
     public_summary: input.publicSummary.trim(),
@@ -27,14 +27,14 @@ export const buildBouncerSubmissionMessage = (
     }
   });
 
-export const sendBouncerSubmission = async (
+export const sendBrokerSubmission = async (
   identity: BrowserXmtpIdentity,
   input: SubmissionFormInput
 ) => {
-  if (!env.bouncerXmtpAddress) {
-    throw new Error("Set VITE_BOUNCER_XMTP_ADDRESS before sending XMTP submissions.");
+  if (!env.brokerXmtpAddress) {
+    throw new Error("Set VITE_BROKER_XMTP_ADDRESS before sending XMTP submissions.");
   }
 
-  const message = buildBouncerSubmissionMessage(input, identity.address);
-  return sendXmtpDm(identity, env.bouncerXmtpAddress, message);
+  const message = buildBrokerSubmissionMessage(input, identity.address);
+  return sendXmtpDm(identity, env.brokerXmtpAddress, message);
 };

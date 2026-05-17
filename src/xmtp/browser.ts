@@ -102,7 +102,7 @@ export const sendXmtpDm = async (
     (await client.fetchInboxIdByIdentifier(identifier).catch(() => null)) ??
     (await sdk.getInboxIdForIdentifier(identifier, "production").catch(() => null));
   if (!inboxId) {
-    throw new Error("The configured bouncer wallet does not have a reachable XMTP inbox yet.");
+    throw new Error("The configured broker wallet does not have a reachable XMTP inbox yet.");
   }
 
   const dm = await client.conversations.createDm(inboxId);

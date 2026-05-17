@@ -80,7 +80,7 @@ npm run launch:token
 - `src/auth/localIdentity.ts`: browser-stored generated XMTP wallet identity helper
 - `src/lib/logger.ts`: namespaced browser console logging helper for click/auth/debug breadcrumbs
 - `src/xmtp/browser.ts`: browser XMTP SDK adapter for local/external wallet signers
-- `src/xmtp/bouncer.ts`: structured bouncer submission DM helper
+- `src/xmtp/broker.ts`: structured broker submission DM helper
 - `src/storage/gateway.ts`: static IPFS gateway reader and disabled-upload fallback
 - `src/storage/pinata.ts`: presigned-upload Pinata adapter
 - `src/attest/eas.ts`: EAS write adapter for verdicts and payout placeholders
@@ -88,8 +88,10 @@ npm run launch:token
 - `src/config/env.ts`: env parsing and defaults
 - `src/config/chains.ts`: chain isolation, currently Base-oriented
 - `FEATURES.md`: living feature map with stability, properties, milestones, and test criteria
-- `scripts/bouncer-bot.py`: Python XMTP-to-Signal bouncer runner
-- `bots/cheapbugs_bouncer/`: bouncer command parsing, SQLite store, Signal CLI, and BUGZ payout adapters
+- `scripts/broker-bot.py`: Python XMTP-to-Signal broker runner
+- `scripts/bouncer-bot.py`: legacy alias for the broker runner
+- `bots/cheapbugs_broker/`: broker command parsing, SQLite store, Signal CLI, and BUGZ payout adapters
+- `bots/cheapbugs_bouncer/`: legacy import compatibility wrappers for the broker package
 
 ## Project Conventions
 
@@ -131,14 +133,14 @@ npm run launch:token
 - ENS avatars are read from the raw `avatar` text record with `ensClient.getEnsText({ key: "avatar" })`, then sanitized to HTTPS or an IPFS gateway URL with paths preserved. Do not switch this back to `getEnsAvatar`; viem's avatar parser HEAD-probes image URLs and can hide otherwise valid avatars when hosts reject HEAD/CORS.
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
 - The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views.
-- The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BOUNCER_XMTP_ADDRESS` only overrides that broker. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
-- Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/bouncer.ts`; the current submit form only collects title, public summary, and private details. Do not re-add repro/evidence/severity/Signal/target/tags/review-access-key fields unless the product direction changes.
+- The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BROKER_XMTP_ADDRESS` overrides that broker and `VITE_BOUNCER_XMTP_ADDRESS` remains a legacy alias. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
+- Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/broker.ts`; the current submit form only collects title, public summary, and private details. Do not re-add repro/evidence/severity/Signal/target/tags/review-access-key fields unless the product direction changes.
 - The broker generates and holds the review key for XMTP submissions; do not expose a frontend review access key on the broker path.
 - The Python parser rejects text `!submit` messages, missing core fields, unexpected fields, and invalid provided target references.
-- The bouncer replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BOUNCER_SUBMISSION_MIN_BUGZ` plus `BOUNCER_REPUTATION_BLOCKLIST`.
+- The broker replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`; `BOUNCER_*` names are accepted only for legacy compatibility.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
-- The Python bouncer uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
-- Bouncer rewards are ERC20 transfers from `BUGZ_PAYOUT_PRIVATE_KEY`, not mints. Fund and cap that wallet intentionally before running without `BOUNCER_DRY_RUN=1`.
+- The Python broker uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
+- Broker rewards are ERC20 transfers from `BUGZ_PAYOUT_PRIVATE_KEY`, not mints. Fund and cap that wallet intentionally before running without `BROKER_DRY_RUN=1`.
 
 ## Known Issues And Practical Tips
 
@@ -155,7 +157,7 @@ npm run launch:token
 - `ffmpeg` is available in the local environment and was used to derive favicon/OpenGraph PNG assets from `cheapbugs.png`.
 - Signal reactions are social support signals only; they are not sybil-resistant votes.
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
-- Real XMTP submission requires the default or overridden broker address to point at an already registered bouncer XMTP inbox.
+- Real XMTP submission requires the default or overridden broker address to point at an already registered broker XMTP inbox.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
 - The contract launcher needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` for a real deployment.
 - The token launcher needs `BUGZ_DEPLOYER_PRIVATE_KEY` for a real deployment.

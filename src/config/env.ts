@@ -18,10 +18,14 @@ const defaultBugzV4PoolId = "0x4c360c12ee8063e7170c344eba74f28ab0d3879c797ed4626
 const defaultBugzV4PairedToken = "0x4200000000000000000000000000000000000006";
 const defaultBugzV4PoolFee = 0x800000;
 const defaultBugzV4TickSpacing = 200;
-const defaultBouncerXmtpAddress = "0xea6995fc3674e1e94736766f5eeefb0506e4ef32";
+const defaultBrokerXmtpAddress = "0xea6995fc3674e1e94736766f5eeefb0506e4ef32";
 const configuredBugzTokenAddress =
   (import.meta.env.VITE_BUGZ_TOKEN_ADDRESS as `0x${string}` | undefined) || defaultBugzTokenAddress;
 const usesDefaultBugzToken = configuredBugzTokenAddress.toLowerCase() === defaultBugzTokenAddress.toLowerCase();
+const configuredBrokerXmtpAddress =
+  (import.meta.env.VITE_BROKER_XMTP_ADDRESS as `0x${string}` | undefined) ||
+  (import.meta.env.VITE_BOUNCER_XMTP_ADDRESS as `0x${string}` | undefined) ||
+  defaultBrokerXmtpAddress;
 
 export const env = {
   appName: import.meta.env.VITE_APP_NAME || "CheapBugs",
@@ -78,8 +82,7 @@ export const env = {
     import.meta.env.VITE_BUGZ_V4_TICK_SPACING,
     usesDefaultBugzToken ? defaultBugzV4TickSpacing : 0
   ),
-  bouncerXmtpAddress:
-    (import.meta.env.VITE_BOUNCER_XMTP_ADDRESS as `0x${string}` | undefined) || defaultBouncerXmtpAddress,
+  brokerXmtpAddress: configuredBrokerXmtpAddress,
   routerMode: import.meta.env.VITE_ROUTER_MODE === "hash" ? "hash" : "history",
   storageProvider: import.meta.env.VITE_STORAGE_PROVIDER === "pinata" ? "pinata" : "ipfs-gateway",
   pinataPresignEndpoint: import.meta.env.VITE_PINATA_PRESIGN_ENDPOINT || "",

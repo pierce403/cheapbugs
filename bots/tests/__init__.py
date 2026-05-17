@@ -1,1 +1,1 @@
-"""Tests for the CheapBugs bouncer bot."""
+"""Tests for the CheapBugs broker bot."""

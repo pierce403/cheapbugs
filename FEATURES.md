@@ -6,11 +6,11 @@ Update this file whenever feature behavior, system boundaries, deployment assump
 
 ## Project Map
 
-CheapBugs is a static Vite + TypeScript application with Solidity contracts, Node and Foundry deployment scripts, Playwright browser tests, and an optional Python XMTP bouncer bot.
+CheapBugs is a static Vite + TypeScript application with Solidity contracts, Node and Foundry deployment scripts, Playwright browser tests, and an optional Python XMTP broker bot.
 
 ```text
 cheapbugs/
-├── bots/                   # Python bouncer bot package and tests
+├── bots/                   # Python broker bot package and tests
 ├── contracts/              # Solidity bug index and BUGZ extension contracts
 ├── script/                 # Foundry deployment scripts
 ├── scripts/                # Deployment, XMTP, and maintenance scripts
@@ -42,7 +42,7 @@ cheapbugs/
 - Sensitive dossier content must be encrypted in the browser before IPFS upload on the legacy path.
 - XMTP broker submissions are private XMTP DMs to the broker and are not encrypted into IPFS by the static app path.
 - Reviewer verdicts are EAS attestations on Base and are read through EAS GraphQL.
-- The Python bouncer is an optional off-static runtime with SQLite state; it does not change the frontend deployment model.
+- The Python broker is an optional off-static runtime with SQLite state; it does not change the frontend deployment model.
 
 ## Features
 
@@ -103,30 +103,31 @@ cheapbugs/
 - **Stability**: in-progress
 - **Description**: The submit route sends bug submissions as strict JSON XMTP DMs to the default broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`.
 - **Properties**:
-  - `VITE_BOUNCER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed.
+  - `VITE_BROKER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed; `VITE_BOUNCER_XMTP_ADDRESS` is a legacy alias.
   - The frontend form currently collects only title, public summary, and private details; repro steps, evidence, severity, Signal recipient, contact hints, target fields, tags, and review access keys are intentionally not user-facing.
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, title, public summary, private details, and client metadata.
   - The broker owns review-key generation and retention for this flow.
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid provided target references, and invalid reporter credentials.
   - The broker replies over XMTP after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
-  - Submission credential checks use `BOUNCER_SUBMISSION_MIN_BUGZ` and `BOUNCER_REPUTATION_BLOCKLIST`.
+  - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`; the old `BOUNCER_*` names are accepted as aliases.
 - **Test Criteria**:
   - [x] Python unit tests cover strict JSON parsing, required fields, target validation, staged replies, and credential failure.
   - [x] Playwright covers the default broker wallet and structured XMTP submit UI.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
 
-### Python Bouncer Bot
+### Python Broker Bot
 
 - **Stability**: in-progress
-- **Description**: Optional Python runtime receives XMTP DMs, validates commands, relays accepted submissions to a private Signal group, stores bouncer state in SQLite, tracks Signal reactions, and pays BUGZ rewards.
+- **Description**: Optional Python runtime receives XMTP DMs, validates commands, relays accepted submissions to a private Signal group, stores broker state in SQLite, tracks Signal reactions, and pays BUGZ rewards.
 - **Properties**:
-  - Runtime config comes from environment variables and `BouncerConfig`.
+  - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`, with `BouncerConfig` kept as a compatibility alias.
+  - `BOUNCER_*` environment variables and `scripts/bouncer-bot.py` are compatibility aliases for older local configs.
   - SQLite tracks processed XMTP message IDs, relayed submissions, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
-  - Signal access requests are gated by `BOUNCER_ACCESS_MIN_BUGZ`.
+  - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ`.
   - Live payouts require `BUGZ_PAYOUT_PRIVATE_KEY` and should run only from an intentionally funded wallet.
 - **Test Criteria**:
   - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, SQLite maturity, reaction parsing, and reward math.
-  - [x] `python3 -m compileall bots scripts/bouncer-bot.py` checks Python syntax.
+  - [x] `python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py` checks Python syntax.
   - [ ] Add integration smoke tests with a disposable XMTP wallet and Signal group before production broker launch.
 
 ### EAS Reviewer Verdicts
@@ -182,7 +183,7 @@ cheapbugs/
 ### Development Tooling
 
 - **Stability**: stable
-- **Description**: Local commands cover frontend, browser, contract, launcher, and bouncer validation.
+- **Description**: Local commands cover frontend, browser, contract, launcher, and broker validation.
 - **Properties**:
   - `forge-std` is tracked as `lib/forge-std`; fresh clones need `git submodule update --init --recursive`.
   - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` sqlite worker shim.
@@ -194,7 +195,7 @@ cheapbugs/
   - [x] `npm run contracts:build`
   - [x] `npm run contracts:test`
   - [x] `python3 -m unittest discover -s bots/tests -t bots`
-  - [x] `python3 -m compileall bots scripts/bouncer-bot.py`
+  - [x] `python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py`
 
 ## External Integrations
 
@@ -221,13 +222,13 @@ npm run launch:bug-index:dry-run
 npm run launch:bug-index:forge:dry-run
 npm run launch:token:dry-run
 python3 -m unittest discover -s bots/tests -t bots
-python3 -m compileall bots scripts/bouncer-bot.py
+python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py
 ```
 
 ## Future Milestones
 
 - Replace frontend reviewer allowlist with an onchain reviewer registry or resolver-backed trust model.
-- Add public payout records for bouncer settlements while keeping `PayoutRecord` as the public record layer.
+- Add public payout records for broker settlements while keeping `PayoutRecord` as the public record layer.
 - Add live XMTP broker smoke tests with disposable identities.
 - Add mocked browser tests for verdict submission and BUGZ trading workflows.
 - Reduce WalletConnect/XMTP bundle size with route or adapter-level code splitting.

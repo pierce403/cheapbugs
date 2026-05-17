@@ -34,7 +34,7 @@ test("shows the GitHub repository icon link beside the brand", async ({ page }) 
 test("submit route defaults to the broker XMTP path", async ({ page }) => {
   await page.goto("/submit");
 
-  await expect(page.getByText("xmtp bouncer wallet: 0xea6995fc3674e1e94736766f5eeefb0506e4ef32")).toBeVisible();
+  await expect(page.getByText("xmtp broker wallet: 0xea6995fc3674e1e94736766f5eeefb0506e4ef32")).toBeVisible();
   await expect(page.getByRole("button", { name: "submit to broker" })).toBeVisible();
   for (const removedLabel of [
     "repro steps",

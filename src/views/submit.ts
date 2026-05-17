@@ -1,7 +1,7 @@
 import { authController } from "../services";
 import { env } from "../config/env";
 import { escapeHtml } from "../lib/utils";
-import { sendBouncerSubmission } from "../xmtp/bouncer";
+import { sendBrokerSubmission } from "../xmtp/broker";
 
 import type { AppViewContext, ViewResult } from "./types";
 
@@ -14,7 +14,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         Never place sensitive bug details in the public summary unless you intentionally want them public. Private details are sent
         to the broker over XMTP. The broker generates and holds the review key.
       </p>
-      <p class="helper-copy">xmtp bouncer wallet: ${escapeHtml(env.bouncerXmtpAddress)}</p>
+      <p class="helper-copy">xmtp broker wallet: ${escapeHtml(env.brokerXmtpAddress)}</p>
       ${
         context.session.address
           ? `<p class="session-copy">connected as ${escapeHtml(context.session.address)}</p>`
@@ -64,8 +64,8 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         if (!xmtpIdentity) {
           throw new Error("Connect with a local XMTP wallet or a wallet that can sign XMTP messages.");
         }
-        const result = await sendBouncerSubmission(xmtpIdentity, input);
-        appContext.notify("success", `Submission sent over XMTP to the bouncer. Message ${result.messageId}.`);
+        const result = await sendBrokerSubmission(xmtpIdentity, input);
+        appContext.notify("success", `Submission sent over XMTP to the broker. Message ${result.messageId}.`);
         appContext.router.navigate("/");
       } catch (error) {
         appContext.notify("error", error instanceof Error ? error.message : "Submission failed.");
