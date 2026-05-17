@@ -190,7 +190,7 @@ Wallet Auth:
 
 - Purpose: Connect Thirdweb installed wallets, prompt a local SIWE-style signature for external-wallet login, fall back to Thirdweb WalletConnect QR when browser web3 is unavailable or fails, restore authorized wallet sessions after refresh, and expose ethers signers to contract adapters
 - Integration Method: [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts) with Thirdweb wallets, `thirdweb/adapters/ethers6`, and site-local XMTP identities from [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
-- Persistence: Thirdweb manages external wallet auto-connect state; external-wallet SIWE message/signature proofs live in `cheapbugs.siweSession.v1` and are reused on refresh when address, wallet id, Base chain id, domain, and origin still match.
+- Persistence: The browser stores external wallet reconnect hints in `cheapbugs.walletSession.v1` and SIWE message/signature proofs in `cheapbugs.siweSession.v1`. The auth adapter also writes Thirdweb manager-compatible `thirdweb:*` localStorage keys after headless connects so `autoConnect()` can restore the active wallet after refresh.
 - Configuration: `VITE_THIRDWEB_CLIENT_ID` overrides the committed public default Thirdweb client id. WalletConnect QR is handled through Thirdweb.
 - Debugging: [src/lib/logger.ts](/home/pierce/projects/cheapbugs/src/lib/logger.ts) emits namespaced console breadcrumbs for auth clicks, Thirdweb provider choices, WalletConnect fallback, SIWE prompts, session restore, and failures.
 

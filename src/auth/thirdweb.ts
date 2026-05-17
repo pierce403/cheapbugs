@@ -24,6 +24,7 @@ import {
 
 type SessionListener = (session: SessionState) => void;
 type WalletMode = Exclude<SessionState["mode"], null>;
+type ExternalWalletMode = Exclude<WalletMode, "local">;
 type SignableThirdwebAccount = {
   address: string;
   signMessage?: (args: { message: string }) => Promise<string>;
@@ -41,8 +42,24 @@ type SiweSession = {
   message: string;
   signature: HexString;
 };
+type PersistedWalletSession = {
+  version: "1";
+  address: HexString;
+  chainId: number;
+  connectedAt: string;
+  domain: string;
+  lastSeenAt: string;
+  mode: ExternalWalletMode;
+  uri: string;
+  walletId: string;
+};
 
 const SIWE_SESSION_KEY = "cheapbugs.siweSession.v1";
+const WALLET_SESSION_KEY = "cheapbugs.walletSession.v1";
+const THIRDWEB_CONNECTED_WALLET_IDS_KEY = "thirdweb:connected-wallet-ids";
+const THIRDWEB_ACTIVE_WALLET_ID_KEY = "thirdweb:active-wallet-id";
+const THIRDWEB_ACTIVE_CHAIN_KEY = "thirdweb:active-chain";
+const THIRDWEB_LAST_USED_WALLET_ID_KEY = "thirdweb:last-used-wallet-id";
 const BASE_RPC_PROVIDER = new JsonRpcProvider(chainConfig.rpcUrl, chainConfig.id);
 const wcWallet = walletConnect();
 const thirdwebDisabledMessage =
@@ -79,6 +96,8 @@ const hasStorage = (): boolean => typeof window !== "undefined" && Boolean(windo
 const currentSiweDomain = (): string => (typeof window === "undefined" ? "localhost" : window.location.host);
 
 const currentSiweUri = (): string => (typeof window === "undefined" ? APP_METADATA.url : window.location.origin);
+
+const isExternalMode = (value: unknown): value is ExternalWalletMode => value === "external";
 
 const createNonce = (): string => {
   const bytes = new Uint8Array(16);
@@ -119,72 +138,98 @@ const siweFields = (
   siweIssuedAt: siweSession?.issuedAt ?? null
 });
 
+const readStoredJson = <T>(key: string, label: string): T | null => {
+  if (!hasStorage()) {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch (error) {
+    appLog.warn(`${label}: failed to parse persisted storage`, error);
+    return null;
+  }
+};
+
+const parseStoredSiweSession = (): SiweSession | null => {
+  const parsed = readStoredJson<Partial<SiweSession>>(SIWE_SESSION_KEY, "siwe");
+  if (!parsed) {
+    return null;
+  }
+
+  const parsedAddress =
+    typeof parsed.address === "string" && parsed.address.startsWith("0x")
+      ? normalizeAddress(parsed.address)
+      : null;
+  const domain = typeof parsed.domain === "string" ? parsed.domain : null;
+  const uri = typeof parsed.uri === "string" ? parsed.uri : null;
+  const nonce = typeof parsed.nonce === "string" ? parsed.nonce : null;
+  const issuedAt = typeof parsed.issuedAt === "string" ? parsed.issuedAt : null;
+  const issuedAtMs = issuedAt ? Date.parse(issuedAt) : NaN;
+  const message = typeof parsed.message === "string" ? parsed.message : null;
+  const signature = typeof parsed.signature === "string" && parsed.signature.startsWith("0x") ? parsed.signature : null;
+  const walletId = typeof parsed.walletId === "string" ? parsed.walletId : null;
+  const mode = isExternalMode(parsed.mode) ? parsed.mode : null;
+  const valid =
+    parsed.version === "1" &&
+    parsedAddress !== null &&
+    parsed.chainId === chainConfig.id &&
+    domain === currentSiweDomain() &&
+    uri === currentSiweUri() &&
+    message !== null &&
+    signature !== null &&
+    nonce !== null &&
+    issuedAt !== null &&
+    Number.isFinite(issuedAtMs) &&
+    walletId !== null &&
+    mode !== null;
+
+  if (!valid) {
+    return null;
+  }
+
+  return {
+    version: "1",
+    address: parsedAddress,
+    chainId: chainConfig.id,
+    domain,
+    uri,
+    nonce,
+    issuedAt,
+    walletId,
+    mode,
+    message,
+    signature: signature as HexString
+  };
+};
+
 const loadSiweSession = (address: HexString, walletId: string, mode: WalletMode): SiweSession | null => {
   if (!hasStorage() || mode === "local") {
     return null;
   }
 
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(SIWE_SESSION_KEY) || "null") as Partial<SiweSession> | null;
-    if (!parsed) {
-      return null;
-    }
-
-    const parsedAddress = parsed.address ? normalizeAddress(parsed.address) : null;
-    const domain = typeof parsed.domain === "string" ? parsed.domain : null;
-    const uri = typeof parsed.uri === "string" ? parsed.uri : null;
-    const nonce = typeof parsed.nonce === "string" ? parsed.nonce : null;
-    const issuedAt = typeof parsed.issuedAt === "string" ? parsed.issuedAt : null;
-    const issuedAtMs = issuedAt ? Date.parse(issuedAt) : NaN;
-    const message = typeof parsed.message === "string" ? parsed.message : null;
-    const signature =
-      typeof parsed.signature === "string" && parsed.signature.startsWith("0x") ? parsed.signature : null;
-    const valid =
-      parsed.version === "1" &&
-      parsedAddress === address &&
-      parsed.chainId === chainConfig.id &&
-      domain === currentSiweDomain() &&
-      uri === currentSiweUri() &&
-      parsed.walletId === walletId &&
-      parsed.mode === mode &&
-      message !== null &&
-      signature !== null &&
-      nonce !== null &&
-      issuedAt !== null &&
-      Number.isFinite(issuedAtMs);
-
-    if (!valid) {
-      appLog.info("siwe: stored proof did not match current thirdweb wallet session", {
-        walletId,
-        mode,
-        address: shortHash(address, 10, 6)
-      });
-      return null;
-    }
-
-    appLog.info("siwe: restored persisted proof", {
-      walletId,
-      mode,
-      address: shortHash(address, 10, 6),
-      issuedAt
-    });
-    return {
-      version: "1",
-      address,
-      chainId: chainConfig.id,
-      domain,
-      uri,
-      nonce,
-      issuedAt,
-      walletId,
-      mode,
-      message,
-      signature: signature as HexString
-    };
-  } catch (error) {
-    appLog.warn("siwe: failed to parse persisted proof", error);
+  const parsed = parseStoredSiweSession();
+  if (!parsed) {
     return null;
   }
+
+  if (parsed.address !== address || parsed.walletId !== walletId || parsed.mode !== mode) {
+    appLog.info("siwe: stored proof did not match current thirdweb wallet session", {
+      walletId,
+      mode,
+      address: shortHash(address, 10, 6)
+    });
+    return null;
+  }
+
+  appLog.info("siwe: restored persisted proof", {
+    walletId,
+    mode,
+    address: shortHash(address, 10, 6),
+    issuedAt: parsed.issuedAt
+  });
+  return parsed;
 };
 
 const saveSiweSession = (siweSession: SiweSession): void => {
@@ -199,6 +244,163 @@ const clearSiweSession = (): void => {
     return;
   }
   window.localStorage.removeItem(SIWE_SESSION_KEY);
+};
+
+const parseStoredWalletSession = (parsed: Partial<PersistedWalletSession> | null): PersistedWalletSession | null => {
+  if (!parsed) {
+    return null;
+  }
+
+  const address =
+    typeof parsed.address === "string" && parsed.address.startsWith("0x")
+      ? normalizeAddress(parsed.address)
+      : null;
+  const walletId = typeof parsed.walletId === "string" ? parsed.walletId : null;
+  const connectedAt = typeof parsed.connectedAt === "string" ? parsed.connectedAt : null;
+  const lastSeenAt = typeof parsed.lastSeenAt === "string" ? parsed.lastSeenAt : null;
+  const domain = typeof parsed.domain === "string" ? parsed.domain : null;
+  const uri = typeof parsed.uri === "string" ? parsed.uri : null;
+  const mode = isExternalMode(parsed.mode) ? parsed.mode : null;
+  const valid =
+    parsed.version === "1" &&
+    address !== null &&
+    parsed.chainId === chainConfig.id &&
+    connectedAt !== null &&
+    Number.isFinite(Date.parse(connectedAt)) &&
+    lastSeenAt !== null &&
+    Number.isFinite(Date.parse(lastSeenAt)) &&
+    domain === currentSiweDomain() &&
+    uri === currentSiweUri() &&
+    mode !== null &&
+    walletId !== null;
+
+  if (!valid) {
+    return null;
+  }
+
+  return {
+    version: "1",
+    address,
+    chainId: chainConfig.id,
+    connectedAt,
+    domain,
+    lastSeenAt,
+    mode,
+    uri,
+    walletId
+  };
+};
+
+const loadWalletSession = (): PersistedWalletSession | null => {
+  if (!hasStorage()) {
+    return null;
+  }
+
+  const walletSession = parseStoredWalletSession(
+    readStoredJson<Partial<PersistedWalletSession>>(WALLET_SESSION_KEY, "wallet-session")
+  );
+  if (walletSession) {
+    appLog.info("auth: loaded persisted wallet session", {
+      walletId: walletSession.walletId,
+      address: shortHash(walletSession.address, 10, 6),
+      lastSeenAt: walletSession.lastSeenAt
+    });
+    return walletSession;
+  }
+
+  const siweSession = parseStoredSiweSession();
+  if (!siweSession) {
+    return null;
+  }
+
+  appLog.info("auth: deriving wallet reconnect hint from persisted SIWE proof", {
+    walletId: siweSession.walletId,
+    address: shortHash(siweSession.address, 10, 6),
+    issuedAt: siweSession.issuedAt
+  });
+  return {
+    version: "1",
+    address: siweSession.address,
+    chainId: chainConfig.id,
+    connectedAt: siweSession.issuedAt,
+    domain: siweSession.domain,
+    lastSeenAt: siweSession.issuedAt,
+    mode: siweSession.mode,
+    uri: siweSession.uri,
+    walletId: siweSession.walletId
+  };
+};
+
+const saveThirdwebReconnectHints = (walletId: string): void => {
+  if (!hasStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(THIRDWEB_CONNECTED_WALLET_IDS_KEY, JSON.stringify([walletId]));
+  window.localStorage.setItem(THIRDWEB_ACTIVE_WALLET_ID_KEY, walletId);
+  window.localStorage.setItem(THIRDWEB_LAST_USED_WALLET_ID_KEY, walletId);
+  window.localStorage.setItem(THIRDWEB_ACTIVE_CHAIN_KEY, JSON.stringify(appChain));
+};
+
+const clearThirdwebReconnectHints = (): void => {
+  if (!hasStorage()) {
+    return;
+  }
+
+  window.localStorage.removeItem(THIRDWEB_CONNECTED_WALLET_IDS_KEY);
+  window.localStorage.removeItem(THIRDWEB_ACTIVE_WALLET_ID_KEY);
+  window.localStorage.removeItem(THIRDWEB_LAST_USED_WALLET_ID_KEY);
+  window.localStorage.removeItem(THIRDWEB_ACTIVE_CHAIN_KEY);
+};
+
+const saveWalletSession = (
+  walletId: string,
+  address: HexString,
+  mode: ExternalWalletMode,
+  connectedAtOverride?: string
+): void => {
+  if (!hasStorage()) {
+    return;
+  }
+
+  const existing = parseStoredWalletSession(
+    readStoredJson<Partial<PersistedWalletSession>>(WALLET_SESSION_KEY, "wallet-session")
+  );
+  const now = new Date().toISOString();
+  const connectedAt =
+    connectedAtOverride ??
+    (existing?.walletId === walletId && existing.address === address && existing.mode === mode
+      ? existing.connectedAt
+      : now);
+  const walletSession: PersistedWalletSession = {
+    version: "1",
+    address,
+    chainId: chainConfig.id,
+    connectedAt,
+    domain: currentSiweDomain(),
+    lastSeenAt: now,
+    mode,
+    uri: currentSiweUri(),
+    walletId
+  };
+  window.localStorage.setItem(WALLET_SESSION_KEY, JSON.stringify(walletSession));
+  saveThirdwebReconnectHints(walletId);
+  appLog.info("auth: persisted wallet session", {
+    walletId,
+    mode,
+    address: shortHash(address, 10, 6),
+    connectedAt,
+    lastSeenAt: now
+  });
+};
+
+const clearWalletSession = (): void => {
+  if (!hasStorage()) {
+    return;
+  }
+
+  window.localStorage.removeItem(WALLET_SESSION_KEY);
+  clearThirdwebReconnectHints();
 };
 
 const walletLabel = (walletId: string): string => {
@@ -291,9 +493,17 @@ export class ThirdwebAuthController {
     this.activeWallet = null;
     this.localIdentity = null;
     clearSiweSession();
+    clearWalletSession();
   }
 
-  private async setWallet(wallet: Wallet, mode: Exclude<WalletMode, "local">): Promise<void> {
+  private walletForId(walletId: string): Wallet {
+    if (walletId === "walletConnect") {
+      return wcWallet;
+    }
+    return getInstalledWallets().find((entry) => entry.id === walletId) ?? createWallet(walletId as never);
+  }
+
+  private async setWallet(wallet: Wallet, mode: ExternalWalletMode): Promise<void> {
     this.activeWallet = wallet;
     this.localIdentity = null;
     const account = wallet.getAccount();
@@ -318,6 +528,9 @@ export class ThirdwebAuthController {
       lastError: null
     };
 
+    if (address) {
+      saveWalletSession(wallet.id, address, mode);
+    }
     this.watchWallet(wallet, mode);
     this.emit();
 
@@ -330,6 +543,8 @@ export class ThirdwebAuthController {
     appLog.info("local-xmtp: activating stored browser identity", { address: shortHash(identity.address, 10, 6) });
     this.activeWallet = null;
     this.localIdentity = identity;
+    clearSiweSession();
+    clearWalletSession();
     this.session = {
       status: "connected",
       walletId: "local-xmtp",
@@ -344,7 +559,7 @@ export class ThirdwebAuthController {
     void this.hydrateEnsProfile(identity.address);
   }
 
-  private watchWallet(wallet: Wallet, mode: Exclude<WalletMode, "local">): void {
+  private watchWallet(wallet: Wallet, mode: ExternalWalletMode): void {
     appLog.info("thirdweb: installing wallet listeners", { walletId: wallet.id, mode });
     wallet.subscribe("accountChanged", async (account) => {
       const address = account ? normalizeAddress(account.address) : null;
@@ -368,6 +583,14 @@ export class ThirdwebAuthController {
         void this.hydrateEnsProfile(address);
       } else {
         this.ensLookupToken += 1;
+        clearWalletSession();
+      }
+
+      if (address) {
+        if (!siweSession) {
+          clearSiweSession();
+        }
+        saveWalletSession(wallet.id, address, mode);
       }
     });
 
@@ -376,6 +599,7 @@ export class ThirdwebAuthController {
       this.ensLookupToken += 1;
       this.activeWallet = null;
       clearSiweSession();
+      clearWalletSession();
       this.session = defaultSessionState();
       this.emit();
     });
@@ -434,6 +658,7 @@ export class ThirdwebAuthController {
       signature
     };
     saveSiweSession(siweSession);
+    saveWalletSession(walletId, address, mode, this.session.siweIssuedAt ?? undefined);
     this.session = {
       ...this.session,
       ...siweFields(siweSession),
@@ -475,6 +700,11 @@ export class ThirdwebAuthController {
       });
 
       if (!this.activeWallet) {
+        const restoredPersistedWallet = await this.restorePersistedWalletSession();
+        if (restoredPersistedWallet) {
+          return;
+        }
+
         const localIdentity = loadLocalXmtpIdentity();
         if (localIdentity) {
           this.setLocalIdentity(localIdentity);
@@ -494,6 +724,58 @@ export class ThirdwebAuthController {
         return;
       }
       this.setError(error instanceof Error ? error.message : "Auto-connect failed.");
+    }
+  }
+
+  private async restorePersistedWalletSession(): Promise<boolean> {
+    const persistedSession = loadWalletSession();
+    if (!persistedSession) {
+      appLog.info("auth: no persisted wallet session available for reconnect");
+      return false;
+    }
+
+    const wallet = this.walletForId(persistedSession.walletId);
+    appLog.info("auth: attempting persisted thirdweb wallet reconnect", {
+      walletId: wallet.id,
+      address: shortHash(persistedSession.address, 10, 6),
+      lastSeenAt: persistedSession.lastSeenAt
+    });
+
+    try {
+      saveThirdwebReconnectHints(wallet.id);
+      await wallet.autoConnect({
+        client: requireThirdwebClient(),
+        chain: appChain
+      });
+
+      const account = wallet.getAccount();
+      if (!account) {
+        throw new Error("Persisted wallet reconnect did not return an account.");
+      }
+
+      const reconnectedAddress = normalizeAddress(account.address);
+      if (reconnectedAddress !== persistedSession.address) {
+        appLog.warn("auth: persisted wallet reconnected with a different account", {
+          walletId: wallet.id,
+          expected: shortHash(persistedSession.address, 10, 6),
+          actual: shortHash(reconnectedAddress, 10, 6)
+        });
+        clearSiweSession();
+      }
+
+      await this.setWallet(wallet, persistedSession.mode);
+      appLog.info("auth: persisted wallet session restored", {
+        walletId: wallet.id,
+        address: shortHash(reconnectedAddress, 10, 6)
+      });
+      return true;
+    } catch (error) {
+      appLog.warn("auth: persisted thirdweb wallet reconnect failed", {
+        walletId: wallet.id,
+        address: shortHash(persistedSession.address, 10, 6),
+        error
+      });
+      return false;
     }
   }
 
@@ -542,10 +824,7 @@ export class ThirdwebAuthController {
     }
 
     appLog.info("auth: thirdweb external wallet login requested", { walletId });
-    const wallet =
-      walletId === "walletConnect"
-        ? wcWallet
-        : getInstalledWallets().find((entry) => entry.id === walletId) ?? createWallet(walletId as never);
+    const wallet = this.walletForId(walletId);
 
     this.setLoading();
     try {
@@ -692,6 +971,7 @@ export class ThirdwebAuthController {
     this.activeWallet = null;
     this.localIdentity = null;
     clearSiweSession();
+    clearWalletSession();
     this.session = defaultSessionState();
     this.emit();
     appLog.info("auth: disconnected");
