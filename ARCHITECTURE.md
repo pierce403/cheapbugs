@@ -71,7 +71,7 @@ System boundaries:
 
 Name: CheapBugs static web app
 
-Description: A narrow-layout, milw0rm-inspired frontend for Thirdweb wallet login, report submission, public browsing, report review, live BUGZ balance/trading controls, a patrons leaderboard, and local decryption of private dossiers.
+Description: A narrow-layout, milw0rm-inspired frontend for Thirdweb wallet login, report submission, public browsing, report review, live BUGZ balance/trading controls, a patrons leaderboard, and local decryption of private dossiers. The app shell currently includes a site-wide development banner with an expected launch date of June 1, 2026.
 
 Technologies: Vite, TypeScript, vanilla HTML/CSS/TS modules, ethers, Thirdweb, viem, optional `@xmtp/browser-sdk`
 

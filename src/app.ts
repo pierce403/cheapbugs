@@ -19,6 +19,7 @@ import type { SessionState } from "./types/app";
 import type { AppViewContext, ViewResult } from "./views/types";
 
 const noticeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const expectedLaunchDate = "June 1, 2026";
 
 const renderIdentityBlock = (session: SessionState): string => {
   if (!session.address) {
@@ -201,6 +202,13 @@ export class CheapBugsApp {
 
     return `
       <div class="shell">
+        <aside class="development-banner panel" role="status" data-testid="development-banner">
+          <strong>development preview</strong>
+          <span>
+            CheapBugs is under development, so some features might not work as expected.
+            Expected launch: ${expectedLaunchDate}.
+          </span>
+        </aside>
         <header class="header panel">
           <div class="banner">
             <div class="brand-block">

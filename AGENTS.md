@@ -76,6 +76,7 @@ npm run launch:token
 - `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
 - `src/auth/thirdweb.ts`: Thirdweb wallet, WalletConnect QR, local SIWE proof, and signer adapter
+- `src/app.ts`: site shell, top-level navigation, session chrome, and site-wide development banner
 - `src/auth/localIdentity.ts`: browser-stored generated XMTP wallet identity helper
 - `src/lib/logger.ts`: namespaced browser console logging helper for click/auth/debug breadcrumbs
 - `src/xmtp/browser.ts`: browser XMTP SDK adapter for local/external wallet signers
@@ -126,6 +127,7 @@ npm run launch:token
 - Thirdweb was removed in `f7b7bca` and restored afterward; compare against `f7b7bca^` when looking for the last pre-direct-WalletConnect implementation.
 - Connected wallet UI now resolves ENS name/avatar from Ethereum mainnet and should prompt users to create an ENS name when none is found.
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
+- The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views.
 - `VITE_BOUNCER_XMTP_ADDRESS` switches the submit route to XMTP DM submission. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
 - The Python bouncer uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.

@@ -91,6 +91,29 @@ button {
   margin-bottom: 10px;
 }
 
+.development-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  border-color: rgba(160, 240, 140, 0.5);
+  background:
+    linear-gradient(180deg, rgba(160, 240, 140, 0.08), transparent 18px),
+    linear-gradient(180deg, #10120d 0%, #080a07 100%);
+}
+
+.development-banner strong {
+  color: var(--success);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.development-banner span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .banner {
   display: flex;
   justify-content: space-between;
@@ -378,6 +401,7 @@ button {
   }
 
   .banner,
+  .development-banner,
   .intro-panel,
   .two-column,
   .trade-grid,
