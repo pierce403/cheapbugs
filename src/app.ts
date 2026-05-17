@@ -197,9 +197,12 @@ export class CheapBugsApp {
       <div class="shell">
         <header class="header panel">
           <div class="banner">
-            <div>
-              <div class="brand">cheapbugs</div>
-              <div class="subtitle">shitty bugs, competitive prices</div>
+            <div class="brand-block">
+              <img class="brand-mark" src="/cheapbugs-mark.png" alt="" aria-hidden="true" />
+              <div>
+                <div class="brand">cheapbugs</div>
+                <div class="subtitle">shitty bugs, competitive prices</div>
+              </div>
             </div>
             ${authControls}
           </div>

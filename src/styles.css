@@ -105,6 +105,22 @@ button {
   color: #ff8b3d;
 }
 
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-soft);
+  object-fit: cover;
+  background: #050505;
+}
+
 .subtitle,
 .helper-copy,
 .session-copy,
@@ -307,6 +323,27 @@ button {
   max-width: 80ch;
 }
 
+.intro-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 220px);
+  gap: 14px;
+  align-items: center;
+}
+
+.intro-copy {
+  min-width: 0;
+}
+
+.intro-art {
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 1;
+  justify-self: end;
+  border: 1px solid var(--line-soft);
+  background: #050505;
+  object-fit: cover;
+}
+
 .narrow-form {
   max-width: 720px;
 }
@@ -341,6 +378,7 @@ button {
   }
 
   .banner,
+  .intro-panel,
   .two-column,
   .trade-grid,
   .auth-grid,
@@ -362,5 +400,10 @@ button {
   .brand {
     font-size: 22px;
     letter-spacing: 0.14em;
+  }
+
+  .intro-art {
+    justify-self: start;
+    max-width: 180px;
   }
 }

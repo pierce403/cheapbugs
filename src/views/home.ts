@@ -71,16 +71,19 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
     title: "CheapBugs",
     html: `
       <section class="panel intro-panel">
-        <div class="panel-title">[ recent exploit archive ]</div>
-        <p class="lede">
-          CheapBugs is a static Base-native report board. Public report metadata is filed onchain through the bug index contract,
-          reviewer verdicts live on EAS, and private dossier material is encrypted client-side before upload.
-        </p>
-        ${
-          chainConfig.bugIndexAddress
-            ? `<p class="helper-copy">bug index: ${escapeHtml(chainConfig.bugIndexAddress)}</p>`
-            : `<p class="warning-copy">bug index contract address is not configured yet. Public onchain browsing will stay empty until deployment.</p>`
-        }
+        <div class="intro-copy">
+          <div class="panel-title">[ recent exploit archive ]</div>
+          <p class="lede">
+            CheapBugs is a static Base-native report board. Public report metadata is filed onchain through the bug index contract,
+            reviewer verdicts live on EAS, and private dossier material is encrypted client-side before upload.
+          </p>
+          ${
+            chainConfig.bugIndexAddress
+              ? `<p class="helper-copy">bug index: ${escapeHtml(chainConfig.bugIndexAddress)}</p>`
+              : `<p class="warning-copy">bug index contract address is not configured yet. Public onchain browsing will stay empty until deployment.</p>`
+          }
+        </div>
+        <img class="intro-art" src="/cheapbugs.png" alt="CheapBugs bug artwork" />
       </section>
 
       <section class="panel">
