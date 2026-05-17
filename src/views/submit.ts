@@ -7,14 +7,26 @@ import { sendBrokerSubmission } from "../xmtp/broker";
 import type { AppViewContext, ViewResult } from "./types";
 
 type XmtpStatusTone = "ready" | "blocked" | "working" | "sent" | "error";
+type XmtpStatus = {
+  tone: XmtpStatusTone;
+  title: string;
+  detail: string;
+};
 
-const initialXmtpStatus = () => {
+let persistedXmtpStatus: XmtpStatus | null = null;
+let submitInFlight = false;
+
+const initialXmtpStatus = (): XmtpStatus => {
+  if (persistedXmtpStatus && (submitInFlight || persistedXmtpStatus.tone === "sent" || persistedXmtpStatus.tone === "error")) {
+    return persistedXmtpStatus;
+  }
+
   const identity = authController.getXmtpIdentity();
   if (identity) {
     return {
       tone: "ready" as const,
-      title: "xmtp: ready",
-      detail: `ready to submit from ${identity.address}`
+      title: "xmtp: signer ready",
+      detail: `ready to connect and submit from ${identity.address}`
     };
   }
 
@@ -32,6 +44,17 @@ const initialXmtpStatus = () => {
     title: "xmtp: wallet required",
     detail: "Connect a local XMTP wallet or compatible external wallet before submitting."
   };
+};
+
+const xmtpErrorMessage = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : "Submission failed.";
+  if (/request expired/i.test(message)) {
+    return "Wallet request expired before XMTP registration finished. Clear any stale wallet prompts, then submit again and approve the XMTP signature request.";
+  }
+  if (/user rejected|user denied|rejected request/i.test(message)) {
+    return "Wallet signature was rejected before XMTP registration finished. Submit again and approve the XMTP signature request.";
+  }
+  return message;
 };
 
 const statusMarkup = (status = initialXmtpStatus()): string => `
@@ -72,7 +95,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       </button>
     </form>
   `,
-  afterRender: (root) => {
+  afterRender: (root, appContext) => {
     const form = root.querySelector<HTMLFormElement>("#submit-form");
     if (!form) {
       return;
@@ -84,6 +107,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
     const statusDetail = root.querySelector<HTMLElement>("#xmtp-status-detail");
 
     const setStatus = (tone: XmtpStatusTone, title: string, detail: string) => {
+      persistedXmtpStatus = { tone, title, detail };
       status?.classList.remove(
         "xmtp-status-ready",
         "xmtp-status-blocked",
@@ -98,11 +122,18 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       if (statusDetail) {
         statusDetail.textContent = detail;
       }
+      if (!status || !document.body.contains(status)) {
+        void appContext.rerender();
+      }
     };
 
     form?.addEventListener("submit", async (event) => {
       event.preventDefault();
       appLog.info("submit: broker form submit requested");
+      if (submitInFlight) {
+        setStatus("working", "xmtp: sending", "A broker submission is already in progress.");
+        return;
+      }
       const address = authController.getSession().address;
       if (!address) {
         setStatus("blocked", "xmtp: wallet required", "Connect a local XMTP wallet or compatible external wallet before submitting.");
@@ -111,6 +142,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       }
 
       const formData = new FormData(form);
+      submitInFlight = true;
       submitButton?.setAttribute("disabled", "true");
       submitButton?.setAttribute("aria-busy", "true");
       try {
@@ -143,10 +175,11 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         form.reset();
         appLog.info("submit: broker submission sent", result);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Submission failed.";
+        const message = xmtpErrorMessage(error);
         setStatus("error", "xmtp: failed", message);
         appLog.error("submit: broker submission failed", error);
       } finally {
+        submitInFlight = false;
         submitButton?.removeAttribute("disabled");
         submitButton?.removeAttribute("aria-busy");
       }
