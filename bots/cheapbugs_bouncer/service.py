@@ -87,7 +87,10 @@ class BouncerBot:
             await reply(f"Submission target is invalid: {exc}")
             self.store.mark_message_processed(message_id, "target_invalid")
             return
-        await reply(f"Submission target is valid: {command.target_kind} {command.target_ref}.")
+        if command.target_ref == "broker triage":
+            await reply("Submission target is valid for broker triage.")
+        else:
+            await reply(f"Submission target is valid: {command.target_kind} {command.target_ref}.")
 
         try:
             credential_summary = self._validate_submission_credentials(command)
@@ -197,15 +200,25 @@ def format_signal_submission(command: SubmissionCommand) -> str:
     evidence = _compact(command.evidence or "-", 1_500)
     contact_hints = _compact(command.contact_hints or "-", 800)
     tags = ", ".join(command.tags) if command.tags else "-"
+    heading_lines = [
+        "[CheapBugs submission]",
+        f"Reporter: {command.reporter_address}",
+        f"Severity: {command.severity}",
+    ]
+    if command.signal_recipient != "broker-managed":
+        heading_lines.append(f"Signal: {command.signal_recipient}")
+    if command.target_ref != "broker triage":
+        heading_lines.append(f"Target: {command.target_kind} {command.target_ref}")
+    heading_lines.extend(
+        [
+            f"Disclosure: {command.disclosure_mode}",
+            f"Tags: {tags}",
+            f"Title: {title}",
+        ]
+    )
     return (
-        "[CheapBugs submission]\n"
-        f"Reporter: {command.reporter_address}\n"
-        f"Signal: {command.signal_recipient}\n"
-        f"Severity: {command.severity}\n"
-        f"Target: {command.target_kind} {command.target_ref}\n"
-        f"Disclosure: {command.disclosure_mode}\n"
-        f"Tags: {tags}\n"
-        f"Title: {title}\n\n"
+        "\n".join(heading_lines)
+        + "\n\n"
         f"Summary:\n{summary}\n\n"
         f"Details:\n{details}\n\n"
         f"Repro steps:\n{repro_steps}\n\n"

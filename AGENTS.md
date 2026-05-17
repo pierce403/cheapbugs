@@ -132,7 +132,9 @@ npm run launch:token
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
 - The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views.
 - The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BOUNCER_XMTP_ADDRESS` only overrides that broker. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
-- Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/bouncer.ts`; the Python parser rejects text `!submit` messages, missing fields, unexpected fields, and invalid target references.
+- Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/bouncer.ts`; the current submit form only collects title, public summary, and private details. Do not re-add repro/evidence/severity/Signal/target/tags/review-access-key fields unless the product direction changes.
+- The broker generates and holds the review key for XMTP submissions; do not expose a frontend review access key on the broker path.
+- The Python parser rejects text `!submit` messages, missing core fields, unexpected fields, and invalid provided target references.
 - The bouncer replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BOUNCER_SUBMISSION_MIN_BUGZ` plus `BOUNCER_REPUTATION_BLOCKLIST`.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
 - The Python bouncer uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.

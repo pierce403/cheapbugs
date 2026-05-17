@@ -104,8 +104,10 @@ cheapbugs/
 - **Description**: The submit route sends bug submissions as strict JSON XMTP DMs to the default broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`.
 - **Properties**:
   - `VITE_BOUNCER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed.
-  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, Signal recipient, public and private report fields, target object, disclosure mode, tags, contact hints, and client metadata.
-  - The broker rejects malformed JSON, missing required fields, unexpected fields, invalid target references, and invalid reporter credentials.
+  - The frontend form currently collects only title, public summary, and private details; repro steps, evidence, severity, Signal recipient, contact hints, target fields, tags, and review access keys are intentionally not user-facing.
+  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, title, public summary, private details, and client metadata.
+  - The broker owns review-key generation and retention for this flow.
+  - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid provided target references, and invalid reporter credentials.
   - The broker replies over XMTP after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
   - Submission credential checks use `BOUNCER_SUBMISSION_MIN_BUGZ` and `BOUNCER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:

@@ -32,6 +32,18 @@ class CommandParsingTest(unittest.TestCase):
         self.assertEqual(command.target_ref, "pierce403/cheapbugs")
         self.assertEqual(command.tags, ("parser", "memory"))
 
+    def test_parse_minimal_json_submission_defaults_broker_fields(self) -> None:
+        command = parse_command(json.dumps(minimal_submission_payload()))
+
+        self.assertIsInstance(command, SubmissionCommand)
+        self.assertEqual(command.signal_recipient, "broker-managed")
+        self.assertEqual(command.target_kind, "other")
+        self.assertEqual(command.target_ref, "broker triage")
+        self.assertEqual(command.disclosure_mode, "private")
+        self.assertEqual(command.tags, tuple())
+        self.assertEqual(command.severity, "unrated")
+        self.assertEqual(command.repro_steps, "")
+
     def test_reject_text_submission(self) -> None:
         with self.assertRaisesRegex(CommandError, "strict CheapBugs JSON schema"):
             parse_command(
@@ -224,6 +236,21 @@ def valid_submission_payload(**overrides: object) -> dict[str, object]:
         "disclosure_mode": "private",
         "tags": ["parser", "memory"],
         "contact_hints": "",
+        "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def minimal_submission_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema": "cheapbugs.bug_submission.v1",
+        "type": "submission",
+        "version": 1,
+        "reporter_address": WALLET,
+        "title": "Parser overflow",
+        "public_summary": "Public safe summary for reviewers.",
+        "details": "Private details go here.",
         "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
     }
     payload.update(overrides)

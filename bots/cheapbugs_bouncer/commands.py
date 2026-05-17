@@ -40,7 +40,15 @@ SUBMISSION_ALLOWED_KEYS = {
     "contact_hints",
     "client",
 }
-SUBMISSION_REQUIRED_KEYS = SUBMISSION_ALLOWED_KEYS - {"client"}
+SUBMISSION_REQUIRED_KEYS = {
+    "schema",
+    "type",
+    "version",
+    "reporter_address",
+    "title",
+    "public_summary",
+    "details",
+}
 CLIENT_ALLOWED_KEYS = {"name", "sent_at"}
 
 
@@ -102,7 +110,7 @@ def _strict_string_present(data: dict[str, Any], name: str, *, max_length: int =
 
 def _strict_tags(data: dict[str, Any]) -> tuple[str, ...]:
     if "tags" not in data:
-        raise CommandError("Missing required field: tags.")
+        return tuple()
     value = data["tags"]
     if not isinstance(value, list):
         raise CommandError("Field tags must be an array of strings.")
@@ -122,7 +130,7 @@ def _strict_tags(data: dict[str, Any]) -> tuple[str, ...]:
 
 def _strict_target(data: dict[str, Any]) -> tuple[str, str]:
     if "target" not in data:
-        raise CommandError("Missing required field: target.")
+        return "other", "broker triage"
     target = data["target"]
     if not isinstance(target, dict):
         raise CommandError("Field target must be an object.")
@@ -193,25 +201,32 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
         raise CommandError("Submission JSON must use type: submission.")
 
     target_kind, target_ref = _strict_target(data)
-    disclosure_mode = _strict_string(data, "disclosure_mode", max_length=40).lower()
+    disclosure_mode = (
+        _strict_string(data, "disclosure_mode", max_length=40).lower()
+        if "disclosure_mode" in data
+        else "private"
+    )
     if disclosure_mode not in DISCLOSURE_MODES:
         raise CommandError(f"Unsupported disclosure mode: {disclosure_mode}.")
 
     reporter_address = normalize_address(_strict_string(data, "reporter_address", max_length=42))
-    signal_recipient = _strict_string(data, "signal_recipient", min_length=3, max_length=128)
+    signal_recipient = (
+        _strict_string(data, "signal_recipient", min_length=3, max_length=128)
+        if "signal_recipient" in data
+        else "broker-managed"
+    )
     title = _strict_string(data, "title", min_length=3, max_length=120)
     summary = _strict_string(data, "public_summary", min_length=10, max_length=2_000)
     details = _strict_string(data, "details", min_length=10, max_length=12_000)
-    repro_steps = _strict_string(data, "repro_steps", min_length=3, max_length=8_000)
-    evidence = _strict_string_present(data, "evidence", max_length=8_000)
-    severity = _strict_string(data, "suggested_severity", max_length=40)
-    contact_hints = _strict_string_present(data, "contact_hints", max_length=1_000)
+    repro_steps = _strict_string_present(data, "repro_steps", max_length=8_000) if "repro_steps" in data else ""
+    evidence = _strict_string_present(data, "evidence", max_length=8_000) if "evidence" in data else ""
+    severity = _strict_string(data, "suggested_severity", max_length=40) if "suggested_severity" in data else "unrated"
+    contact_hints = _strict_string_present(data, "contact_hints", max_length=1_000) if "contact_hints" in data else ""
     tags = _strict_tags(data)
 
-    body_parts = [
-        details,
-        f"Repro steps:\n{repro_steps}",
-    ]
+    body_parts = [details]
+    if repro_steps:
+        body_parts.append(f"Repro steps:\n{repro_steps}")
     if evidence:
         body_parts.append(f"Evidence:\n{evidence}")
     if contact_hints:
@@ -318,17 +333,10 @@ def command_help() -> str:
         '  "type": "submission",\n'
         '  "version": 1,\n'
         '  "reporter_address": "0x...",\n'
-        '  "signal_recipient": "+15551234567 or u:username.01",\n'
         '  "title": "Short report title",\n'
         '  "public_summary": "Public-safe summary",\n'
-        '  "details": "Private details",\n'
-        '  "repro_steps": "Reproduction steps",\n'
-        '  "evidence": "",\n'
-        '  "suggested_severity": "high",\n'
-        '  "target": {"kind": "repo", "reference": "owner/repo"},\n'
-        '  "disclosure_mode": "private",\n'
-        '  "tags": ["solidity"],\n'
-        '  "contact_hints": ""\n'
+        '  "details": "Private details"\n'
         "}\n\n"
+        "The broker fills omitted workflow metadata during triage. "
         "Signal access requests may still use !access with wallet and signal fields."
     )

@@ -36,5 +36,19 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
 
   await expect(page.getByText("xmtp bouncer wallet: 0xea6995fc3674e1e94736766f5eeefb0506e4ef32")).toBeVisible();
   await expect(page.getByRole("button", { name: "submit to broker" })).toBeVisible();
-  await expect(page.getByText("review access key")).toHaveCount(0);
+  for (const removedLabel of [
+    "repro steps",
+    "evidence",
+    "suggested severity",
+    "signal recipient",
+    "contact hints",
+    "target kind",
+    "disclosure mode",
+    "target reference",
+    "tags",
+    "review access key",
+    "regen"
+  ]) {
+    await expect(page.getByText(removedLabel, { exact: true })).toHaveCount(0);
+  }
 });

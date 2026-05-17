@@ -34,7 +34,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BOUNCER_XMTP_ADDRESS` only when overriding that broker wallet. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
 
-Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The bouncer rejects malformed JSON, missing fields, invalid target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP that the JSON is valid, the fields are well formed, the target is valid, and the reporter credentials are valid before relaying the submission.
+Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The site currently asks only for title, public summary, and private details; the broker owns review-key generation and fills omitted triage metadata internally. The bouncer rejects malformed JSON, missing core fields, invalid provided target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP that the JSON is valid, the fields are well formed, the target is valid, and the reporter credentials are valid before relaying the submission.
 
 Bot setup:
 
@@ -136,7 +136,7 @@ Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site s
 6. Reviewers publish verdicts as EAS onchain attestations on Base.
 7. The frontend reads the bug index contract for reports and the EAS GraphQL API for verdicts.
 
-By default, the submit route sends a strict JSON XMTP DM to the bouncer wallet. The bouncer validates the JSON shape, target reference, BUGZ submission balance, and local reputation blocklist, then relays that message to Signal, records the Signal message timestamp in SQLite, counts active Signal emoji reactions after the configured review window, and transfers BUGZ to the reporter wallet.
+By default, the submit route sends a minimal strict JSON XMTP DM to the bouncer wallet. The bouncer validates the JSON shape, any provided target reference, BUGZ submission balance, and local reputation blocklist, then relays that message to Signal, records the Signal message timestamp in SQLite, counts active Signal emoji reactions after the configured review window, and transfers BUGZ to the reporter wallet.
 
 ## Environment Notes
 
