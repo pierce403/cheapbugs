@@ -61,6 +61,7 @@ Until this exists, the broker must not create bug-index records that claim to be
 - Base RPC and BUGZ token defaults are public configuration, not secrets.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
 - Broker logs are written to `BROKER_LOG_PATH` and stdout. They should contain operational metadata and broker actions, not private report detail bodies.
+- Broker debug mode can include third-party XMTP/Rust diagnostics. Inspect debug logs before sharing them outside the project.
 - Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
 - The broker wallet must be deliberately funded and capped before live payouts. Rewards are ERC20 transfers, not mints.
 

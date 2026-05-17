@@ -7,8 +7,16 @@ cd "$ROOT_DIR"
 ENV_FILE="${BROKER_ENV_FILE:-.env}"
 VENV_DIR="${BROKER_VENV_DIR:-.venv-broker}"
 COMMAND="${1:-run}"
+DEBUG_COMMAND=0
 
 case "$COMMAND" in
+  debug)
+    DEBUG_COMMAND=1
+    COMMAND="run"
+    if [[ $# -gt 0 ]]; then
+      shift
+    fi
+    ;;
   run|init-db|sync-signal|settle)
     if [[ $# -gt 0 ]]; then
       shift
@@ -19,7 +27,7 @@ case "$COMMAND" in
     ;;
   *)
     echo "Unknown broker command: $COMMAND" >&2
-    echo "Usage: ./run-broker.sh [run|init-db|sync-signal|settle] [--log-level LEVEL]" >&2
+    echo "Usage: ./run-broker.sh [run|debug|init-db|sync-signal|settle] [--log-level LEVEL]" >&2
     exit 2
     ;;
 esac
@@ -49,14 +57,50 @@ is_falsey() {
   esac
 }
 
+has_log_level_arg() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --log-level|--log-level=*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+debug_enabled=0
+if [[ "$DEBUG_COMMAND" == "1" ]] || is_truthy "${BROKER_DEBUG:-0}"; then
+  debug_enabled=1
+fi
+
 export BROKER_XMTP_ENV="${BROKER_XMTP_ENV:-production}"
 export BROKER_XMTP_DB_PATH="${BROKER_XMTP_DB_PATH:-.broker/xmtp.db3}"
 export BROKER_DB_PATH="${BROKER_DB_PATH:-.broker/broker.sqlite}"
-export BROKER_LOG_PATH="${BROKER_LOG_PATH:-broker.log}"
+if [[ "$debug_enabled" == "1" ]]; then
+  export BROKER_LOG_PATH="${BROKER_LOG_PATH:-broker-debug.log}"
+  export PYTHONFAULTHANDLER="${BROKER_PYTHONFAULTHANDLER:-1}"
+  export RUST_BACKTRACE="${BROKER_RUST_BACKTRACE:-full}"
+  export RUST_LOG="${BROKER_RUST_LOG:-debug}"
+else
+  export BROKER_LOG_PATH="${BROKER_LOG_PATH:-broker.log}"
+fi
 export BROKER_DRY_RUN="${BROKER_DRY_RUN:-1}"
 export BROKER_SIGNAL_CLI="${BROKER_SIGNAL_CLI:-}"
 export BASE_RPC_URL="${BASE_RPC_URL:-https://mainnet.base.org}"
 export BUGZ_TOKEN_ADDRESS="${BUGZ_TOKEN_ADDRESS:-0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07}"
+
+python_args=()
+if [[ "$debug_enabled" == "1" ]]; then
+  if ! has_log_level_arg "$@"; then
+    python_args+=(--log-level DEBUG)
+  fi
+  {
+    echo "Broker debug mode enabled."
+    echo "  BROKER_LOG_PATH=$BROKER_LOG_PATH"
+    echo "  PYTHONFAULTHANDLER=$PYTHONFAULTHANDLER"
+    echo "  RUST_BACKTRACE=$RUST_BACKTRACE"
+    echo "  RUST_LOG=$RUST_LOG"
+  } >&2
+fi
 
 missing=()
 require_env() {
@@ -142,7 +186,7 @@ fi
 mkdir -p "$(dirname "$BROKER_DB_PATH")" "$(dirname "$BROKER_XMTP_DB_PATH")" "$(dirname "$BROKER_LOG_PATH")"
 
 if [[ "$COMMAND" == "run" ]]; then
-  python scripts/broker-bot.py init-db
+  python scripts/broker-bot.py init-db "${python_args[@]}"
 fi
 
-exec python scripts/broker-bot.py "$COMMAND" "$@"
+exec python scripts/broker-bot.py "$COMMAND" "${python_args[@]}" "$@"

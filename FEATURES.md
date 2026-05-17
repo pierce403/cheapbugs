@@ -155,6 +155,7 @@ cheapbugs/
   - `run-broker.sh` loads `.env`, validates mandatory `BROKER_KEY`, prepares `.venv-broker`, initializes the SQLite store, and runs the broker.
   - Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base BUGZ token and can be overridden for local testing.
   - Broker runtime logs are timestamped to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`; logs record message metadata and broker actions without dumping private detail bodies.
+  - `./run-broker.sh debug` enables Python DEBUG logging, Python fault-handler output, Rust XMTP backtraces, `RUST_LOG=debug`, and a default `broker-debug.log`.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; disable it only when the broker wallet is intentionally funded for live payouts.

@@ -149,6 +149,7 @@ npm run launch:token
 - The Python broker uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
 - Use `./run-broker.sh` for local broker runtime startup. It expects a shell-compatible `.env`, defaults `BROKER_DRY_RUN=1`, requires only `BROKER_KEY` for the no-Signal path, and creates `.venv-broker`/`.broker`, which are gitignored. Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base token. If `BROKER_SIGNAL_CLI` is unset, Signal relay/reaction/reward support is disabled with a warning.
 - Broker runtime logs go to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`, with timestamps. Keep broker logs focused on event metadata and broker actions; do not dump private submission details into logs.
+- Use `./run-broker.sh debug` for XMTP broker crash debugging; it turns on Python DEBUG logs, `PYTHONFAULTHANDLER=1`, `RUST_BACKTRACE=full`, `RUST_LOG=debug`, and defaults to `broker-debug.log`.
 - Broker rewards are ERC20 transfers from the wallet behind `BROKER_KEY`, not mints. `BROKER_KEY` is also the XMTP broker identity, so fund and cap that wallet intentionally before running without `BROKER_DRY_RUN=1`.
 
 ## Known Issues And Practical Tips

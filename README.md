@@ -44,6 +44,14 @@ Bot setup:
 
 `run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.5` and `BROKER_KEY`. `BROKER_KEY` is the broker wallet key used for both the XMTP identity and BUGZ payouts. Base RPC and BUGZ token settings default to Base mainnet and the live BUGZ token, and can be overridden with `BASE_RPC_URL` and `BUGZ_TOKEN_ADDRESS`. `BROKER_DRY_RUN` defaults to `1`, which prevents token transfers while still exercising the validation path; set `BROKER_DRY_RUN=0` only when the broker wallet is intentionally funded. Broker events are timestamped to stdout and `broker.log` by default; set `BROKER_LOG_PATH` to override the log file.
 
+For crash/debug runs, use:
+
+```bash
+./run-broker.sh debug
+```
+
+Debug mode sets Python logging to `DEBUG`, enables Python fault-handler output, enables Rust backtraces for XMTP panics, and writes to `broker-debug.log` unless `BROKER_LOG_PATH` is already set.
+
 Signal is optional for local broker testing. If `BROKER_SIGNAL_CLI` is unset, `run-broker.sh` prints a warning and starts the broker without Signal relay, Signal reaction syncing, or reward settlement.
 
 Minimal `.env` shape:
