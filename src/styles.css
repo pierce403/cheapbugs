@@ -128,6 +128,26 @@ button {
   color: #ff8b3d;
 }
 
+.brand-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.brand-github {
+  color: var(--success);
+  font-size: 12px;
+  text-transform: lowercase;
+  text-decoration: none;
+}
+
+.brand-github:hover,
+.brand-github:focus-visible {
+  color: #d7ffd0;
+  text-decoration: underline;
+}
+
 .brand-block {
   display: flex;
   align-items: center;

@@ -19,6 +19,7 @@ import type { AppViewContext, ViewResult } from "./views/types";
 
 const noticeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const expectedLaunchDate = "June 1, 2026";
+const githubRepoUrl = "https://github.com/pierce403/cheapbugs";
 
 const renderAvatarMedia = (
   session: SessionState,
@@ -282,7 +283,10 @@ export class CheapBugsApp {
             <div class="brand-block">
               <img class="brand-mark" src="/cheapbugs-mark.png" alt="" aria-hidden="true" />
               <div>
-                <div class="brand">cheapbugs</div>
+                <div class="brand-row">
+                  <div class="brand">cheapbugs</div>
+                  <a class="brand-github" href="${githubRepoUrl}" target="_blank" rel="noreferrer">github</a>
+                </div>
                 <div class="subtitle">shitty bugs, competitive prices</div>
               </div>
             </div>
