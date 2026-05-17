@@ -79,7 +79,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
             </p>`
       }
       <button class="button" type="submit" ${context.session.address ? "" : "disabled"}>
-        ${isBouncerConfigured() ? "send structured xmtp dm" : "encrypt, upload, and file on base"}
+        ${isBouncerConfigured() ? "submit to broker" : "encrypt, upload, and file on base"}
       </button>
     </form>
   `,
