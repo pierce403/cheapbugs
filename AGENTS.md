@@ -6,6 +6,8 @@ Read this file at the start of every task. Update it before you finish whenever 
 
 Also read `FEATURES.md` at the start of every task that touches feature behavior, system design, data flow, deployment shape, contracts, storage, auth, or vendor integrations.
 
+Also read `SECURITY.md` at the start of every task that touches signatures, broker authority, smart-contract attribution, private report handling, IPFS, EAS, payouts, or trust assumptions.
+
 Record both wins to repeat and mistakes to avoid. Prefer exact commands, concrete file paths, and specific implementation notes over vague summaries.
 
 This file is intentionally inspired by the recurse.bot idea: each agent should leave the project easier for the next one.
@@ -88,6 +90,7 @@ npm run launch:token
 - `src/config/env.ts`: env parsing and defaults
 - `src/config/chains.ts`: chain isolation, currently Base-oriented
 - `FEATURES.md`: living feature map with stability, properties, milestones, and test criteria
+- `SECURITY.md`: living security model, trust boundaries, implemented guarantees, and planned claims
 - `scripts/broker-bot.py`: Python XMTP-to-Signal broker runner
 - `scripts/bouncer-bot.py`: legacy alias for the broker runner
 - `bots/cheapbugs_broker/`: broker command parsing, SQLite store, Signal CLI, and BUGZ payout adapters
@@ -136,6 +139,7 @@ npm run launch:token
 - The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views.
 - The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BROKER_XMTP_ADDRESS` overrides that broker and `VITE_BOUNCER_XMTP_ADDRESS` remains a legacy alias. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
 - Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/broker.ts`; the current submit form only collects title, public summary, and private details. Do not re-add repro/evidence/severity/Signal/target/tags/review-access-key fields unless the product direction changes.
+- Browser-to-broker submissions are not yet reporter-signed. Do not let the broker create user-attributed onchain bug-index records until `CheapBugsBugIndex` has a reporter-signed broker-relay path that verifies EIP-712/ECDSA and prevents replay.
 - The broker generates and holds the review key for XMTP submissions; do not expose a frontend review access key on the broker path.
 - The submit route has an inline `#xmtp-status` indicator for XMTP wallet readiness, registration-signature progress, success, and failure. During external-wallet XMTP signature waits it also shows `#xmtp-signature-modal` so WalletConnect/mobile approvals are visible. Keep `submit to broker` clickable while disconnected so it can show the wallet-required status instead of doing nothing.
 - Browser XMTP registration can require a wallet signature before any broker message is sent. `src/xmtp/browser.ts` caches identical signature requests, skips redundant registration when the SDK reports the installation is already registered, and checks broker inboxes with both stripped and `0x` Ethereum identifier forms.

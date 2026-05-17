@@ -32,6 +32,7 @@ cheapbugs/
 ├── DEPLOY.md
 ├── TODO.md
 ├── AGENTS.md
+├── SECURITY.md
 └── FEATURES.md
 ```
 
@@ -108,6 +109,7 @@ cheapbugs/
   - `VITE_BROKER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed; `VITE_BOUNCER_XMTP_ADDRESS` is a legacy alias.
   - The frontend form currently collects only title, public summary, and private details; repro steps, evidence, severity, Signal recipient, contact hints, target fields, tags, and review access keys are intentionally not user-facing.
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, title, public summary, private details, and client metadata.
+  - The frontend does not yet attach a reporter signature over the submission payload; broker-relayed onchain attribution must stay disabled until the reporter-signed relay feature exists.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
   - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve XMTP registration.
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.
@@ -120,7 +122,27 @@ cheapbugs/
 - **Test Criteria**:
   - [x] Python unit tests cover strict JSON parsing, required fields, target validation, staged replies, and credential failure.
   - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, and structured XMTP submit UI.
+  - [ ] Add reporter-signed payload envelopes before the broker can submit user-attributed records onchain.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
+
+### Reporter-Signed Broker Relay
+
+- **Stability**: planned, not implemented
+- **Description**: Let the broker pin private submission material to IPFS and optionally submit EAS or bug-index records without being able to forge reports from other users.
+- **Properties**:
+  - The browser must create a canonical submission payload hash and an EIP-712 signature from the reporter before sending the XMTP message.
+  - The signed message must bind at least schema, version, reporter, broker wallet, Base chain id, bug-index contract address, payload hash, created time, and a nonce or deadline.
+  - The broker may transform storage details, pin IPFS, and pay gas, but it must not be able to choose or alter the reporter address accepted by the registry.
+  - `CheapBugsBugIndex` must reject broker-relayed submissions unless the reporter signature recovers to the claimed reporter, or validates through EIP-1271 if contract-wallet support is added.
+  - The contract must prevent replay of the same signed submission across brokers, chains, contracts, or duplicate report hashes.
+  - XMTP sender identity is useful broker-side evidence, but it is not enough for the smart-contract-level anti-forgery claim.
+  - Private plaintext details must never be placed onchain; onchain records should contain public metadata, IPFS CIDs or commitments, and content hashes only.
+- **Test Criteria**:
+  - [ ] Contract tests prove a broker cannot submit a forged report for an arbitrary reporter.
+  - [ ] Contract tests prove valid reporter signatures are accepted through the broker-relay path.
+  - [ ] Contract tests prove wrong broker, wrong chain/contract domain, expired/deadline, and replayed submissions fail.
+  - [ ] Browser tests cover the signature prompt and envelope generation.
+  - [ ] Broker tests verify signed envelopes before any IPFS, EAS, or bug-index write.
 
 ### Python Broker Bot
 
@@ -234,6 +256,7 @@ python3 -m compileall bots scripts/broker-bot.py scripts/bouncer-bot.py
 
 ## Future Milestones
 
+- Implement reporter-signed broker relay before allowing broker-created user-attributed bug-index records.
 - Replace frontend reviewer allowlist with an onchain reviewer registry or resolver-backed trust model.
 - Add public payout records for broker settlements while keeping `PayoutRecord` as the public record layer.
 - Add live XMTP broker smoke tests with disposable identities.
