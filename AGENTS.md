@@ -148,7 +148,7 @@ npm run launch:token
 - The broker replies over XMTP after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`; `BOUNCER_*` names are accepted only for legacy compatibility.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
 - The Python broker uses `xmtp==0.1.5`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
-- Use `./run-broker.sh` for local broker runtime startup. It expects a shell-compatible `.env`, defaults `BROKER_DRY_RUN=1`, requires `XMTP_DB_ENCRYPTION_KEY` for persistent XMTP state, and creates `.venv-broker`/`.broker`, which are gitignored.
+- Use `./run-broker.sh` for local broker runtime startup. It expects a shell-compatible `.env`, defaults `BROKER_DRY_RUN=1`, requires `XMTP_DB_ENCRYPTION_KEY` for persistent XMTP state, and creates `.venv-broker`/`.broker`, which are gitignored. `.env*` is ignored except `.env.example`.
 - Broker rewards are ERC20 transfers from `BUGZ_PAYOUT_PRIVATE_KEY`, not mints. Fund and cap that wallet intentionally before running without `BROKER_DRY_RUN=1`.
 
 ## Known Issues And Practical Tips
