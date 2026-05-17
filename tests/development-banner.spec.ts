@@ -80,3 +80,30 @@ test("submit route gives inline XMTP feedback when submit is blocked", async ({ 
     "Connect a local XMTP wallet or compatible external wallet before submitting."
   );
 });
+
+test("submit route shows a wallet-device wait modal during XMTP signature requests", async ({ page }) => {
+  await page.goto("/submit");
+
+  await page.locator("[data-view-root]").evaluate((root) => {
+    root.dispatchEvent(
+      new CustomEvent("cheapbugs:xmtp-progress", {
+        detail: { message: "waiting for XMTP wallet signature" }
+      })
+    );
+  });
+
+  const dialog = page.getByRole("dialog", { name: "wallet signature" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("waiting for signature from wallet device");
+  await expect(dialog).toContainText("Approve the XMTP registration signature");
+
+  await page.locator("[data-view-root]").evaluate((root) => {
+    root.dispatchEvent(
+      new CustomEvent("cheapbugs:xmtp-progress", {
+        detail: { message: "XMTP wallet signature approved" }
+      })
+    );
+  });
+
+  await expect(dialog).toBeHidden();
+});

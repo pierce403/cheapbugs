@@ -256,6 +256,61 @@ button:disabled,
   border-color: rgba(255, 113, 91, 0.5);
 }
 
+.signature-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.76);
+}
+
+.signature-modal-backdrop[hidden] {
+  display: none;
+}
+
+.signature-modal {
+  width: min(420px, 100%);
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.signature-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 106, 0, 0.26);
+  border-top-color: var(--warning);
+  border-radius: 999px;
+  animation: signature-spin 0.9s linear infinite;
+}
+
+.signature-modal-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.signature-modal-copy strong {
+  color: var(--text);
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.signature-modal-copy p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+@keyframes signature-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .auth-panel {
   display: grid;
   gap: 6px;

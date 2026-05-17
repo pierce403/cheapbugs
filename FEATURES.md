@@ -109,6 +109,7 @@ cheapbugs/
   - The frontend form currently collects only title, public summary, and private details; repro steps, evidence, severity, Signal recipient, contact hints, target fields, tags, and review access keys are intentionally not user-facing.
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, title, public summary, private details, and client metadata.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
+  - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve XMTP registration.
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
   - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.

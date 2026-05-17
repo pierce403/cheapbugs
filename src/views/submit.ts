@@ -12,9 +12,21 @@ type XmtpStatus = {
   title: string;
   detail: string;
 };
+type SignatureWaitState = {
+  open: boolean;
+  detail: string;
+};
 
 let persistedXmtpStatus: XmtpStatus | null = null;
+let persistedSignatureWait: SignatureWaitState = {
+  open: false,
+  detail: "Approve the XMTP registration signature in your wallet app or browser extension. This does not send a transaction."
+};
 let submitInFlight = false;
+
+const XMTP_PROGRESS_EVENT = "cheapbugs:xmtp-progress";
+const signatureWaitDetail =
+  "Approve the XMTP registration signature in your wallet app or browser extension. This does not send a transaction.";
 
 const initialXmtpStatus = (): XmtpStatus => {
   if (persistedXmtpStatus && (submitInFlight || persistedXmtpStatus.tone === "sent" || persistedXmtpStatus.tone === "error")) {
@@ -57,6 +69,11 @@ const xmtpErrorMessage = (error: unknown): string => {
   return message;
 };
 
+const isSignatureWaitProgress = (message: string): boolean => /waiting for .*xmtp wallet signature/i.test(message);
+
+const isSignatureSettledProgress = (message: string): boolean =>
+  /xmtp wallet signature approved|using cached xmtp wallet signature/i.test(message);
+
 const statusMarkup = (status = initialXmtpStatus()): string => `
   <div id="xmtp-status" class="xmtp-status xmtp-status-${status.tone}" role="status" aria-live="polite" data-testid="xmtp-status">
     <span class="xmtp-status-light" aria-hidden="true"></span>
@@ -64,6 +81,28 @@ const statusMarkup = (status = initialXmtpStatus()): string => `
       <strong id="xmtp-status-title">${escapeHtml(status.title)}</strong>
       <span id="xmtp-status-detail">${escapeHtml(status.detail)}</span>
     </div>
+  </div>
+`;
+
+const signatureWaitModalMarkup = (state = persistedSignatureWait): string => `
+  <div
+    id="xmtp-signature-modal"
+    class="signature-modal-backdrop${state.open ? " is-open" : ""}"
+    role="dialog"
+    aria-modal="true"
+    aria-label="wallet signature"
+    aria-live="assertive"
+    data-testid="xmtp-signature-modal"
+    ${state.open ? "" : "hidden"}
+  >
+    <section class="signature-modal panel" aria-busy="true">
+      <div class="signature-spinner" aria-hidden="true"></div>
+      <div class="signature-modal-copy">
+        <div class="panel-title">[ wallet signature ]</div>
+        <strong>waiting for signature from wallet device</strong>
+        <p id="xmtp-signature-detail">${escapeHtml(state.detail)}</p>
+      </div>
+    </section>
   </div>
 `;
 
@@ -94,6 +133,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         submit to broker
       </button>
     </form>
+    ${signatureWaitModalMarkup()}
   `,
   afterRender: (root, appContext) => {
     const form = root.querySelector<HTMLFormElement>("#submit-form");
@@ -105,6 +145,20 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
     const status = root.querySelector<HTMLElement>("#xmtp-status");
     const statusTitle = root.querySelector<HTMLElement>("#xmtp-status-title");
     const statusDetail = root.querySelector<HTMLElement>("#xmtp-status-detail");
+    const signatureModal = root.querySelector<HTMLElement>("#xmtp-signature-modal");
+    const signatureDetail = root.querySelector<HTMLElement>("#xmtp-signature-detail");
+
+    const setSignatureWait = (open: boolean, detail = signatureWaitDetail) => {
+      persistedSignatureWait = { open, detail };
+      signatureModal?.toggleAttribute("hidden", !open);
+      signatureModal?.classList.toggle("is-open", open);
+      if (signatureDetail) {
+        signatureDetail.textContent = detail;
+      }
+      if (!signatureModal || !document.body.contains(signatureModal)) {
+        void appContext.rerender();
+      }
+    };
 
     const setStatus = (tone: XmtpStatusTone, title: string, detail: string) => {
       persistedXmtpStatus = { tone, title, detail };
@@ -122,10 +176,31 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       if (statusDetail) {
         statusDetail.textContent = detail;
       }
+      if (tone !== "working") {
+        setSignatureWait(false);
+      }
       if (!status || !document.body.contains(status)) {
         void appContext.rerender();
       }
     };
+
+    const handleXmtpProgress = (message: string) => {
+      if (isSignatureWaitProgress(message)) {
+        setSignatureWait(true);
+      } else if (isSignatureSettledProgress(message)) {
+        setSignatureWait(false);
+      }
+
+      setStatus("working", "xmtp: sending", message);
+      appLog.info("submit: broker XMTP progress", { message });
+    };
+
+    root.addEventListener(XMTP_PROGRESS_EVENT, ((event: Event) => {
+      const message = (event as CustomEvent<{ message?: unknown }>).detail?.message;
+      if (typeof message === "string") {
+        handleXmtpProgress(message);
+      }
+    }) as EventListener);
 
     form?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -168,8 +243,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         }
         setStatus("working", "xmtp: connecting", "Preparing broker submission.");
         const result = await sendBrokerSubmission(xmtpIdentity, input, (message) => {
-          setStatus("working", "xmtp: sending", message);
-          appLog.info("submit: broker XMTP progress", { message });
+          root.dispatchEvent(new CustomEvent(XMTP_PROGRESS_EVENT, { detail: { message } }));
         });
         setStatus("sent", "xmtp: sent", `Broker message ${result.messageId} sent.`);
         form.reset();
@@ -179,6 +253,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         setStatus("error", "xmtp: failed", message);
         appLog.error("submit: broker submission failed", error);
       } finally {
+        setSignatureWait(false);
         submitInFlight = false;
         submitButton?.removeAttribute("disabled");
         submitButton?.removeAttribute("aria-busy");
