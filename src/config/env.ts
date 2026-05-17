@@ -56,6 +56,10 @@ export const env = {
     (usesDefaultBugzToken ? defaultBugzHoldersUrl : `https://basescan.org/token/${configuredBugzTokenAddress}#balances`),
   etherscanApiUrl: import.meta.env.VITE_ETHERSCAN_API_URL || "https://api.etherscan.io/v2/api",
   etherscanApiKey: import.meta.env.VITE_ETHERSCAN_API_KEY || import.meta.env.VITE_BASESCAN_API_KEY || "",
+  etherscanApiKeyUrl: import.meta.env.VITE_ETHERSCAN_API_KEY_URL || "https://etherscan.io/myapikey",
+  etherscanTokenHolderDocsUrl:
+    import.meta.env.VITE_ETHERSCAN_TOKEN_HOLDER_DOCS_URL ||
+    "https://docs.etherscan.io/api-reference/endpoint/tokenholderlist",
   bugzV4PoolHook:
     (import.meta.env.VITE_BUGZ_V4_POOL_HOOK as `0x${string}` | undefined) ||
     (usesDefaultBugzToken ? defaultBugzV4PoolHook : ""),

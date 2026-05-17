@@ -37,6 +37,8 @@ export const chainConfig = {
   bugzHoldersUrl: env.bugzHoldersUrl,
   etherscanApiUrl: env.etherscanApiUrl,
   etherscanApiKey: env.etherscanApiKey,
+  etherscanApiKeyUrl: env.etherscanApiKeyUrl,
+  etherscanTokenHolderDocsUrl: env.etherscanTokenHolderDocsUrl,
   bugzV4PoolHook: env.bugzV4PoolHook,
   bugzV4PoolId: env.bugzV4PoolId,
   bugzV4PairedToken: env.bugzV4PairedToken,

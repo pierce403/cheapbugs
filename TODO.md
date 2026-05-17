@@ -30,5 +30,5 @@
 
 ## Future Product Scope
 
-- Add patron leaderboard logic and receipts.
+- Add patron receipt/provenance UX beyond the cached holder leaderboard.
 - Add treasury, token gating, and governance modules as separate extensions.

@@ -9,7 +9,7 @@ Frontend values:
 - `VITE_BUG_INDEX_ADDRESS`
 - `VITE_BUGZ_TOKEN_ADDRESS` only if and when token-aware frontend features are added
 - `VITE_BUGZ_TREASURY_ADDRESS` only when the token manager should show optional treasury stats
-- `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` when the patrons leaderboard should use the Etherscan V2 holder API for Base
+- `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` when the patrons leaderboard should use the Etherscan V2 holder API for Base. Generate it from the Etherscan API Dashboard at `https://etherscan.io/myapikey`; Etherscan documents `tokenholderlist` as a paid holder endpoint.
 - `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` when the patrons leaderboard should fall back to reconstructing holder balances from Transfer logs
 - `VITE_BUGZ_HOLDERS_URL` when overriding the default BaseScan holder-distribution link
 - `VITE_BUGZ_BUY_URL` when the token manager should hand off to an external buy flow

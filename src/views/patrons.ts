@@ -40,6 +40,18 @@ export const renderPatronsView = async (context: AppViewContext): Promise<ViewRe
   const formatCacheTime = (value: number | null): string =>
     value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "-";
 
+  const holderApiHelp =
+    !leaderboard.isHolderApiConfigured || leaderboard.errorMessage
+      ? `
+        <p class="helper-copy">
+          For more reliable holder data, add <code>VITE_ETHERSCAN_API_KEY</code> or <code>VITE_BASESCAN_API_KEY</code>
+          from the <a href="${escapeHtml(leaderboard.holderApiKeyUrl)}" target="_blank" rel="noreferrer">Etherscan API Dashboard</a>.
+          Etherscan documents <a href="${escapeHtml(leaderboard.holderApiDocsUrl)}" target="_blank" rel="noreferrer">tokenholderlist</a>
+          as a V2 holder endpoint for Base.
+        </p>
+      `
+      : "";
+
   return {
     title: "Patrons",
     html: `
@@ -54,6 +66,7 @@ export const renderPatronsView = async (context: AppViewContext): Promise<ViewRe
             formatCacheTime(leaderboard.nextRefreshAt)
           )}
         </p>
+        ${holderApiHelp}
         <div class="button-row">
           <button id="refresh-patrons" class="button secondary" type="button">refresh holders</button>
           <a class="button secondary" href="${escapeHtml(leaderboard.holdersUrl)}" target="_blank" rel="noreferrer">basescan holders</a>

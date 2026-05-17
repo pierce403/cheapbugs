@@ -83,6 +83,7 @@ npm run launch:bug-index:dry-run
 npm run launch:token:dry-run
 npm run launch:bug-index:forge:dry-run
 npm run contracts:test
+npm run test:e2e
 ```
 
 5. Deploy the Base bug index contract when ready:

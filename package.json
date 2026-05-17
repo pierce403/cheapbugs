@@ -8,6 +8,7 @@
     "prebuild": "node scripts/fix-xmtp-wasm-worker.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:e2e": "playwright test",
     "preview": "vite preview",
     "contracts:build": "forge build",
     "contracts:test": "forge test",
@@ -26,6 +27,7 @@
     "viem": "^2.47.10"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "typescript": "^5.8.3",
     "vite": "^7.1.7"
   }

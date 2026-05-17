@@ -20,6 +20,13 @@ type DashboardRead<T> = {
 
 const shortenError = (message: string): string => (message.length > 220 ? `${message.slice(0, 217)}...` : message);
 
+const holderApiFields = () => ({
+  holdersUrl: chainConfig.bugzHoldersUrl,
+  holderApiKeyUrl: chainConfig.etherscanApiKeyUrl,
+  holderApiDocsUrl: chainConfig.etherscanTokenHolderDocsUrl,
+  isHolderApiConfigured: Boolean(chainConfig.etherscanApiKey)
+});
+
 const retryDelay = (ms: number): Promise<void> => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 
 const tokenReadErrorMessage = (label: string, error: unknown): string => {
@@ -144,7 +151,7 @@ export const loadPatronLeaderboard = async (
       sourceLabel: "not configured",
       updatedAt: null,
       nextRefreshAt: null,
-      holdersUrl: chainConfig.bugzHoldersUrl,
+      ...holderApiFields(),
       errorMessage: null
     };
   }
@@ -164,7 +171,7 @@ export const loadPatronLeaderboard = async (
       sourceLabel: snapshot.source === "etherscan" ? "Etherscan V2 holder API" : "Base Transfer log scan",
       updatedAt: snapshot.updatedAt,
       nextRefreshAt: snapshot.nextRefreshAt,
-      holdersUrl: chainConfig.bugzHoldersUrl,
+      ...holderApiFields(),
       errorMessage: null
     };
   } catch (error) {
@@ -173,7 +180,7 @@ export const loadPatronLeaderboard = async (
       sourceLabel: chainConfig.etherscanApiKey ? "Etherscan V2 holder API" : "Base Transfer log scan",
       updatedAt: null,
       nextRefreshAt: null,
-      holdersUrl: chainConfig.bugzHoldersUrl,
+      ...holderApiFields(),
       errorMessage: error instanceof Error ? error.message : "Patron leaderboard query failed."
     };
   }

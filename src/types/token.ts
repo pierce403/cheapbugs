@@ -33,5 +33,8 @@ export type PatronLeaderboard = {
   updatedAt: number | null;
   nextRefreshAt: number | null;
   holdersUrl: string;
+  holderApiKeyUrl: string;
+  holderApiDocsUrl: string;
+  isHolderApiConfigured: boolean;
   errorMessage: string | null;
 };

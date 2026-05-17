@@ -52,7 +52,7 @@ type SerializedHolderBalanceSnapshot = Omit<HolderBalanceSnapshot, "holders"> & 
 
 const TTL_MS = 30_000;
 const HOLDER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const HOLDER_SCAN_BLOCK_STEP = 50_000;
+const HOLDER_SCAN_BLOCK_STEP = 10_000;
 const HOLDER_API_OFFSET = 100;
 const cache = new Map<string, MemoryRecord<unknown>>();
 const holderLocalCache = new QueryCache("cheapbugs.patrons.v1");
@@ -243,6 +243,25 @@ const sortHolders = (holders: HolderBalance[]): HolderBalance[] =>
     .filter((holder) => holder.balance > 0n && holder.address !== ZERO_ADDRESS)
     .sort((left, right) => (right.balance > left.balance ? 1 : right.balance < left.balance ? -1 : 0));
 
+const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const transferLogScanError = (error: unknown): Error => {
+  const raw = errorText(error);
+  if (
+    raw.includes("eth_getLogs") ||
+    raw.includes("-32614") ||
+    raw.includes("10,000 range") ||
+    raw.includes("10000 range") ||
+    raw.includes("query returned more than")
+  ) {
+    return new Error(
+      `The configured Base RPC rejected the BUGZ holder scan. The static fallback scans in ${HOLDER_SCAN_BLOCK_STEP.toLocaleString()}-block pages, but this RPC still refused a log page. Add VITE_ETHERSCAN_API_KEY or VITE_BASESCAN_API_KEY to use the Etherscan holder API, or set VITE_CHAIN_RPC_URL to a Base RPC with eth_getLogs support.`
+    );
+  }
+
+  return new Error(`BUGZ holder scan failed on the configured Base RPC: ${raw.slice(0, 220)}`);
+};
+
 const getBugzEtherscanPatronBalances = async (): Promise<HolderBalanceSnapshot> => {
   const metadata = await getBugzTokenMetadata();
   const decimals = metadata?.decimals ?? 18;
@@ -328,12 +347,17 @@ const getBugzTransferLogPatronBalances = async (): Promise<HolderBalanceSnapshot
 
   for (let start = fromBlock; start <= latestBlock; start += HOLDER_SCAN_BLOCK_STEP) {
     const end = Math.min(latestBlock, start + HOLDER_SCAN_BLOCK_STEP - 1);
-    const logs = await readProvider.getLogs({
-      address,
-      topics: [transferTopic],
-      fromBlock: start,
-      toBlock: end
-    });
+    let logs: Awaited<ReturnType<typeof readProvider.getLogs>>;
+    try {
+      logs = await readProvider.getLogs({
+        address,
+        topics: [transferTopic],
+        fromBlock: start,
+        toBlock: end
+      });
+    } catch (error) {
+      throw transferLogScanError(error);
+    }
 
     logs.forEach((log) => {
       try {

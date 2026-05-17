@@ -1,5 +1,7 @@
 dist
 artifacts
+playwright-report
+test-results
 node_modules
 .env.local
 *.tsbuildinfo

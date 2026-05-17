@@ -15,6 +15,7 @@ cheapbugs/
 ├── script/                 # Foundry deployment scripts
 ├── scripts/                # Deployment and maintenance scripts
 ├── test/                   # Foundry contract tests
+├── tests/                  # Playwright browser tests
 ├── lib/                    # Foundry libraries
 ├── public/                 # Static assets and SPA hosting helpers
 ├── src/
@@ -219,11 +220,11 @@ BUGZ Read, Holder, And Trade Layer:
 
 - Purpose: Read ERC20 metadata, connected-wallet balances, optional treasury display stats, patron balances, and browser-sign buy/sell swaps without requiring backend infrastructure
 - Integration Method: [src/contracts/bugzToken.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzToken.ts), [src/contracts/bugzTrade.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTrade.ts), and [src/lib/token.ts](/home/pierce/projects/cheapbugs/src/lib/token.ts)
-- Holder Source: The patrons board prefers Etherscan V2 `tokenholderlist` on `chainid=8453` when `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` is configured, falls back to chunked Base `Transfer` log reconstruction from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, and stores normalized holder snapshots in localStorage for 24 hours. Manual refresh clears that cache.
+- Holder Source: The patrons board prefers Etherscan V2 `tokenholderlist` on `chainid=8453` when `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` is configured, falls back to chunked 10,000-block Base `Transfer` log reconstruction from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, and stores normalized holder snapshots in localStorage for 24 hours. Manual refresh clears that cache.
 - Holder Explorer: `VITE_BUGZ_HOLDERS_URL` defaults to the BaseScan BUGZ token holders tab so users can compare the local leaderboard with explorer distribution data.
 - Trade Path: Configured Clanker WETH/BUGZ Uniswap v4 pool key, v4 Quoter reads, and Universal Router 2.1.1 transactions. Buys wrap ETH to WETH inside the router, swap to BUGZ, and send BUGZ to the wallet. Sells use ERC20 plus Permit2 approvals, swap BUGZ to WETH, and unwrap to ETH.
 - Constraint: Buy/sell does not use a treasury address. `VITE_BUGZ_TREASURY_ADDRESS` only enables optional dashboard rows and should remain unset when there is no treasury to report.
-- Constraint: The Etherscan holder endpoint requires a browser-exposed API key. If no key is configured, the static fallback is only as reliable as the configured Base RPC's `eth_getLogs` support.
+- Constraint: The Etherscan holder endpoint requires a browser-exposed API key and Etherscan documents it as a paid holder endpoint. If no key is configured, the static fallback is only as reliable as the configured Base RPC's `eth_getLogs` support; RPC failures should render setup guidance with links to the Etherscan API Dashboard and holder endpoint docs.
 
 Clanker:
 
@@ -309,13 +310,14 @@ Local Setup Instructions:
 - optionally set `VITE_THIRDWEB_CLIENT_ID` to override the default Thirdweb client id or override `VITE_ENS_RPC_URL`
 - deploy the bug index contract or set `VITE_BUG_INDEX_ADDRESS`
 - BUGZ defaults to the Base Clanker token at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`
-- optionally configure the BUGZ deployment block, market URL, and `VITE_BUGZ_V4_*` pool overrides when `/patrons` scans or a different Clanker market should become live. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional dashboard stats.
+- optionally configure the BUGZ deployment block, Etherscan API key, market URL, and `VITE_BUGZ_V4_*` pool overrides when `/patrons` scans or a different Clanker market should become live. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional dashboard stats.
 - optionally set `VITE_BOUNCER_XMTP_ADDRESS` and run `python scripts/bouncer-bot.py run` when the XMTP/Signal submission path should be live
 
 Testing / Verification Commands:
 
 - `npm run dev`
 - `npm run build`
+- `npm run test:e2e`
 - `npm run contracts:build`
 - `npm run contracts:test`
 - `npm run launch:bug-index:dry-run`
