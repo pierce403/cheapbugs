@@ -13,6 +13,7 @@ export type TokenDashboard = {
   treasuryTokenBalance: bigint | null;
   treasuryNativeBalance: bigint | null;
   marketUrl: string;
+  holdersUrl: string;
   patronScanReady: boolean;
   patronScanStatus: string;
   errorMessage: string | null;
@@ -24,4 +25,13 @@ export type PatronEntry = {
   ensName: string | null;
   ensAvatarUrl: string | null;
   ensLookupStatus: SessionState["ensLookupStatus"];
+};
+
+export type PatronLeaderboard = {
+  entries: PatronEntry[];
+  sourceLabel: string;
+  updatedAt: number | null;
+  nextRefreshAt: number | null;
+  holdersUrl: string;
+  errorMessage: string | null;
 };

@@ -215,13 +215,15 @@ Base RPC:
 - Purpose: Contract reads, writes, and deployment
 - Integration Method: Configured in [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts) and consumed by the frontend and launchers
 
-BUGZ Read And Trade Layer:
+BUGZ Read, Holder, And Trade Layer:
 
 - Purpose: Read ERC20 metadata, connected-wallet balances, optional treasury display stats, patron balances, and browser-sign buy/sell swaps without requiring backend infrastructure
 - Integration Method: [src/contracts/bugzToken.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzToken.ts), [src/contracts/bugzTrade.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTrade.ts), and [src/lib/token.ts](/home/pierce/projects/cheapbugs/src/lib/token.ts)
+- Holder Source: The patrons board prefers Etherscan V2 `tokenholderlist` on `chainid=8453` when `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` is configured, falls back to chunked Base `Transfer` log reconstruction from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, and stores normalized holder snapshots in localStorage for 24 hours. Manual refresh clears that cache.
+- Holder Explorer: `VITE_BUGZ_HOLDERS_URL` defaults to the BaseScan BUGZ token holders tab so users can compare the local leaderboard with explorer distribution data.
 - Trade Path: Configured Clanker WETH/BUGZ Uniswap v4 pool key, v4 Quoter reads, and Universal Router 2.1.1 transactions. Buys wrap ETH to WETH inside the router, swap to BUGZ, and send BUGZ to the wallet. Sells use ERC20 plus Permit2 approvals, swap BUGZ to WETH, and unwrap to ETH.
 - Constraint: Buy/sell does not use a treasury address. `VITE_BUGZ_TREASURY_ADDRESS` only enables optional dashboard rows and should remain unset when there is no treasury to report.
-- Constraint: Full patron enumeration depends on reconstructing balances from `Transfer` logs and therefore needs `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`.
+- Constraint: The Etherscan holder endpoint requires a browser-exposed API key. If no key is configured, the static fallback is only as reliable as the configured Base RPC's `eth_getLogs` support.
 
 Clanker:
 

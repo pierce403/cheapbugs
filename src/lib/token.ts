@@ -1,5 +1,6 @@
 import { chainConfig } from "../config/chains";
 import {
+  clearBugzPatronCache,
   getBugzPatronBalances,
   getBugzTokenBalance,
   getBugzTokenMetadata,
@@ -10,7 +11,7 @@ import {
 import { resolveEnsProfile } from "./ens";
 import { appLog } from "./logger";
 
-import type { PatronEntry, TokenDashboard } from "../types/token";
+import type { PatronLeaderboard, TokenDashboard } from "../types/token";
 
 type DashboardRead<T> = {
   value: T | null;
@@ -68,11 +69,13 @@ const readDashboardValue = async <T>(label: string, read: () => Promise<T | null
 };
 
 export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null): Promise<TokenDashboard> => {
-  const patronScanStatus = isBugzPatronScanConfigured()
-    ? `ready from block ${chainConfig.bugzTokenDeploymentBlock}`
-    : chainConfig.bugzTokenAddress
-      ? "set VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK after deployment to enable full holder scans"
-      : "waiting for BUGZ deployment";
+  const patronScanStatus = !chainConfig.bugzTokenAddress
+    ? "waiting for BUGZ deployment"
+    : chainConfig.etherscanApiKey
+      ? "ready via Etherscan V2 holder API; cached daily"
+      : isBugzPatronScanConfigured()
+        ? `ready via Transfer logs from block ${chainConfig.bugzTokenDeploymentBlock}; cached daily`
+        : "set VITE_ETHERSCAN_API_KEY or VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK to enable holder scans";
 
   if (!isBugzTokenConfigured()) {
     return {
@@ -87,6 +90,7 @@ export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null)
       treasuryTokenBalance: null,
       treasuryNativeBalance: null,
       marketUrl: chainConfig.bugzMarketUrl,
+      holdersUrl: chainConfig.bugzHoldersUrl,
       patronScanReady: false,
       patronScanStatus,
       errorMessage: null
@@ -123,6 +127,7 @@ export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null)
     treasuryTokenBalance: treasury?.tokenBalance ?? null,
     treasuryNativeBalance: treasury?.nativeBalance ?? null,
     marketUrl: chainConfig.bugzMarketUrl,
+    holdersUrl: chainConfig.bugzHoldersUrl,
     patronScanReady: isBugzPatronScanConfigured(),
     patronScanStatus,
     errorMessage: errorMessages.length ? errorMessages.join(" ") : null
@@ -130,19 +135,24 @@ export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null)
 };
 
 export const loadPatronLeaderboard = async (
-  limit = 50
-): Promise<{ entries: PatronEntry[]; errorMessage: string | null }> => {
+  limit = 50,
+  options: { cachedOnly?: boolean } = {}
+): Promise<PatronLeaderboard> => {
   if (!isBugzTokenConfigured() || !isBugzPatronScanConfigured()) {
     return {
       entries: [],
+      sourceLabel: "not configured",
+      updatedAt: null,
+      nextRefreshAt: null,
+      holdersUrl: chainConfig.bugzHoldersUrl,
       errorMessage: null
     };
   }
 
   try {
-    const balances = await getBugzPatronBalances();
+    const snapshot = await getBugzPatronBalances({ cachedOnly: options.cachedOnly });
     const entries = await Promise.all(
-      balances.slice(0, limit).map(async ({ address, balance }) => ({
+      snapshot.holders.slice(0, limit).map(async ({ address, balance }) => ({
         address,
         balance,
         ...(await resolveEnsProfile(address))
@@ -151,12 +161,24 @@ export const loadPatronLeaderboard = async (
 
     return {
       entries,
+      sourceLabel: snapshot.source === "etherscan" ? "Etherscan V2 holder API" : "Base Transfer log scan",
+      updatedAt: snapshot.updatedAt,
+      nextRefreshAt: snapshot.nextRefreshAt,
+      holdersUrl: chainConfig.bugzHoldersUrl,
       errorMessage: null
     };
   } catch (error) {
     return {
       entries: [],
+      sourceLabel: chainConfig.etherscanApiKey ? "Etherscan V2 holder API" : "Base Transfer log scan",
+      updatedAt: null,
+      nextRefreshAt: null,
+      holdersUrl: chainConfig.bugzHoldersUrl,
       errorMessage: error instanceof Error ? error.message : "Patron leaderboard query failed."
     };
   }
+};
+
+export const refreshPatronLeaderboard = (): void => {
+  clearBugzPatronCache();
 };

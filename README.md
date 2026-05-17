@@ -8,7 +8,7 @@ The repo now also includes an XMTP bouncer path for a private-review workflow: t
 
 BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`. The static app reads connected-wallet balances directly from Base and exposes buy/sell controls as browser-signed Uniswap v4 transactions against the Clanker-created market. There is no token backend.
 
-The frontend now reserves first-class routes for `index`, `submit`, `review`, `token`, and `patrons`. The token screen is live by default for BUGZ; the patrons screen still needs `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` before full holder scans are practical.
+The frontend now reserves first-class routes for `index`, `submit`, `review`, `token`, and `patrons`. The token screen is live by default for BUGZ; the patrons screen uses a daily-cached holder API when configured and otherwise falls back to Transfer-log scans from the BUGZ deployment block.
 
 For contract development, the repo now also includes a Foundry workspace with a deploy script and scenario tests for bug submission and reviewer vote flows.
 
@@ -70,7 +70,7 @@ cp .env.example .env.local
 3. Fill the required values in `.env.local`:
 
 - `VITE_BUG_INDEX_ADDRESS` after deploying the contract
-- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_BUGZ_MARKET_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional treasury display rows.
+- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY`, `VITE_BUGZ_MARKET_URL`, `VITE_BUGZ_HOLDERS_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard, daily-cached patrons board, and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional treasury display rows.
 - optional `VITE_THIRDWEB_CLIENT_ID` override for Thirdweb wallet login. A public default client id is committed for static deploys.
 - optional `VITE_BOUNCER_XMTP_ADDRESS` when submissions should be XMTP DMs to the bouncer instead of legacy onchain/IPFS filings
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema

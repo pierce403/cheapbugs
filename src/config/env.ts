@@ -10,7 +10,9 @@ const optionalNumber = (value: string | undefined, fallback = 0): number => {
 };
 
 const defaultBugzTokenAddress = "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07";
+const defaultBugzTokenDeploymentBlock = 46093316;
 const defaultBugzMarketUrl = `https://www.clanker.world/clanker/${defaultBugzTokenAddress}`;
+const defaultBugzHoldersUrl = `https://basescan.org/token/${defaultBugzTokenAddress}#balances`;
 const defaultBugzV4PoolHook = "0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC";
 const defaultBugzV4PoolId = "0x4c360c12ee8063e7170c344eba74f28ab0d3879c797ed46269202c3966234657";
 const defaultBugzV4PairedToken = "0x4200000000000000000000000000000000000006";
@@ -44,8 +46,16 @@ export const env = {
   bugIndexAddress: (import.meta.env.VITE_BUG_INDEX_ADDRESS as `0x${string}` | undefined) || "",
   bugzTokenAddress: configuredBugzTokenAddress,
   bugzTreasuryAddress: (import.meta.env.VITE_BUGZ_TREASURY_ADDRESS as `0x${string}` | undefined) || "",
-  bugzTokenDeploymentBlock: optionalNumber(import.meta.env.VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK, 0),
+  bugzTokenDeploymentBlock: optionalNumber(
+    import.meta.env.VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK,
+    usesDefaultBugzToken ? defaultBugzTokenDeploymentBlock : 0
+  ),
   bugzMarketUrl: import.meta.env.VITE_BUGZ_MARKET_URL || import.meta.env.VITE_BUGZ_BUY_URL || defaultBugzMarketUrl,
+  bugzHoldersUrl:
+    import.meta.env.VITE_BUGZ_HOLDERS_URL ||
+    (usesDefaultBugzToken ? defaultBugzHoldersUrl : `https://basescan.org/token/${configuredBugzTokenAddress}#balances`),
+  etherscanApiUrl: import.meta.env.VITE_ETHERSCAN_API_URL || "https://api.etherscan.io/v2/api",
+  etherscanApiKey: import.meta.env.VITE_ETHERSCAN_API_KEY || import.meta.env.VITE_BASESCAN_API_KEY || "",
   bugzV4PoolHook:
     (import.meta.env.VITE_BUGZ_V4_POOL_HOOK as `0x${string}` | undefined) ||
     (usesDefaultBugzToken ? defaultBugzV4PoolHook : ""),

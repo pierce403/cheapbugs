@@ -1,5 +1,6 @@
 import { ENS_APP_URL } from "../lib/ens";
-import { loadPatronLeaderboard, loadTokenDashboard } from "../lib/token";
+import { appLog } from "../lib/logger";
+import { loadPatronLeaderboard, loadTokenDashboard, refreshPatronLeaderboard } from "../lib/token";
 import { escapeHtml, formatTokenAmount, shortHash } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
@@ -12,7 +13,7 @@ export const renderPatronsView = async (context: AppViewContext): Promise<ViewRe
       ? "BUGZ is not configured yet. The patrons board will stay empty until the token contract is deployed and VITE_BUGZ_TOKEN_ADDRESS is set."
       : "",
     dashboard.isConfigured && !dashboard.patronScanReady
-      ? "Set VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK after deployment so the frontend can reconstruct holder balances from Transfer logs."
+      ? "Set VITE_ETHERSCAN_API_KEY or VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK so the frontend can resolve BUGZ holders."
       : "",
     leaderboard.errorMessage ?? ""
   ]
@@ -36,6 +37,9 @@ export const renderPatronsView = async (context: AppViewContext): Promise<ViewRe
         .join("")
     : `<tr><td colspan="5" class="muted-cell">No patron balances resolved yet.</td></tr>`;
 
+  const formatCacheTime = (value: number | null): string =>
+    value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "-";
+
   return {
     title: "Patrons",
     html: `
@@ -43,8 +47,17 @@ export const renderPatronsView = async (context: AppViewContext): Promise<ViewRe
         <div class="panel-title">[ patrons leaderboard ]</div>
         ${warnings}
         <p class="lede">
-          Ranked by live BUGZ balances reconstructed from Transfer logs. ENS names are shown when they resolve; otherwise the board falls back to raw addresses.
+          Ranked by BUGZ balances from ${escapeHtml(leaderboard.sourceLabel)}. Results are cached locally for one day.
         </p>
+        <p class="helper-copy">
+          cache: refreshed ${escapeHtml(formatCacheTime(leaderboard.updatedAt))} / next auto refresh ${escapeHtml(
+            formatCacheTime(leaderboard.nextRefreshAt)
+          )}
+        </p>
+        <div class="button-row">
+          <button id="refresh-patrons" class="button secondary" type="button">refresh holders</button>
+          <a class="button secondary" href="${escapeHtml(leaderboard.holdersUrl)}" target="_blank" rel="noreferrer">basescan holders</a>
+        </div>
         <table class="data-table">
           <thead>
             <tr>
@@ -58,6 +71,13 @@ export const renderPatronsView = async (context: AppViewContext): Promise<ViewRe
           <tbody>${rows}</tbody>
         </table>
       </section>
-    `
+    `,
+    afterRender: (root, appContext) => {
+      root.querySelector<HTMLButtonElement>("#refresh-patrons")?.addEventListener("click", () => {
+        appLog.info("ui: patrons refresh click");
+        refreshPatronLeaderboard();
+        appContext.notify("info", "Refreshing BUGZ holder cache.");
+      });
+    }
   };
 };

@@ -72,6 +72,7 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
             <tr><th>your balance</th><td>${connectedBalance}</td></tr>
             ${treasuryRows}
             <tr><th>holder scan</th><td>${escapeHtml(dashboard.patronScanStatus)}</td></tr>
+            <tr><th>basescan holders</th><td><a href="${escapeHtml(dashboard.holdersUrl)}" target="_blank" rel="noreferrer">view holder distribution</a></td></tr>
             <tr><th>clanker</th><td><a href="${escapeHtml(dashboard.marketUrl)}" target="_blank" rel="noreferrer">view market</a></td></tr>
           </tbody>
         </table>

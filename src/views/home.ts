@@ -8,7 +8,7 @@ import type { AppViewContext, ViewResult } from "./types";
 
 export const renderHomeView = async (context: AppViewContext): Promise<ViewResult> => {
   const bundles = await loadRecentBundles(12);
-  const patronPreview = await loadPatronLeaderboard(3);
+  const patronPreview = await loadPatronLeaderboard(3, { cachedOnly: true });
   const featuredHashes = new Set(getFeaturedReportHashes());
   const featured = bundles.filter((bundle) => featuredHashes.has(bundle.publicSubmission.reportHash));
   const featuredBundles = featured.length ? featured : bundles.slice(0, 4);
@@ -63,7 +63,7 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
         .join("")
     : `
       <tr><td>01</td><td><a href="${context.router.href("/token")}" data-nav>token manager</a></td><td>-</td><td>BUGZ trading live</td></tr>
-      <tr><td>02</td><td><a href="${context.router.href("/patrons")}" data-nav>patrons board</a></td><td>-</td><td>holder scan needs deployment block</td></tr>
+      <tr><td>02</td><td><a href="${context.router.href("/patrons")}" data-nav>patrons board</a></td><td>-</td><td>holder cache warming up</td></tr>
       <tr><td>03</td><td>ens preferred</td><td>-</td><td>connect wallet for balance</td></tr>
     `;
 
