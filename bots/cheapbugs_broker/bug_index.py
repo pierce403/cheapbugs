@@ -148,6 +148,7 @@ class BugIndexClient:
             raise BugIndexPublishError(f"Could not read Base chain id from RPC {self.rpc_url}: {_rpc_error(exc)}") from exc
         if chain_id != self.chain_id:
             raise BugIndexPublishError(f"RPC chain id mismatch: expected {self.chain_id}, got {chain_id}. Check BASE_RPC_URL.")
+        bug_input = checksum_publish_bug_input(self.web3, bug_input)
 
         try:
             if self.contract.functions.exists(report_hash).call():
@@ -266,6 +267,17 @@ def build_publish_bug_call_args(
         _uint(message, "deadline"),
         _string(auth, "value"),
     )
+
+
+def checksum_publish_bug_input(web3: Any, bug_input: tuple[Any, ...]) -> tuple[Any, ...]:
+    """Return publishBug tuple args with ABI address fields in web3.py-safe checksum form."""
+
+    values = list(bug_input)
+    try:
+        values[2] = web3.to_checksum_address(values[2])
+    except Exception as exc:
+        raise BugIndexPublishError("Publish authorization reporter is not a valid EVM address.") from exc
+    return tuple(values)
 
 
 def _report_id(report_hash: str) -> str:

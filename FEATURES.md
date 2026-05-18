@@ -267,6 +267,7 @@ cheapbugs/
   - The broker runner patches XMTP agent stream shutdown so a stream error cannot recursively cancel the currently running stream task and hide the original error.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; while enabled, accepted submissions verify and pin but skip the `publishBug` transaction and Signal relay. Set it to `0` only when the broker wallet is intentionally funded for live index publishing and payouts.
+  - Broker verification may normalize EVM addresses to lowercase internally, but `bots/cheapbugs_broker/bug_index.py` converts ABI `address` arguments to checksum form before calling web3.py contract functions.
   - SQLite tracks processed XMTP message IDs, relayed submissions, BugBundle CIDs and details keys, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
   - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ`.
   - Live payouts spend from the broker wallet and should run only from an intentionally funded wallet.

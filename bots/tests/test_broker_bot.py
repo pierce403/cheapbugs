@@ -20,7 +20,13 @@ from cheapbugs_broker.bugbundle import (
     canonical_json_bytes,
     verify_authorized_bug_bundle,
 )
-from cheapbugs_broker.bug_index import BugIndexPublishError, BugIndexPublishResult, build_publish_bug_call_args
+from cheapbugs_broker.bug_index import (
+    BugIndexClient,
+    BugIndexPublishError,
+    BugIndexPublishResult,
+    build_publish_bug_call_args,
+    checksum_publish_bug_input,
+)
 from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
 from cheapbugs_broker.config import BrokerConfig
 from cheapbugs_broker.ipfs import IpfsAddResult
@@ -321,6 +327,64 @@ class BugIndexPublishTest(unittest.TestCase):
         self.assertEqual(nonce, 7)
         self.assertEqual(deadline, 1779062400)
         self.assertTrue(signature.startswith("0x"))
+
+    def test_publish_bug_call_args_checksum_reporter_for_web3(self) -> None:
+        reporter = "0x7ab874eeef0169ada0d225e9801a3ffffa26aac3"
+        bug_bundle = fake_bug_bundle(
+            reporter=reporter,
+            bug_type="web",
+            severity="medium",
+            target_interest="high",
+            title="Parser overflow",
+            public_summary="Public safe summary for reviewers.",
+        )
+        payload = minimal_submission_payload(
+            reporter_address=reporter,
+            bug_bundle=bug_bundle,
+            publish_authorization=fake_publish_authorization(bug_bundle["core"]),
+        )
+        command = parse_command(json.dumps(payload))
+        self.assertIsInstance(command, SubmissionCommand)
+        verified = fake_verified_bundle(payload["bug_bundle"])
+        bug_bundle = FakeIpfs().add_json(verified.payload, "bundle.json")
+        pinned = fake_pinned_bundle(bug_bundle)
+
+        bug_input, _, _, _ = build_publish_bug_call_args(command, verified, pinned)
+        checked = checksum_publish_bug_input(FakeWeb3(), bug_input)
+
+        self.assertEqual(checked[2], "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3")
+
+    def test_publish_bug_checksums_reporter_before_gas_estimation(self) -> None:
+        reporter = "0x7ab874eeef0169ada0d225e9801a3ffffa26aac3"
+        bug_bundle_payload = fake_bug_bundle(
+            reporter=reporter,
+            bug_type="web",
+            severity="medium",
+            target_interest="high",
+            title="Parser overflow",
+            public_summary="Public safe summary for reviewers.",
+        )
+        payload = minimal_submission_payload(
+            reporter_address=reporter,
+            bug_bundle=bug_bundle_payload,
+            publish_authorization=fake_publish_authorization(bug_bundle_payload["core"]),
+        )
+        command = parse_command(json.dumps(payload))
+        self.assertIsInstance(command, SubmissionCommand)
+        verified = fake_verified_bundle(payload["bug_bundle"])
+        bug_bundle = FakeIpfs().add_json(verified.payload, "bundle.json")
+        pinned = fake_pinned_bundle(bug_bundle)
+        web3 = FakePublishWeb3()
+        contract = FakeBugIndexContract()
+        client = BugIndexClient("http://localhost:8545", WALLET, "0xabc", 8453)
+        client._web3 = web3
+        client._contract = contract
+        client._account = FakeAccount(BROKER)
+
+        result = client.publish_bug(command, verified, pinned)
+
+        self.assertEqual(result.tx_hash, "0x" + "a" * 64)
+        self.assertEqual(contract.publish_function.bug_input[2], "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3")
 
 
 class BrokerServiceTest(unittest.TestCase):
@@ -1139,6 +1203,102 @@ class FakeBugIndex:
             block_number=None if self.dry_run else 12345,
             index_address=WALLET,
         )
+
+
+class FakeWeb3:
+    def to_checksum_address(self, address: str) -> str:
+        if address == "0x7ab874eeef0169ada0d225e9801a3ffffa26aac3":
+            return "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3"
+        raise ValueError(f"unexpected address: {address}")
+
+
+class FakePublishWeb3:
+    def __init__(self) -> None:
+        self.eth = FakeEth()
+
+    def to_checksum_address(self, address: str) -> str:
+        normalized = address.lower()
+        if normalized == "0x7ab874eeef0169ada0d225e9801a3ffffa26aac3":
+            return "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3"
+        if normalized == BROKER:
+            return BROKER
+        if normalized == WALLET:
+            return WALLET
+        raise ValueError(f"unexpected address: {address}")
+
+    def to_hex(self, value: bytes) -> str:
+        return "0x" + value.hex()
+
+
+class FakeEth:
+    chain_id = 8453
+    gas_price = 1
+
+    def get_balance(self, address: str) -> int:
+        return 1_000_000
+
+    def get_transaction_count(self, address: str) -> int:
+        return 4
+
+    def send_raw_transaction(self, raw_tx: bytes) -> bytes:
+        self.raw_tx = raw_tx
+        return bytes.fromhex("a" * 64)
+
+    def wait_for_transaction_receipt(self, tx_hash: str, timeout: int) -> dict[str, int]:
+        return {"status": 1, "blockNumber": 12345}
+
+
+class FakeAccount:
+    def __init__(self, address: str) -> None:
+        self.address = address
+
+    def sign_transaction(self, tx: dict[str, object]) -> object:
+        return type("FakeSignedTransaction", (), {"raw_transaction": b"signed"})()
+
+
+class FakeBugIndexContract:
+    def __init__(self) -> None:
+        self.publish_function: FakePublishFunction | None = None
+        self.functions = FakeBugIndexFunctions(self)
+
+
+class FakeBugIndexFunctions:
+    def __init__(self, contract: FakeBugIndexContract) -> None:
+        self.contract = contract
+
+    def exists(self, report_hash: str) -> object:
+        return FakeCall(False)
+
+    def brokers(self, broker_address: str) -> object:
+        return FakeCall(True)
+
+    def publishBug(self, bug_input: tuple[object, ...], nonce: int, deadline: int, signature: str) -> object:
+        self.contract.publish_function = FakePublishFunction(bug_input, nonce, deadline, signature)
+        return self.contract.publish_function
+
+
+class FakeCall:
+    def __init__(self, value: bool) -> None:
+        self.value = value
+
+    def call(self) -> bool:
+        return self.value
+
+
+class FakePublishFunction:
+    def __init__(self, bug_input: tuple[object, ...], nonce: int, deadline: int, signature: str) -> None:
+        self.bug_input = bug_input
+        self.nonce = nonce
+        self.deadline = deadline
+        self.signature = signature
+
+    def estimate_gas(self, tx: dict[str, object]) -> int:
+        if self.bug_input[2] != "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3":
+            raise ValueError("reporter was not checksummed")
+        return 100_000
+
+    def build_transaction(self, tx: dict[str, object]) -> dict[str, object]:
+        return tx
 
 
 if __name__ == "__main__":
