@@ -3,10 +3,11 @@ pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 
-import { BondVault } from "../contracts/BondVault.sol";
+import { CheapBugsBondVault } from "../contracts/CheapBugsBondVault.sol";
 import { MockBugzToken } from "./MockBugzToken.sol";
 
-contract BondVaultTest is Test {
+contract CheapBugsBondVaultTest is Test {
+    address internal constant BUGZ_TOKEN_ADDRESS = 0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07;
     uint256 internal constant BUGZ = 1e18;
 
     address internal owner = makeAddr("owner");
@@ -16,13 +17,34 @@ contract BondVaultTest is Test {
     address internal bob = makeAddr("bob");
 
     MockBugzToken internal token;
-    BondVault internal vault;
+    CheapBugsBondVault internal vault;
 
     function setUp() public {
-        token = new MockBugzToken();
-        vault = new BondVault(token, treasury, owner);
+        token = _installMockBugzToken();
+        vault = new CheapBugsBondVault(treasury, owner);
         vm.prank(owner);
         vault.setSlasher(slasher, true);
+    }
+
+    function test_constructorAndOwnerSettersRejectZeroAddressesAndUnauthorizedCalls() public {
+        vm.expectRevert(CheapBugsBondVault.InvalidAddress.selector);
+        new CheapBugsBondVault(address(0), owner);
+
+        vm.expectRevert();
+        vm.prank(alice);
+        vault.setTreasury(alice);
+
+        vm.expectRevert();
+        vm.prank(alice);
+        vault.setSlasher(alice, true);
+
+        vm.expectRevert(CheapBugsBondVault.InvalidAddress.selector);
+        vm.prank(owner);
+        vault.setTreasury(address(0));
+
+        vm.expectRevert(CheapBugsBondVault.InvalidAddress.selector);
+        vm.prank(owner);
+        vault.setSlasher(address(0), true);
     }
 
     function test_bondStoresActiveBondAndEnumeratesBondedAddress() public {
@@ -54,6 +76,26 @@ contract BondVaultTest is Test {
         assertEq(vault.bondedAddressCount(), 1);
     }
 
+    function test_rejectsZeroBondZeroWithdrawalOverWithdrawalAndMissingPendingWithdrawal() public {
+        vm.expectRevert(CheapBugsBondVault.InvalidAmount.selector);
+        vm.prank(alice);
+        vault.bond(0);
+
+        _bond(alice, 100 * BUGZ);
+
+        vm.expectRevert(CheapBugsBondVault.InvalidAmount.selector);
+        vm.prank(alice);
+        vault.requestWithdrawal(0);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBondVault.InsufficientActiveBond.selector, 101 * BUGZ, 100 * BUGZ));
+        vm.prank(alice);
+        vault.requestWithdrawal(101 * BUGZ);
+
+        vm.expectRevert(CheapBugsBondVault.NoPendingWithdrawal.selector);
+        vm.prank(bob);
+        vault.withdraw();
+    }
+
     function test_newBondCancelsPendingWithdrawal() public {
         _bond(alice, 1_000 * BUGZ);
 
@@ -69,13 +111,50 @@ contract BondVaultTest is Test {
         assertEq(vault.withdrawAvailableAt(alice), 0);
     }
 
+    function test_newBondCancelsPendingWithdrawalEvenAfterDelayHasElapsed() public {
+        _bond(alice, 1_000 * BUGZ);
+        vm.prank(alice);
+        vault.requestWithdrawal(500 * BUGZ);
+        vm.warp(block.timestamp + 7 days);
+
+        _mintAndApprove(alice, 1 * BUGZ);
+        vm.prank(alice);
+        vault.bond(1 * BUGZ);
+
+        assertEq(vault.activeBondOf(alice), 1_001 * BUGZ);
+        assertEq(vault.pendingWithdrawalOf(alice), 0);
+        assertEq(vault.withdrawAvailableAt(alice), 0);
+    }
+
+    function test_multipleWithdrawalRequestsResetDelayAndKeepPendingSlashable() public {
+        _bond(alice, 1_000 * BUGZ);
+
+        vm.prank(alice);
+        vault.requestWithdrawal(100 * BUGZ);
+        uint64 firstAvailableAt = vault.withdrawAvailableAt(alice);
+
+        vm.warp(block.timestamp + 1 days);
+        vm.prank(alice);
+        vault.requestWithdrawal(200 * BUGZ);
+
+        assertEq(vault.pendingWithdrawalOf(alice), 300 * BUGZ);
+        assertEq(vault.withdrawAvailableAt(alice), firstAvailableAt + 1 days);
+
+        vm.prank(slasher);
+        vault.slash(alice, 1_000);
+
+        assertEq(vault.pendingWithdrawalOf(alice), 200 * BUGZ);
+        assertEq(vault.activeBondOf(alice), 700 * BUGZ);
+        assertEq(token.balanceOf(treasury), 100 * BUGZ);
+    }
+
     function test_withdrawRequiresDelayAndRemovesEmptyBondedAddress() public {
         _bond(alice, 100 * BUGZ);
 
         vm.prank(alice);
         vault.requestWithdrawal(100 * BUGZ);
 
-        vm.expectRevert(abi.encodeWithSelector(BondVault.WithdrawalNotReady.selector, uint64(block.timestamp + 7 days)));
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBondVault.WithdrawalNotReady.selector, uint64(block.timestamp + 7 days)));
         vm.prank(alice);
         vault.withdraw();
 
@@ -104,6 +183,25 @@ contract BondVaultTest is Test {
         assertEq(vault.bondedAddressCount(), 1);
     }
 
+    function test_slashCanStillTakeReadyPendingWithdrawalBeforeUserClaims() public {
+        _bond(alice, 100 * BUGZ);
+        vm.prank(alice);
+        vault.requestWithdrawal(100 * BUGZ);
+        vm.warp(block.timestamp + 7 days);
+
+        vm.prank(slasher);
+        vault.slash(alice, 10_000);
+
+        assertEq(vault.bondOf(alice), 0);
+        assertEq(vault.pendingWithdrawalOf(alice), 0);
+        assertEq(vault.withdrawAvailableAt(alice), 0);
+        assertEq(token.balanceOf(treasury), 100 * BUGZ);
+
+        vm.expectRevert(CheapBugsBondVault.NoPendingWithdrawal.selector);
+        vm.prank(alice);
+        vault.withdraw();
+    }
+
     function test_fullSlashRemovesBondedAddress() public {
         _bond(alice, 100 * BUGZ);
         _bond(bob, 200 * BUGZ);
@@ -120,13 +218,22 @@ contract BondVaultTest is Test {
     function test_slashRejectsNonSlasherAndBadBps() public {
         _bond(alice, 100 * BUGZ);
 
-        vm.expectRevert(BondVault.NotSlasher.selector);
+        vm.expectRevert(CheapBugsBondVault.NotSlasher.selector);
         vm.prank(bob);
         vault.slash(alice, 1);
 
-        vm.expectRevert(abi.encodeWithSelector(BondVault.InvalidSlashBps.selector, uint16(10_001)));
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBondVault.InvalidSlashBps.selector, uint16(10_001)));
         vm.prank(slasher);
         vault.slash(alice, 10_001);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBondVault.InvalidSlashBps.selector, uint16(0)));
+        vm.prank(slasher);
+        vault.slash(alice, 0);
+
+        _bond(bob, 1);
+        vm.expectRevert(CheapBugsBondVault.InvalidAmount.selector);
+        vm.prank(slasher);
+        vault.slash(bob, 1);
     }
 
     function test_ownerCanRemoveSlasher() public {
@@ -136,7 +243,7 @@ contract BondVaultTest is Test {
         vault.setSlasher(slasher, false);
 
         assertFalse(vault.slashers(slasher));
-        vm.expectRevert(BondVault.NotSlasher.selector);
+        vm.expectRevert(CheapBugsBondVault.NotSlasher.selector);
         vm.prank(slasher);
         vault.slash(alice, 1_000);
     }
@@ -181,6 +288,12 @@ contract BondVaultTest is Test {
         token.mint(account, amount);
         vm.prank(account);
         token.approve(address(vault), amount);
+    }
+
+    function _installMockBugzToken() internal returns (MockBugzToken) {
+        MockBugzToken implementation = new MockBugzToken();
+        vm.etch(BUGZ_TOKEN_ADDRESS, address(implementation).code);
+        return MockBugzToken(BUGZ_TOKEN_ADDRESS);
     }
 
     function _log10(uint256 value) internal pure returns (uint8 level) {

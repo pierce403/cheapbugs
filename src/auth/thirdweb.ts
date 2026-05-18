@@ -29,6 +29,13 @@ type ExternalWalletMode = Exclude<WalletMode, "local">;
 type SignableThirdwebAccount = {
   address: string;
   signMessage?: (args: { message: string; chainId?: number }) => Promise<string>;
+  signTypedData?: (args: {
+    domain: Record<string, unknown>;
+    types: Record<string, readonly { name: string; type: string }[]>;
+    primaryType: string;
+    message: Record<string, unknown>;
+    chainId?: number;
+  }) => Promise<string>;
 };
 type SiweSession = {
   version: "1";
@@ -984,7 +991,10 @@ export class ThirdwebAuthController {
     return {
       address,
       signMessage: async (message: string) =>
-        account.signMessage?.({ message, chainId }) ?? Promise.reject(new Error("Wallet cannot sign."))
+        account.signMessage?.({ message, chainId }) ?? Promise.reject(new Error("Wallet cannot sign.")),
+      signTypedData: account.signTypedData
+        ? async (request) => account.signTypedData?.({ ...request, chainId }) ?? Promise.reject(new Error("Wallet cannot sign typed data."))
+        : undefined
     };
   }
 

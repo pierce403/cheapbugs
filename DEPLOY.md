@@ -2,12 +2,12 @@
 
 ## 1. Prepare Environment
 
-Create `.env.local` from [.env.example](/home/pierce/projects/cheapbugs/.env.example).
+Create `.env.local` from [.env.example](.env.example).
 
 Frontend values:
 
 - `VITE_BUG_INDEX_ADDRESS`
-- `VITE_BUGZ_TOKEN_ADDRESS` only if and when token-aware frontend features are added
+- `VITE_BUGZ_TOKEN_ADDRESS` only if token-aware frontend features should override the live Base BUGZ default
 - `VITE_BUGZ_TREASURY_ADDRESS` only when the token manager should show optional treasury stats
 - `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` when the patrons leaderboard should use the Etherscan V2 holder API for Base. Generate it from the Etherscan API Dashboard at `https://etherscan.io/myapikey`; Etherscan documents `tokenholderlist` as a paid holder endpoint.
 - `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` when the patrons leaderboard should fall back to reconstructing holder balances from Transfer logs
@@ -24,21 +24,20 @@ Launcher values:
 - `BASE_RPC_URL`
 - `BUG_INDEX_DEPLOYER_PRIVATE_KEY`
 - `BUG_INDEX_OWNER`
-- `BUG_INDEX_INITIAL_REVIEWERS`
-- `BUGZ_DEPLOYER_PRIVATE_KEY` for token deployment
-- `BUGZ_INITIAL_HOLDER` if the 10,000,000 BUGZ supply should mint somewhere other than the deployer
+- `BUG_INDEX_INITIAL_BROKERS`
+- `BUG_INDEX_INITIAL_ADMINS`
+- `BUG_INDEX_INITIAL_SLASHERS`
 
 ## 2. Dry Run The Contract Build
 
 ```bash
 npm run launch:bug-index:dry-run
 npm run launch:bug-index:forge:dry-run
-npm run launch:token:dry-run
 ```
 
 This compiles the contracts, writes artifacts, refreshes the frontend ABI modules, and lets you simulate the Foundry deployment path without broadcasting.
 
-## 3. Deploy The Bug Index Contract To Base
+## 3. Deploy The CheapBugs Contract Suite To Base
 
 ```bash
 npm run launch:bug-index
@@ -50,9 +49,11 @@ Foundry-based launch:
 npm run launch:bug-index:forge
 ```
 
-The Forge launcher uses [script/LaunchBugIndex.s.sol](/home/pierce/projects/cheapbugs/script/LaunchBugIndex.s.sol) through [scripts/launch-bug-index-forge.sh](/home/pierce/projects/cheapbugs/scripts/launch-bug-index-forge.sh) and reads the same `BUG_INDEX_*` environment values.
+The Forge launcher uses [script/LaunchBugIndex.s.sol](script/LaunchBugIndex.s.sol) through [scripts/launch-bug-index-forge.sh](scripts/launch-bug-index-forge.sh) and reads the same `BUG_INDEX_*` environment values.
 
-The script prints the deployed contract address as:
+The script deploys and wires `CheapBugsTreasuryVault`, `CheapBugsBondVault`, and `CheapBugsBugIndex`. Vaults hardcode the live Base BUGZ token address.
+
+The script prints the deployed index address as:
 
 ```bash
 VITE_BUG_INDEX_ADDRESS=0x...
@@ -60,23 +61,7 @@ VITE_BUG_INDEX_ADDRESS=0x...
 
 Copy that value into `.env.local`.
 
-## 4. Optional Deploy The BUGZ Token To Base
-
-```bash
-npm run launch:token
-```
-
-The launcher deploys `CheapBugs Token` with symbol `BUGZ` and mints 10,000,000 tokens to `BUGZ_INITIAL_HOLDER` or the deployer if no holder override is set.
-
-It prints the deployed contract address as:
-
-```bash
-VITE_BUGZ_TOKEN_ADDRESS=0x...
-```
-
-Only copy that into `.env.local` when the frontend actually needs to reference the token.
-
-## 5. Register EAS Schemas On Base
+## 4. Register EAS Schemas On Base
 
 Required now:
 
@@ -100,7 +85,7 @@ The site outputs to `dist/`.
 
 ### GitHub Pages
 
-The repo now includes a GitHub Actions workflow at [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml).
+The repo now includes a GitHub Actions workflow at [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml).
 In GitHub repository settings, Pages should be configured to deploy from `GitHub Actions`, not from a branch.
 
 Recommended repository variables:
@@ -109,13 +94,13 @@ Recommended repository variables:
 - `VITE_REVIEW_VERDICT_SCHEMA_UID`
 - `VITE_PAYOUT_RECORD_SCHEMA_UID`
 - `VITE_REVIEWER_ADDRESSES`
-- any other `VITE_*` overrides you want from [.env.example](/home/pierce/projects/cheapbugs/.env.example)
+- any other `VITE_*` overrides you want from [.env.example](.env.example)
 
 The Pages workflow builds with:
 
 - `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain
 - `VITE_ROUTER_MODE=hash`
-- `.nojekyll` enabled through [public/.nojekyll](/home/pierce/projects/cheapbugs/public/.nojekyll)
+- `.nojekyll` enabled through [public/.nojekyll](public/.nojekyll)
 
 That combination keeps asset URLs correct at the domain root and avoids SPA route breakage on GitHub Pages.
 Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site should use a different Thirdweb client id.

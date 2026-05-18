@@ -3,12 +3,13 @@ pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 
-import { BondVault } from "../contracts/BondVault.sol";
-import { CheapBugsBugIndex, IBondVault, ITreasuryVault } from "../contracts/CheapBugsBugIndex.sol";
-import { TreasuryVault } from "../contracts/TreasuryVault.sol";
+import { CheapBugsBondVault } from "../contracts/CheapBugsBondVault.sol";
+import { CheapBugsBugIndex, ICheapBugsBondVault, ICheapBugsTreasuryVault } from "../contracts/CheapBugsBugIndex.sol";
+import { CheapBugsTreasuryVault } from "../contracts/CheapBugsTreasuryVault.sol";
 import { MockBugzToken } from "./MockBugzToken.sol";
 
 contract CheapBugsBugIndexTest is Test {
+    address internal constant BUGZ_TOKEN_ADDRESS = 0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07;
     uint256 internal constant BUGZ = 1e18;
 
     uint256 internal reporterKey = 0xA11CE;
@@ -21,15 +22,15 @@ contract CheapBugsBugIndexTest is Test {
     address internal voter = makeAddr("voter");
 
     MockBugzToken internal token;
-    TreasuryVault internal treasury;
-    BondVault internal bondVault;
+    CheapBugsTreasuryVault internal treasury;
+    CheapBugsBondVault internal bondVault;
     CheapBugsBugIndex internal index;
 
     function setUp() public {
         reporter = vm.addr(reporterKey);
-        token = new MockBugzToken();
-        treasury = new TreasuryVault(token, owner);
-        bondVault = new BondVault(token, address(treasury), owner);
+        token = _installMockBugzToken();
+        treasury = new CheapBugsTreasuryVault(owner);
+        bondVault = new CheapBugsBondVault(address(treasury), owner);
 
         address[] memory initialBrokers = new address[](1);
         initialBrokers[0] = broker;
@@ -37,8 +38,8 @@ contract CheapBugsBugIndexTest is Test {
         initialAdmins[0] = admin;
         index = new CheapBugsBugIndex(
             owner,
-            IBondVault(address(bondVault)),
-            ITreasuryVault(address(treasury)),
+            ICheapBugsBondVault(address(bondVault)),
+            ICheapBugsTreasuryVault(address(treasury)),
             initialBrokers,
             initialAdmins
         );
@@ -84,6 +85,60 @@ contract CheapBugsBugIndexTest is Test {
         assertEq(latest[0], input.reportHash);
     }
 
+    function test_constructorAndOwnerSettersRejectBadInputsAndUnauthorizedCalls() public {
+        address[] memory empty = new address[](0);
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidAddress.selector);
+        new CheapBugsBugIndex(
+            owner,
+            ICheapBugsBondVault(address(0)),
+            ICheapBugsTreasuryVault(address(treasury)),
+            empty,
+            empty
+        );
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidAddress.selector);
+        new CheapBugsBugIndex(
+            owner,
+            ICheapBugsBondVault(address(bondVault)),
+            ICheapBugsTreasuryVault(address(0)),
+            empty,
+            empty
+        );
+
+        vm.expectRevert();
+        vm.prank(outsider);
+        index.setBroker(outsider, true);
+
+        vm.expectRevert();
+        vm.prank(outsider);
+        index.setAdmin(outsider, true);
+
+        vm.expectRevert();
+        vm.prank(outsider);
+        index.setBondVault(ICheapBugsBondVault(address(bondVault)));
+
+        vm.expectRevert();
+        vm.prank(outsider);
+        index.setTreasuryVault(ICheapBugsTreasuryVault(address(treasury)));
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidAddress.selector);
+        vm.prank(owner);
+        index.setBondVault(ICheapBugsBondVault(address(0)));
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidAddress.selector);
+        vm.prank(owner);
+        index.setTreasuryVault(ICheapBugsTreasuryVault(address(0)));
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidAddress.selector);
+        vm.prank(owner);
+        index.setBroker(address(0), true);
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidAddress.selector);
+        vm.prank(owner);
+        index.setAdmin(address(0), true);
+    }
+
     function test_publishBugRejectsNonBroker() public {
         CheapBugsBugIndex.BugInput memory input =
             _bugInput("non-broker", keccak256("details-key"), uint64(block.timestamp + 7 days));
@@ -105,6 +160,55 @@ contract CheapBugsBugIndexTest is Test {
         vm.expectRevert();
         vm.prank(brokerTwo);
         index.publishBug(input, 0, uint64(block.timestamp + 1 days), signature);
+    }
+
+    function test_publishBugRejectsWrongReporterSignatureAndDuplicateReportHash() public {
+        CheapBugsBugIndex.BugInput memory input =
+            _bugInput("wrong-signer", keccak256("details-key"), uint64(block.timestamp + 7 days));
+        uint64 deadline = uint64(block.timestamp + 1 days);
+        bytes32 digest = index.publishBugDigest(input, 0, deadline, broker);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(0xB0B), digest);
+        bytes memory wrongSignature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert();
+        vm.prank(broker);
+        index.publishBug(input, 0, deadline, wrongSignature);
+
+        bytes memory signature = _sign(input, 0, deadline, broker);
+        vm.prank(broker);
+        index.publishBug(input, 0, deadline, signature);
+
+        bytes memory duplicateSignature = _sign(input, 1, deadline, broker);
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.SubmissionExists.selector, input.reportHash));
+        vm.prank(broker);
+        index.publishBug(input, 1, deadline, duplicateSignature);
+    }
+
+    function test_publishBugRejectsInvalidRequiredFieldsAfterValidSignature() public {
+        CheapBugsBugIndex.BugInput memory input =
+            _bugInput("invalid-field", keccak256("details-key"), uint64(block.timestamp + 7 days));
+        input.reportHash = bytes32(0);
+        uint64 deadline = uint64(block.timestamp + 1 days);
+        bytes memory signature = _sign(input, 0, deadline, broker);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.InvalidField.selector, "reportHash"));
+        vm.prank(broker);
+        index.publishBug(input, 0, deadline, signature);
+    }
+
+    function test_publishBugSignatureDoesNotBindBrokerProducedCidButDoesBindBundleHash() public {
+        CheapBugsBugIndex.BugInput memory input =
+            _bugInput("cid-supplied-after-signature", keccak256("details-key"), uint64(block.timestamp + 7 days));
+        uint64 deadline = uint64(block.timestamp + 1 days);
+        bytes memory signature = _sign(input, 0, deadline, broker);
+        input.bugBundleCid = "ipfs://broker-produced-cid";
+
+        vm.prank(broker);
+        index.publishBug(input, 0, deadline, signature);
+
+        CheapBugsBugIndex.Bug memory stored = index.getReport(input.reportHash);
+        assertEq(stored.encryptedPayloadCid, "ipfs://broker-produced-cid");
+        assertEq(stored.bugBundleHash, input.bugBundleHash);
     }
 
     function test_publishBugRejectsExpiredSignature() public {
@@ -163,6 +267,12 @@ contract CheapBugsBugIndexTest is Test {
         );
         vm.prank(admin);
         index.flagBug(reportHash, CheapBugsBugIndex.BugStatus.Unreviewed);
+    }
+
+    function test_flagBugRejectsMissingBug() public {
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.MissingBug.selector, keccak256("missing")));
+        vm.prank(admin);
+        index.flagBug(keccak256("missing"), CheapBugsBugIndex.BugStatus.Valid);
     }
 
     function test_ownerCanAddAndRemoveBrokersAndAdmins() public {
@@ -256,6 +366,26 @@ contract CheapBugsBugIndexTest is Test {
         index.submitBondVote(reportHash, true);
     }
 
+    function test_voteRejectsMissingBugAndClosesAfterPayout() public {
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.MissingBug.selector, keccak256("missing")));
+        vm.prank(voter);
+        index.submitBondVote(keccak256("missing"), true);
+
+        bytes32 detailsKey = keccak256("details-key");
+        bytes32 reportHash = _publish("vote-after-payout", detailsKey);
+        _bond(voter, 100 * BUGZ);
+        _fundTreasury(10_000 * BUGZ);
+        vm.prank(admin);
+        index.flagBug(reportHash, CheapBugsBugIndex.BugStatus.Valid);
+        vm.warp(index.getReport(reportHash).revealAfter);
+        vm.prank(broker);
+        index.completePayout(reportHash, 1, detailsKey);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.VotingClosed.selector, reportHash));
+        vm.prank(voter);
+        index.submitBondVote(reportHash, true);
+    }
+
     function test_revealDetailsKeyRequiresSevenDaysAndMatchingCommitment() public {
         bytes32 detailsKey = keccak256("details-key");
         bytes32 reportHash = _publish("reveal", detailsKey);
@@ -276,6 +406,27 @@ contract CheapBugsBugIndexTest is Test {
         CheapBugsBugIndex.Bug memory stored = index.getReport(reportHash);
         assertTrue(stored.detailsKeyRevealed);
         assertEq(stored.detailsKey, detailsKey);
+
+        vm.prank(broker);
+        index.revealDetailsKey(reportHash, detailsKey);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.DetailKeyAlreadyRevealed.selector, reportHash));
+        vm.prank(broker);
+        index.revealDetailsKey(reportHash, keccak256("another-wrong-key"));
+    }
+
+    function test_revealDetailsKeyRejectsMissingBugAndNonBroker() public {
+        bytes32 detailsKey = keccak256("details-key");
+        bytes32 reportHash = _publish("reveal-role", detailsKey);
+        vm.warp(index.getReport(reportHash).revealAfter);
+
+        vm.expectRevert(CheapBugsBugIndex.NotBroker.selector);
+        vm.prank(outsider);
+        index.revealDetailsKey(reportHash, detailsKey);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.MissingBug.selector, keccak256("missing")));
+        vm.prank(broker);
+        index.revealDetailsKey(keccak256("missing"), detailsKey);
     }
 
     function test_completePayoutEnforcesOrderRevealAdminStatusAndTreasuryPayment() public {
@@ -304,7 +455,7 @@ contract CheapBugsBugIndexTest is Test {
         index.completePayout(first, 3, firstKey);
 
         vm.warp(index.getReport(first).revealAfter);
-        uint256 expectedFirstPayout = (token.balanceOf(address(treasury)) / 1_000) * 3;
+        uint256 expectedFirstPayout = (token.balanceOf(address(treasury)) * 3) / 1_000;
 
         vm.prank(broker);
         index.completePayout(first, 3, firstKey);
@@ -341,6 +492,48 @@ contract CheapBugsBugIndexTest is Test {
         vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.PayoutRequiresAdminStatus.selector, reportHash));
         vm.prank(broker);
         index.completePayout(reportHash, 0, detailsKey);
+    }
+
+    function test_completePayoutRejectsNonBrokerBadMultiplierMissingBugAndTreasuryBrokerRemoval() public {
+        bytes32 detailsKey = keccak256("details-key");
+        bytes32 reportHash = _publish("payout-guards", detailsKey);
+        _fundTreasury(100_000 * BUGZ);
+        vm.prank(admin);
+        index.flagBug(reportHash, CheapBugsBugIndex.BugStatus.Valid);
+        vm.warp(index.getReport(reportHash).revealAfter);
+
+        vm.expectRevert(CheapBugsBugIndex.NotBroker.selector);
+        vm.prank(outsider);
+        index.completePayout(reportHash, 1, detailsKey);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.InvalidPayoutMultiplier.selector, uint8(11)));
+        vm.prank(broker);
+        index.completePayout(reportHash, 11, detailsKey);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.MissingBug.selector, keccak256("missing")));
+        vm.prank(broker);
+        index.completePayout(keccak256("missing"), 1, detailsKey);
+
+        vm.prank(owner);
+        treasury.setBroker(broker, false);
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsTreasuryVault.NotBroker.selector, broker));
+        vm.prank(broker);
+        index.completePayout(reportHash, 1, detailsKey);
+    }
+
+    function test_completePayoutRejectsRepeatAfterAllPayoutsAreComplete() public {
+        bytes32 detailsKey = keccak256("details-key");
+        bytes32 reportHash = _publish("already-paid", detailsKey);
+        _fundTreasury(100_000 * BUGZ);
+        vm.prank(admin);
+        index.flagBug(reportHash, CheapBugsBugIndex.BugStatus.Valid);
+        vm.warp(index.getReport(reportHash).revealAfter);
+        vm.prank(broker);
+        index.completePayout(reportHash, 1, detailsKey);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.MissingBug.selector, reportHash));
+        vm.prank(broker);
+        index.completePayout(reportHash, 1, detailsKey);
     }
 
     function testFuzz_publishRejectsRevealWindowBeforeSevenDays(uint64 offset) public {
@@ -382,7 +575,7 @@ contract CheapBugsBugIndexTest is Test {
         index.flagBug(reportHash, CheapBugsBugIndex.BugStatus.Valid);
 
         vm.warp(index.getReport(reportHash).revealAfter);
-        uint256 expected = (token.balanceOf(address(treasury)) / 1_000) * multiplier;
+        uint256 expected = (token.balanceOf(address(treasury)) * multiplier) / 1_000;
 
         vm.prank(broker);
         index.completePayout(reportHash, multiplier, detailsKey);
@@ -444,6 +637,20 @@ contract CheapBugsBugIndexTest is Test {
         token.approve(address(bondVault), amount);
         bondVault.bond(amount);
         vm.stopPrank();
+    }
+
+    function _fundTreasury(uint256 amount) internal {
+        token.mint(owner, amount);
+        vm.startPrank(owner);
+        token.approve(address(treasury), amount);
+        treasury.deposit(amount);
+        vm.stopPrank();
+    }
+
+    function _installMockBugzToken() internal returns (MockBugzToken) {
+        MockBugzToken implementation = new MockBugzToken();
+        vm.etch(BUGZ_TOKEN_ADDRESS, address(implementation).code);
+        return MockBugzToken(BUGZ_TOKEN_ADDRESS);
     }
 
     function _log10(uint256 value) internal pure returns (uint256 level) {

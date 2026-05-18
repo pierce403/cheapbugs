@@ -41,6 +41,7 @@ SUBMISSION_ALLOWED_KEYS = {
     "disclosure_mode",
     "tags",
     "bug_bundle",
+    "publish_authorization",
     "details_key",
     "client",
 }
@@ -56,6 +57,7 @@ SUBMISSION_REQUIRED_KEYS = {
     "severity",
     "target_interest",
     "bug_bundle",
+    "publish_authorization",
     "details_key",
 }
 CLIENT_ALLOWED_KEYS = {"name", "sent_at"}
@@ -167,6 +169,13 @@ def _strict_bug_bundle(data: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+def _strict_publish_authorization(data: dict[str, Any]) -> dict[str, Any]:
+    value = data.get("publish_authorization")
+    if not isinstance(value, dict):
+        raise CommandError("Field publish_authorization must be an object.")
+    return value
+
+
 def _strict_details_key(data: dict[str, Any]) -> str:
     value = _strict_string(data, "details_key", max_length=80)
     if not B64URL_32_RE.match(value):
@@ -209,6 +218,7 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
         raise CommandError(f"Unexpected submission field(s): {', '.join(unknown_keys)}.")
     _validate_optional_client(data)
     bug_bundle = _strict_bug_bundle(data)
+    publish_authorization = _strict_publish_authorization(data)
     details_key_b64 = _strict_details_key(data)
 
     schema = _strict_string(data, "schema", max_length=80)
@@ -259,6 +269,7 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
         disclosure_mode=disclosure_mode,
         tags=tags,
         bug_bundle=bug_bundle,
+        publish_authorization=publish_authorization,
         details_key_b64=details_key_b64,
     )
 
@@ -353,8 +364,9 @@ def command_help() -> str:
         '  "severity": "high",\n'
         '  "target_interest": "medium",\n'
         '  "bug_bundle": {"schema": "cheapbugs.bug_bundle.v1", "...": "..."},\n'
+        '  "publish_authorization": {"scheme": "eip712_publish_bug_v1", "...": "..."},\n'
         '  "details_key": "base64url 32-byte key"\n'
         "}\n\n"
-        "The broker verifies the signed encrypted BugBundle before pinning it. "
+        "The broker verifies the encrypted BugBundle and reporter EIP-712 publish authorization before pinning it. "
         "Signal access requests may still use !access with wallet and signal fields."
     )

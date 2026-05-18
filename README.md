@@ -103,22 +103,15 @@ cp .env.example .env.local
 
 ```bash
 npm run launch:bug-index:dry-run
-npm run launch:token:dry-run
 npm run launch:bug-index:forge:dry-run
 npm run contracts:test
 npm run test:e2e
 ```
 
-5. Deploy the Base bug index contract when ready:
+5. Deploy the Base CheapBugs contract suite when ready:
 
 ```bash
 npm run launch:bug-index
-```
-
-Optional extension-token deployment for local experiments:
-
-```bash
-npm run launch:token
 ```
 
 6. Start the app:
@@ -141,23 +134,24 @@ Set these repository variables before relying on the Pages deploy:
 
 - `VITE_BUG_INDEX_ADDRESS` when the Base bug index is deployed
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` when the verdict schema is registered
-- optional chain and storage overrides from [.env.example](/home/pierce/projects/cheapbugs/.env.example)
+- optional chain and storage overrides from [.env.example](.env.example)
 
-The workflow lives at [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml).
+The workflow lives at [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml).
 It builds with `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain and `hash` routing so GitHub Pages can serve SPA routes without a custom origin server.
 Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site should use a different Thirdweb client id.
 
 ## How Reports Work
 
 1. A reporter connects through Thirdweb with an injected browser wallet, scans a WalletConnect QR code, or uses a site-local XMTP wallet.
-2. The browser builds `SubmissionPrivate` and `SubmissionPublic`.
-3. `SubmissionPrivate` is encrypted locally in the browser.
-4. The encrypted private dossier is uploaded to IPFS through the configured storage provider.
-5. The public-safe report record is written onchain to `CheapBugsBugIndex` on Base.
-6. Reviewers publish verdicts as EAS onchain attestations on Base.
-7. The frontend reads the bug index contract for reports and the EAS GraphQL API for verdicts.
+2. The browser encrypts private details into a `cheapbugs.bug_bundle.v1`.
+3. The reporter signs a `PublishBug` EIP-712 authorization over the bundle hash and report commitments.
+4. The browser sends the encrypted bundle, publish authorization, and out-of-bundle details key to the broker over XMTP.
+5. The broker verifies the authorization and pins the encrypted bundle to IPFS.
+6. The public-safe report record can be written onchain to `CheapBugsBugIndex` on Base by the authorized broker.
+7. Reviewers publish verdicts as EAS onchain attestations on Base.
+8. The frontend reads the bug index contract for reports and the EAS GraphQL API for verdicts.
 
-By default, the submit route sends a minimal strict JSON XMTP DM to the broker wallet. The broker validates the JSON shape, any provided target reference, BUGZ submission balance, and local reputation blocklist, then relays that message to Signal, records the Signal message timestamp in SQLite, counts active Signal emoji reactions after the configured review window, and transfers BUGZ to the reporter wallet.
+By default, the submit route sends a minimal strict JSON XMTP DM to the broker wallet. The broker validates the JSON shape, publish authorization, target reference, BUGZ submission balance, and local reputation blocklist, then pins the encrypted bundle to IPFS and records the submission. The older direct broker-wallet reward adapter still exists, but the contract direction is ordered payouts through `CheapBugsTreasuryVault`.
 
 ## Environment Notes
 
@@ -168,53 +162,49 @@ By default, the submit route sends a minimal strict JSON XMTP DM to the broker w
 - Without a Pinata presign endpoint, the default IPFS gateway provider can read existing IPFS JSON but cannot upload new legacy onchain dossiers.
 - ENS identity lookups use Ethereum mainnet RPC and can be overridden with `VITE_ENS_RPC_URL`.
 - Site-generated XMTP wallets are stored locally in the browser under `cheapbugs.localXmtpIdentity.v1`; users must keep the copied recovery key if that wallet will hold BUGZ.
-- Base-specific values are isolated in [src/config/chains.ts](/home/pierce/projects/cheapbugs/src/config/chains.ts) and [src/config/env.ts](/home/pierce/projects/cheapbugs/src/config/env.ts).
+- Base-specific values are isolated in [src/config/chains.ts](src/config/chains.ts) and [src/config/env.ts](src/config/env.ts).
 
 ## Contract Launchers
 
-The launcher scripts are [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs) and [scripts/launch-token.mjs](/home/pierce/projects/cheapbugs/scripts/launch-token.mjs).
+The launcher script is [scripts/launch-bug-index.mjs](scripts/launch-bug-index.mjs).
 
-For Solidity-native deployment and testing, the repo also includes [foundry.toml](/home/pierce/projects/cheapbugs/foundry.toml), [script/LaunchBugIndex.s.sol](/home/pierce/projects/cheapbugs/script/LaunchBugIndex.s.sol), and [test/CheapBugsBugIndex.t.sol](/home/pierce/projects/cheapbugs/test/CheapBugsBugIndex.t.sol).
+For Solidity-native deployment and testing, the repo also includes [foundry.toml](foundry.toml), [script/LaunchBugIndex.s.sol](script/LaunchBugIndex.s.sol), and [test/CheapBugsBugIndex.t.sol](test/CheapBugsBugIndex.t.sol).
 
-The bug index launcher:
+The CheapBugs contract launcher:
 
-- compiles [contracts/CheapBugsBugIndex.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsBugIndex.sol)
+- compiles [contracts/CheapBugsBugIndex.sol](contracts/CheapBugsBugIndex.sol)
+- compiles [contracts/CheapBugsBondVault.sol](contracts/CheapBugsBondVault.sol)
+- compiles [contracts/CheapBugsTreasuryVault.sol](contracts/CheapBugsTreasuryVault.sol)
 - writes `artifacts/CheapBugsBugIndex.json`
-- refreshes [src/contracts/bugIndexAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndexAbi.ts) so the frontend ABI stays aligned with the deployed contract
-- the contract now also exposes reviewer-only `submitReviewVote` and vote query helpers so Foundry tests can cover report-rating scenarios onchain
-
-The token launcher deploys the repo's standalone ERC20 extension contract. The live production BUGZ token is the Clanker-deployed Base token above.
-
-The token launcher:
-
-- compiles [contracts/CheapBugsToken.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsToken.sol)
-- writes `artifacts/CheapBugsToken.json`
-- refreshes [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
-- deploys `CheapBugs Token` with symbol `BUGZ` and an initial supply of 10,000,000 tokens minted to `BUGZ_INITIAL_HOLDER` or the deployer by default
+- writes `artifacts/CheapBugsBondVault.json`
+- writes `artifacts/CheapBugsTreasuryVault.json`
+- refreshes [src/contracts/bugIndexAbi.ts](src/contracts/bugIndexAbi.ts) so the frontend ABI stays aligned with the deployed contract
+- deploys and wires the bond vault, treasury vault, and index together
+- uses the live Base BUGZ token address hardcoded in the vault contracts
 
 ## Key Paths
 
-- [contracts/CheapBugsBugIndex.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsBugIndex.sol)
-- [contracts/CheapBugsToken.sol](/home/pierce/projects/cheapbugs/contracts/CheapBugsToken.sol)
-- [scripts/launch-bug-index.mjs](/home/pierce/projects/cheapbugs/scripts/launch-bug-index.mjs)
-- [scripts/launch-token.mjs](/home/pierce/projects/cheapbugs/scripts/launch-token.mjs)
-- [scripts/launch-bug-index-forge.sh](/home/pierce/projects/cheapbugs/scripts/launch-bug-index-forge.sh)
-- [script/LaunchBugIndex.s.sol](/home/pierce/projects/cheapbugs/script/LaunchBugIndex.s.sol)
-- [test/CheapBugsBugIndex.t.sol](/home/pierce/projects/cheapbugs/test/CheapBugsBugIndex.t.sol)
-- [src/contracts/bugIndex.ts](/home/pierce/projects/cheapbugs/src/contracts/bugIndex.ts)
-- [src/contracts/bugzTokenAbi.ts](/home/pierce/projects/cheapbugs/src/contracts/bugzTokenAbi.ts)
-- [src/auth/thirdweb.ts](/home/pierce/projects/cheapbugs/src/auth/thirdweb.ts)
-- [src/auth/localIdentity.ts](/home/pierce/projects/cheapbugs/src/auth/localIdentity.ts)
-- [FEATURES.md](/home/pierce/projects/cheapbugs/FEATURES.md)
-- [src/xmtp/browser.ts](/home/pierce/projects/cheapbugs/src/xmtp/browser.ts)
-- [src/xmtp/broker.ts](/home/pierce/projects/cheapbugs/src/xmtp/broker.ts)
-- [scripts/broker-bot.py](/home/pierce/projects/cheapbugs/scripts/broker-bot.py)
-- [bots/cheapbugs_broker/](/home/pierce/projects/cheapbugs/bots/cheapbugs_broker)
-- [src/storage/gateway.ts](/home/pierce/projects/cheapbugs/src/storage/gateway.ts)
-- [src/storage/pinata.ts](/home/pierce/projects/cheapbugs/src/storage/pinata.ts)
-- [src/attest/eas.ts](/home/pierce/projects/cheapbugs/src/attest/eas.ts)
-- [src/lib/reports.ts](/home/pierce/projects/cheapbugs/src/lib/reports.ts)
-- [.github/workflows/deploy-pages.yml](/home/pierce/projects/cheapbugs/.github/workflows/deploy-pages.yml)
+- [contracts/CheapBugsBugIndex.sol](contracts/CheapBugsBugIndex.sol)
+- [contracts/CheapBugsBondVault.sol](contracts/CheapBugsBondVault.sol)
+- [contracts/CheapBugsTreasuryVault.sol](contracts/CheapBugsTreasuryVault.sol)
+- [scripts/launch-bug-index.mjs](scripts/launch-bug-index.mjs)
+- [scripts/launch-bug-index-forge.sh](scripts/launch-bug-index-forge.sh)
+- [script/LaunchBugIndex.s.sol](script/LaunchBugIndex.s.sol)
+- [test/CheapBugsBugIndex.t.sol](test/CheapBugsBugIndex.t.sol)
+- [src/contracts/bugIndex.ts](src/contracts/bugIndex.ts)
+- [src/contracts/bugzTokenAbi.ts](src/contracts/bugzTokenAbi.ts)
+- [src/auth/thirdweb.ts](src/auth/thirdweb.ts)
+- [src/auth/localIdentity.ts](src/auth/localIdentity.ts)
+- [FEATURES.md](FEATURES.md)
+- [src/xmtp/browser.ts](src/xmtp/browser.ts)
+- [src/xmtp/broker.ts](src/xmtp/broker.ts)
+- [scripts/broker-bot.py](scripts/broker-bot.py)
+- [bots/cheapbugs_broker/](bots/cheapbugs_broker)
+- [src/storage/gateway.ts](src/storage/gateway.ts)
+- [src/storage/pinata.ts](src/storage/pinata.ts)
+- [src/attest/eas.ts](src/attest/eas.ts)
+- [src/lib/reports.ts](src/lib/reports.ts)
+- [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml)
 
 ## References
 

@@ -15,9 +15,7 @@
     "launch:bug-index": "node scripts/launch-bug-index.mjs",
     "launch:bug-index:dry-run": "node scripts/launch-bug-index.mjs --dry-run",
     "launch:bug-index:forge": "bash scripts/launch-bug-index-forge.sh --broadcast",
-    "launch:bug-index:forge:dry-run": "bash scripts/launch-bug-index-forge.sh",
-    "launch:token": "node scripts/launch-token.mjs",
-    "launch:token:dry-run": "node scripts/launch-token.mjs --dry-run"
+    "launch:bug-index:forge:dry-run": "bash scripts/launch-bug-index-forge.sh"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.6.1",

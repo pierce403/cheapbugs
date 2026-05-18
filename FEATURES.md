@@ -11,7 +11,7 @@ CheapBugs is a static Vite + TypeScript application with Solidity contracts, Nod
 ```text
 cheapbugs/
 ├── bots/                   # Python broker bot package and tests
-├── contracts/              # Solidity bug index, bond vault, treasury vault, and BUGZ extension contracts
+├── contracts/              # Solidity bug index, bond vault, and treasury vault contracts
 ├── script/                 # Foundry deployment scripts
 ├── scripts/                # Deployment, XMTP, and maintenance scripts
 ├── test/                   # Foundry contract tests
@@ -41,11 +41,11 @@ cheapbugs/
 
 - The hosted app is static assets from `dist/`; do not add SSR or an app-owned backend database.
 - Public-safe report metadata is stored on Base in `CheapBugsBugIndex`, which now accepts broker-published records only when backed by a reporter EIP-712 signature.
-- BUGZ bonds are held in `BondVault`; pending withdrawals remain slashable through the 7-day delay.
-- Detail-key purchases and ordered broker rewards settle through `TreasuryVault`.
-- Sensitive dossier content must be encrypted in the browser before IPFS upload on the legacy path.
-- XMTP broker submissions are private XMTP DMs to the broker; the browser now builds and signs an encrypted `BugBundle`, sends the out-of-bundle reveal key to the broker, and the broker verifies then pins the bundle through a local Kubo IPFS node.
-- The remaining broker publishing path work is browser/broker wiring for the contract-side EIP-712 relay and post-window details-key reveal through the bug index.
+- BUGZ bonds are held in `CheapBugsBondVault`; pending withdrawals remain slashable through the 7-day delay.
+- Detail-key purchases and ordered broker rewards settle through `CheapBugsTreasuryVault`.
+- The vaults hardcode the live Base BUGZ token address `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`; this repo no longer deploys a BUGZ token contract.
+- XMTP broker submissions are private XMTP DMs to the broker; the browser builds an encrypted `BugBundle`, signs a contract-verifiable EIP-712 `PublishBug` authorization, sends the out-of-bundle reveal key to the broker, and the broker verifies then pins the bundle through a local Kubo IPFS node.
+- The remaining broker publishing path work is the broker transaction that calls `CheapBugsBugIndex.publishBug` after IPFS pinning and later reveals the details key through the bug index.
 - Reviewer verdicts are EAS attestations on Base and are read through EAS GraphQL.
 - The Python broker is an optional off-static runtime with SQLite state; it does not change the frontend deployment model.
 
@@ -79,10 +79,10 @@ cheapbugs/
   - [x] Playwright covers ENS-backed profile modal behavior, avatar URL handling, local ENS cache reuse, and manual ENS refresh.
   - [x] `npm run build` catches Thirdweb/XMTP integration type drift.
 
-### Bond Vault
+### CheapBugs Bond Vault
 
 - **Stability**: in-progress
-- **Description**: `BondVault` escrows BUGZ bonds used for CheapBugs reputation and weighted bug voting.
+- **Description**: `CheapBugsBondVault` escrows live Base BUGZ bonds used for CheapBugs reputation and weighted bug voting.
 - **Properties**:
   - Users bond BUGZ with `bond(amount)`.
   - Withdrawals are two-step: `requestWithdrawal(amount)` moves active bond into pending withdrawal, then `withdraw()` releases it only after 7 days.
@@ -97,10 +97,10 @@ cheapbugs/
   - [x] Forge fuzz tests cover level math and percentage slash accounting.
   - [x] Forge invariant tests prove the vault's BUGZ balance equals the listed active-plus-pending bond exposure across randomized bond, withdrawal, cancellation, and slash sequences.
 
-### Treasury Vault
+### CheapBugs Treasury Vault
 
 - **Stability**: in-progress
-- **Description**: `TreasuryVault` holds BUGZ treasury funds, records detail-key purchases, and pays reporter rewards when called by the index.
+- **Description**: `CheapBugsTreasuryVault` holds live Base BUGZ treasury funds, records detail-key purchases, and pays reporter rewards when called by the index.
 - **Properties**:
   - Users can deposit BUGZ into the treasury and buy detail-key access with `purchaseDetailKey(reportHash, amount)`.
   - Detail-key purchases transfer BUGZ into the treasury, update `detailKeyPayments(reportHash, buyer)`, and append enumerable purchase records for broker verification.
@@ -120,37 +120,35 @@ cheapbugs/
 - **Description**: `CheapBugsBugIndex` stores broker-published, reporter-signed bug records; coordinates details-key reveal, bonded voting, admin status guidance, and ordered payouts.
 - **Properties**:
   - Only owner-authorized brokers can publish bugs.
-  - Published records require a reporter EIP-712 signature over the report fields, broker address, nonce, deadline, BugBundle CID/hash, encrypted details hash, details-key commitment, and reveal time.
+  - Published records require a reporter EIP-712 signature over the report fields, broker address, nonce, deadline, BugBundle hash, encrypted details hash, details-key commitment, and reveal time. The broker-produced IPFS CID is stored but is not in the signature because it is known only after pinning.
   - Reporter nonces are one-time use, signatures expire at their deadline, and signatures bind the broker and index domain.
   - The index requires `revealAfter` to be at least 7 days after onchain publication.
   - Public records include report hash, report id, reporter, created time, disclosure mode, public summary, BugBundle CID, target kind, target hash, tags, content hash, BugBundle hash, encrypted details hash, details-key commitment, reveal status, admin status, and payout state.
   - The stored details-key commitment is SHA-256 over the raw 32-byte key. Brokers reveal the raw `bytes32` key after the 7-day window.
   - Owner-managed admins can flag bugs as `Valid`, `Invalid`, or `Spam`; payout completion requires an admin status.
-  - Bonded users can vote up or down before the reveal window closes. Vote weight is snapshotted at vote time from `BondVault.getLevel(voter)`.
+  - Bonded users can vote up or down before the reveal window closes. Vote weight is snapshotted at vote time from `CheapBugsBondVault.getLevel(voter)`.
   - Bug payouts must be completed in report order. Only an authorized broker can complete payout, and invalid or spam bugs require a zero multiplier.
-  - On payout completion, the index reveals the details key if needed, calls `TreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
+  - On payout completion, the index reveals the details key if needed, calls `CheapBugsTreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
-  - Direct browser-to-index submission is disabled; `src/contracts/bugIndex.ts` keeps read helpers but rejects legacy direct writes.
-  - Launcher scripts refresh frontend ABI files after compilation and now require bond-vault and treasury-vault addresses for real index deployment.
+  - Direct browser-to-index submission is disabled; `src/contracts/bugIndex.ts` keeps read helpers and exposes no direct write helper.
+  - Launcher scripts refresh frontend ABI files after compilation and deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together.
 - **Test Criteria**:
   - [x] `npm run contracts:build` compiles Solidity contracts.
-  - [x] `npm run contracts:test` covers broker publication, reporter signatures, nonce replay, deadline expiry, reveal timing, details-key commitment checks, admin status, bonded voting, ordered payouts, zero-payout invalid bugs, and treasury transfer integration.
+  - [x] `npm run contracts:test` covers broker publication, reporter signatures, nonce replay, deadline expiry, reveal timing, details-key commitment checks, admin status, bonded voting, ordered payouts, zero-payout invalid bugs, treasury broker removal, role abuse, and treasury transfer integration.
   - [x] Forge fuzz tests cover reveal-window rejection, bonded-vote weight math, and payout multiplier math.
   - [x] `npm run launch:bug-index:dry-run` validates the Node launcher and frontend ABI refresh.
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
 
-### Legacy Encrypted IPFS Submission Path
+### Removed Direct Submission Path
 
-- **Stability**: in-progress
-- **Description**: Browser builds `SubmissionPrivate` and `SubmissionPublic`, encrypts private dossier JSON, uploads it through a storage provider, and files the public record onchain.
+- **Stability**: removed
+- **Description**: The old browser path that encrypted private dossier JSON, uploaded it directly, and attempted a browser-to-index write has been removed from the active API surface.
 - **Properties**:
-  - Private dossier content is encrypted before leaving the browser.
-  - Pinata credentials never enter browser code; Pinata uploads require presigned URLs.
-  - The default IPFS gateway provider can read JSON but cannot upload.
-  - All IPFS content is untrusted input.
+  - Direct browser-to-index writes are not exposed from `src/contracts/bugIndex.ts`.
+  - New submissions must go through the XMTP broker flow with a reporter EIP-712 `PublishBug` authorization.
+  - Storage helpers remain for reading existing encrypted content and writing review notes, but not for direct bug-index submission.
 - **Test Criteria**:
-  - [x] `npm run build` type-checks storage and crypto paths.
-  - [ ] Add browser coverage for a mocked encrypted submission once the legacy path becomes primary again.
+  - [x] `npm run build` type-checks the removed write surface.
 
 ### XMTP Broker Submission
 
@@ -161,36 +159,36 @@ cheapbugs/
   - The frontend form collects bug type, severity, target interest, title, public summary, and private details. Repro steps, evidence, Signal recipient, contact hints, target kind/reference fields, tags, and review access keys are intentionally not user-facing.
   - Bug type is a malleable broker-triage hint with current values `0day`, `nday`, `web`, `net`, and `intel`.
   - Severity and target interest are malleable broker-triage hints with current slider values `low`, `medium`, `high`, and `critical`.
-  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, broker-triage target defaults, client metadata, a signed encrypted `bug_bundle`, and an out-of-bundle `details_key`.
-  - The frontend generates the random details key, encrypts details into the BugBundle with AES-256-GCM, and attaches an EIP-191 `eip191_bugbundle_core_v1` signature over the canonical BugBundle core before sending the XMTP DM. This gives the broker a reporter-verifiable signed bundle to pin, but it is not yet the EIP-712 signature required by `CheapBugsBugIndex.publishBug`.
+  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, broker-triage target defaults, client metadata, an encrypted `bug_bundle`, a reporter EIP-712 `publish_authorization`, and an out-of-bundle `details_key`.
+  - The frontend generates the random details key, encrypts details into the BugBundle with AES-256-GCM, hashes the canonical BugBundle core, and signs the `PublishBug` EIP-712 message that the index verifies.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
   - The submit route shows a processing-submission modal while broker XMTP submission work is in progress, keeps it open across broker status replies, and only marks the submission complete after the broker confirms the BugBundle is pinned to IPFS.
-  - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve either XMTP registration or the BugBundle authorization signature.
+  - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve either XMTP registration or the `PublishBug` authorization signature.
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
   - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.
-  - The broker verifies the signed BugBundle before pinning: schema, fields, reporter/broker/chain/index binding, signature recovery, key commitment, encrypted details hash, AAD, and successful details decryption.
-  - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid or missing BugBundle signatures, invalid provided target references, and invalid reporter credentials.
-  - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, BugBundle signature/details valid, target valid, credentials valid.
+  - The broker verifies the BugBundle and publish authorization before pinning: schema, fields, reporter/broker/chain/index binding, EIP-712 signature recovery, key commitment, encrypted details hash, AAD, and successful details decryption.
+  - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid or missing publish authorizations, invalid provided target references, and invalid reporter credentials.
+  - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, publish authorization/details valid, target valid, credentials valid.
   - Broker status messages intentionally avoid XMTP reply-content encoding so the submission flow does not depend on nonessential reply-content codec behavior.
   - After sending the submission DM, the browser waits for broker plain text replies in the same XMTP conversation. `Encrypted BugBundle pinned to IPFS: ipfs://...` is treated as terminal success; target, credential, JSON, or IPFS failure replies are terminal errors.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:
-  - [x] Python unit tests cover strict JSON parsing, required fields, BugBundle core-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, and credential failure.
-  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, field ordering, BugBundle-signature wait modal, and structured XMTP submit UI including the IPFS-confirmation modal state.
-  - [ ] Wire browser and broker code to create and verify the EIP-712 `PublishBug` envelope required by the bug index before live broker publishing.
+  - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, and credential failure.
+  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, field ordering, PublishBug-signature wait modal, and structured XMTP submit UI including the IPFS-confirmation modal state.
+  - [x] Browser and broker code create and verify the EIP-712 `PublishBug` envelope required by the bug index.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
 
 ### BugBundle IPFS Reveal Model
 
 - **Stability**: in-progress
-- **Description**: A submitted bug will become one versioned `BugBundle` JSON object pinned to IPFS, with public metadata, broker-triage guidance, encrypted details, and the reporter signature in one immutable blob.
+- **Description**: A submitted bug becomes one versioned `BugBundle` JSON object pinned to IPFS, with public metadata, broker-triage guidance, and encrypted details. The reporter's EIP-712 publish authorization travels in the XMTP command and is verified before pinning.
 - **Properties**:
   - The bundle schema is `cheapbugs.bug_bundle.v1`.
   - The bundle includes public fields such as reporter, broker, chain id, reveal timing, title, public summary, `bug_type`, `severity`, and `target_interest`.
   - The bundle includes the encrypted `details` ciphertext and encryption metadata, but never the details key.
-  - Current implementation has the submitter generate the random details key, encrypt the details, sign the bundle core, and send the signed bundle plus the out-of-bundle details key to the broker over XMTP.
-  - The broker verifies the signature, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, then pins the signed bundle payload to IPFS without adding broker status fields.
+  - Current implementation has the submitter generate the random details key, encrypt the details, sign the `PublishBug` authorization over the bundle hash and commitments, and send the bundle plus out-of-bundle details key to the broker over XMTP.
+  - The broker verifies the EIP-712 authorization, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, then pins the encrypted bundle payload to IPFS without adding broker status fields.
   - Broker pinning uses a locally running Kubo HTTP API. `BROKER_IPFS_API_URL` defaults to `http://127.0.0.1:5001`.
   - On broker startup, the `run` command checks Kubo `/api/v0/version` and verifies `/api/v0/add` accepts write requests using a tiny unpinned probe.
   - `BROKER_IPFS_GATEWAY_URL` defaults to the frontend's current `https://ipfs.io/ipfs` gateway. `BROKER_IPFS_PRIME_GATEWAY=1` performs a best-effort gateway fetch after pinning, but gateway caching is not durable and can fail when the local node is not publicly reachable through the IPFS swarm.
@@ -198,10 +196,10 @@ cheapbugs/
   - The bug index stores the bundle CID, bundle/content commitments, encrypted details hash, reveal time, and details-key commitment.
   - After the 7-day judgment period, a broker adds the raw 32-byte details key to the bug index. The index verifies `sha256(rawKey) == detailsKeyCommitment`; browsers can then fetch the bundle from IPFS, read the key from the index, decrypt details locally, and render the bug as ordinary readable content.
 - **Test Criteria**:
-  - [x] Broker tests cover signed encrypted BugBundle verification and pinning without plaintext details in the pinned JSON.
+  - [x] Broker tests cover EIP-712-authorized encrypted BugBundle verification and pinning without plaintext details in the pinned JSON.
   - [x] Broker tests cover Kubo API startup/add request wiring without requiring a live Kubo daemon.
-  - [x] Browser tests cover BugBundle signature prompt state.
-  - [x] Broker tests prove the broker rejects altered bundle core hashes and invalid BugBundle validation results.
+  - [x] Browser tests cover PublishBug signature prompt state.
+  - [x] Broker tests prove the broker rejects altered bundle authorization hashes and invalid BugBundle validation results.
   - [ ] Browser tests cover submitter-side bundle construction, details encryption, and key commitment generation against deterministic vectors.
   - [ ] Broker tests add dedicated cases for bad recovered signatures, mismatched details keys, and unintelligible decrypted details.
   - [x] Contract tests prove keys cannot be revealed before the judgment window and revealed keys must match the stored commitment.
@@ -209,23 +207,23 @@ cheapbugs/
 
 ### Reporter-Signed Broker Relay
 
-- **Stability**: partially implemented
+- **Stability**: in-progress
 - **Description**: Let the broker pin private submission material to IPFS and submit bug-index records without being able to forge reports from other users.
 - **Properties**:
   - `CheapBugsBugIndex.publishBug` now requires an EIP-712 reporter signature before accepting broker-published records.
-  - The signed message binds reporter, broker wallet, Base chain id through the EIP-712 domain, bug-index contract address through the EIP-712 domain, report fields, BugBundle CID/hash, encrypted details hash, details-key commitment, reveal time, created time, nonce, and deadline.
+  - The signed message binds reporter, broker wallet, Base chain id through the EIP-712 domain, bug-index contract address through the EIP-712 domain, report fields, BugBundle hash, encrypted details hash, details-key commitment, reveal time, created time, nonce, and deadline. The broker-produced IPFS CID is stored after pinning but is not part of the reporter signature.
   - The broker may verify, pin IPFS, and pay gas, but it must not be able to choose or alter the reporter address or signed bundle content accepted by the registry.
   - `CheapBugsBugIndex` rejects broker-relayed submissions unless the ECDSA signature recovers to the claimed reporter. EIP-1271 contract-wallet support remains future work.
   - The contract prevents replay through used reporter nonces, broker binding, EIP-712 domain binding, signature deadlines, and duplicate report hashes.
   - XMTP sender identity is useful broker-side evidence, but it is not enough for the smart-contract-level anti-forgery claim.
   - Private plaintext details must never be placed onchain; onchain records should contain public metadata, IPFS CIDs, commitments, content hashes, and post-window details keys only.
-  - The current browser and Python broker still produce and verify the EIP-191 BugBundle authorization; they must be extended to create the contract EIP-712 publish signature before live index writes are enabled.
+  - The browser and Python broker now create and verify the contract EIP-712 publish signature; the remaining live path is for the broker to submit the verified record to the index after pinning.
 - **Test Criteria**:
   - [x] Contract tests prove a broker cannot submit a forged report for an arbitrary reporter.
   - [x] Contract tests prove valid reporter signatures are accepted through the broker-relay path.
   - [x] Contract tests prove wrong broker, expired/deadline, and replayed submissions fail.
-  - [ ] Browser tests cover the signature prompt and envelope generation.
-  - [ ] Broker tests verify signed envelopes before any IPFS, EAS, or bug-index write.
+  - [x] Browser tests cover the signature prompt state.
+  - [x] Broker tests verify signed envelopes before IPFS pinning.
 
 ### Python Broker Bot
 
@@ -331,7 +329,7 @@ cheapbugs/
 ## External Integrations
 
 - **Base RPC**: contract reads, writes, BUGZ balances, holder scans, deployments.
-- **BondVault / TreasuryVault**: onchain BUGZ bonding, detail-key purchase accounting, and ordered reporter reward disbursement.
+- **CheapBugsBondVault / CheapBugsTreasuryVault**: onchain BUGZ bonding, detail-key purchase accounting, and ordered reporter reward disbursement.
 - **Thirdweb**: installed-wallet login, WalletConnect QR, signer adapters.
 - **ENS**: mainnet name/avatar resolution for session UI.
 - **IPFS / Pinata**: encrypted dossier storage and gateway reads.
@@ -352,15 +350,14 @@ npm run contracts:build
 npm run contracts:test
 npm run launch:bug-index:dry-run
 npm run launch:bug-index:forge:dry-run
-npm run launch:token:dry-run
 python3 -m unittest discover -s bots/tests -t bots
 python3 -m compileall bots scripts/broker-bot.py
 ```
 
 ## Future Milestones
 
-- Wire browser and Python broker publishing to the implemented `CheapBugsBugIndex.publishBug` EIP-712 reporter-signature path.
-- Replace the broker bot's direct wallet-funded payout path with the index-ordered `TreasuryVault` reward path.
+- Wire accepted broker submissions to call `CheapBugsBugIndex.publishBug` after IPFS pinning.
+- Replace the broker bot's direct wallet-funded payout path with the index-ordered `CheapBugsTreasuryVault` reward path.
 - Replace frontend reviewer allowlist with an onchain reviewer registry or resolver-backed trust model.
 - Add public payout records for broker settlements while keeping `PayoutRecord` as the public record layer.
 - Add live XMTP broker smoke tests with disposable identities.

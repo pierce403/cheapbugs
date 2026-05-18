@@ -38,6 +38,7 @@ class SubmissionCommand:
     evidence: str = ""
     contact_hints: str = ""
     bug_bundle: dict[str, Any] | None = None
+    publish_authorization: dict[str, Any] | None = None
     details_key_b64: str = ""
 
 

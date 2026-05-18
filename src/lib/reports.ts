@@ -1,15 +1,14 @@
-import { activeStorageProvider } from "../storage";
 import type { ReviewVerdict } from "../types/review";
-import type { BugType, SubmissionBundle, SubmissionPrivate, SubmissionPublic, SubmissionRating } from "../types/submission";
+import type { BugType, SubmissionBundle, SubmissionPrivate, SubmissionRating } from "../types/submission";
 import type { DisclosureMode, Impact, RewardClass, TargetKind, Validity } from "../types/domain";
 
 import { createReviewVerdictAttestation } from "../attest/eas";
-import { getBugReport, getLatestBugReports, submitBugReportOnChain } from "../contracts/bugIndex";
-import { decryptJson, type EncryptedEnvelope, encryptJson, computePrivateContentHash } from "./crypto";
+import { getBugReport, getLatestBugReports } from "../contracts/bugIndex";
+import { activeStorageProvider } from "../storage";
+import { decryptJson, type EncryptedEnvelope } from "./crypto";
 import { computeReviewDisplayState, getReviewVerdictsByReportHash } from "./eas";
 import { downloadJson, uploadJson } from "./ipfs";
-import { getReportAccessKey, saveReportAccessKey } from "./report-access";
-import { hashJson, hashText, normalizeAddress, parseTags, toReportId } from "./utils";
+import { getReportAccessKey } from "./report-access";
 
 export type SubmissionFormInput = {
   bugType: BugType;
@@ -33,67 +32,6 @@ export type ReviewFormInput = {
   rewardClass: RewardClass;
   confidence: number;
   note: string;
-};
-
-export const submitReport = async (
-  input: SubmissionFormInput,
-  reporterAddress: `0x${string}`,
-  accessKey: string
-) => {
-  const createdAt = new Date().toISOString();
-  const privateSubmission: SubmissionPrivate = {
-    bugType: input.bugType,
-    title: input.title.trim(),
-    details: input.details.trim(),
-    reproSteps: input.reproSteps.trim(),
-    evidence: input.evidence.trim(),
-    severity: input.severity,
-    targetInterest: input.targetInterest,
-    contactHints: input.contactHints.trim(),
-    targetRef: input.targetRef.trim()
-  };
-
-  const contentHash = computePrivateContentHash(privateSubmission);
-  const targetRefHash = hashText(privateSubmission.targetRef.toLowerCase());
-  const reportHash = hashJson({
-    reporterAddress,
-    createdAt,
-    contentHash,
-    targetRefHash,
-    publicSummary: input.publicSummary.trim()
-  });
-  const reportId = toReportId(reportHash);
-  const storage = activeStorageProvider();
-  const encrypted = await encryptJson(privateSubmission, accessKey);
-  const privateUpload = await uploadJson(storage, encrypted, `${reportId}-private.json`);
-
-  const publicSubmission: SubmissionPublic = {
-    reportId,
-    reportHash,
-    reporterAddress: normalizeAddress(reporterAddress),
-    createdAt,
-    disclosureMode: input.disclosureMode,
-    publicSummary: input.publicSummary.trim(),
-    encryptedPayloadCid: privateUpload.uri,
-    targetKind: input.targetKind,
-    targetRefHash,
-    tags: parseTags(input.tags),
-    contentHash
-  };
-
-  const { txHash } = await submitBugReportOnChain(publicSubmission);
-
-  saveReportAccessKey(reportHash, accessKey);
-
-  return {
-    reportHash,
-    reportId,
-    txHash,
-    publicSubmission,
-    encryptedPayloadCid: privateUpload.uri,
-    accessKey,
-    storageProvider: storage.label
-  };
 };
 
 export const loadSubmissionBundle = async (reportHash: `0x${string}`): Promise<SubmissionBundle | null> => {

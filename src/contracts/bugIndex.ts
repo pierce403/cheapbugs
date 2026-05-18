@@ -54,12 +54,6 @@ const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => 
   contentHash: entry.contentHash
 });
 
-export const submitBugReportOnChain = async (
-  _submission: SubmissionPublic
-): Promise<never> => {
-  throw new Error("Direct onchain report submission is disabled. Send submissions to a broker for signed publishing.");
-};
-
 export const getBugReport = async (reportHash: `0x${string}`): Promise<SubmissionPublic | null> => {
   if (!isBugIndexConfigured()) {
     return null;

@@ -126,10 +126,10 @@ const xmtpErrorMessage = (error: unknown): string => {
 const isSignatureWaitProgress = (message: string): boolean => /waiting for .*xmtp wallet signature/i.test(message);
 
 const isBrokerSignatureWaitProgress = (message: string): boolean =>
-  /waiting for (?:broker submission|bugbundle) signature/i.test(message);
+  /waiting for (?:broker submission|bugbundle|publishbug eip-712) signature/i.test(message);
 
 const isSignatureSettledProgress = (message: string): boolean =>
-  /xmtp wallet signature approved|using cached xmtp wallet signature|broker submission signature approved|bugbundle signature approved/i.test(
+  /xmtp wallet signature approved|using cached xmtp wallet signature|broker submission signature approved|bugbundle signature approved|publishbug authorization approved/i.test(
     message
   );
 
@@ -137,7 +137,7 @@ const isIpfsConfirmationProgress = (message: string): boolean => /Encrypted BugB
 
 const signatureWaitDetailForProgress = (message: string): string =>
   isBrokerSignatureWaitProgress(message)
-    ? "Approve the CheapBugs BugBundle authorization in your wallet app or browser extension. This signs the encrypted report bundle and does not send a transaction."
+    ? "Approve the CheapBugs PublishBug authorization in your wallet app or browser extension. This signs the encrypted report commitments and does not send a transaction."
     : signatureWaitDetail;
 
 const statusMarkup = (status = initialXmtpStatus()): string => `
@@ -205,7 +205,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       <div class="panel-title">[ submit report ]</div>
       <p class="warning-copy">
         Never place sensitive bug details in the public summary unless you intentionally want them public. Private details are sent
-        to the broker over XMTP for validation and future signed BugBundle publishing.
+        to the broker over XMTP for validation and EIP-712-authorized BugBundle publishing.
       </p>
       <p class="helper-copy">xmtp broker wallet: ${escapeHtml(env.brokerXmtpAddress)}</p>
       ${statusMarkup()}

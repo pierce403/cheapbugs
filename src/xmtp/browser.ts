@@ -3,10 +3,18 @@ import { privateKeyToAccount } from "viem/accounts";
 
 import { normalizeAddress } from "../lib/utils";
 
+export type TypedDataSigningRequest = {
+  domain: Record<string, unknown>;
+  types: Record<string, readonly { name: string; type: string }[]>;
+  primaryType: string;
+  message: Record<string, unknown>;
+};
+
 export type BrowserXmtpIdentity = {
   address: `0x${string}`;
   privateKey?: `0x${string}`;
   signMessage?: (message: string) => Promise<string>;
+  signTypedData?: (request: TypedDataSigningRequest) => Promise<string>;
 };
 
 export type XmtpProgressHandler = (message: string) => void;

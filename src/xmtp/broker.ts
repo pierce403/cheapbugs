@@ -1,15 +1,16 @@
+import { keccak256, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { env } from "../config/env";
 import type { SubmissionFormInput } from "../lib/reports";
-import { normalizeAddress, stableStringify } from "../lib/utils";
+import { disclosureModeToIndex, hashJson, normalizeAddress, stableStringify, targetKindToIndex, toReportId } from "../lib/utils";
 import { sendXmtpDm, type BrowserXmtpIdentity, type XmtpProgressHandler } from "./browser";
 
 export const BROKER_SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1";
 export const BROKER_SUBMISSION_VERSION = 1;
 export const BUG_BUNDLE_SCHEMA = "cheapbugs.bug_bundle.v1";
 export const BUG_BUNDLE_VERSION = 1;
-export const BUG_BUNDLE_SIGNATURE_SCHEME = "eip191_bugbundle_core_v1";
+export const PUBLISH_AUTHORIZATION_SCHEME = "eip712_publish_bug_v1";
 const BROKER_IPFS_CONFIRMATION_PATTERN = /Encrypted BugBundle pinned to IPFS:\s*ipfs:\/\//i;
 const BROKER_TERMINAL_FAILURE_PATTERN = new RegExp(
   [
@@ -19,7 +20,7 @@ const BROKER_TERMINAL_FAILURE_PATTERN = new RegExp(
     "Unexpected submission field",
     "Submission (?:schema|version|JSON) must",
     "Unsupported disclosure mode",
-    "BugBundle signature is invalid",
+    "Publish authorization is invalid",
     "BugBundle is invalid",
     "Submission (?:target|credentials) is invalid",
     "BugBundle IPFS publish failed"
@@ -28,6 +29,28 @@ const BROKER_TERMINAL_FAILURE_PATTERN = new RegExp(
 );
 const BROKER_IPFS_CONFIRMATION_TIMEOUT_MS = 120 * 1000;
 const BUG_BUNDLE_REVEAL_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
+const PUBLISH_AUTHORIZATION_TTL_SECONDS = 24 * 60 * 60;
+const PUBLISH_BUG_TYPES = {
+  PublishBug: [
+    { name: "reportHash", type: "bytes32" },
+    { name: "reportIdHash", type: "bytes32" },
+    { name: "reporter", type: "address" },
+    { name: "createdAt", type: "uint64" },
+    { name: "disclosureMode", type: "uint8" },
+    { name: "publicSummaryHash", type: "bytes32" },
+    { name: "targetKind", type: "uint8" },
+    { name: "targetRefHash", type: "bytes32" },
+    { name: "tagsHash", type: "bytes32" },
+    { name: "contentHash", type: "bytes32" },
+    { name: "bugBundleHash", type: "bytes32" },
+    { name: "encryptedDetailsHash", type: "bytes32" },
+    { name: "detailsKeyCommitment", type: "bytes32" },
+    { name: "revealAfter", type: "uint64" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint64" },
+    { name: "broker", type: "address" }
+  ]
+} as const;
 
 type BugBundleCore = {
   schema: typeof BUG_BUNDLE_SCHEMA;
@@ -66,11 +89,38 @@ type BugBundleCore = {
   };
 };
 
-type BugBundleSignature = {
-  scheme: typeof BUG_BUNDLE_SIGNATURE_SCHEME;
+type PublishAuthorizationMessage = {
+  reportHash: `0x${string}`;
+  reportIdHash: `0x${string}`;
+  reporter: `0x${string}`;
+  createdAt: bigint;
+  disclosureMode: number;
+  publicSummaryHash: `0x${string}`;
+  targetKind: number;
+  targetRefHash: `0x${string}`;
+  tagsHash: `0x${string}`;
+  contentHash: `0x${string}`;
+  bugBundleHash: `0x${string}`;
+  encryptedDetailsHash: `0x${string}`;
+  detailsKeyCommitment: `0x${string}`;
+  revealAfter: bigint;
+  nonce: bigint;
+  deadline: bigint;
+  broker: `0x${string}`;
+};
+
+type PublishAuthorization = {
+  scheme: typeof PUBLISH_AUTHORIZATION_SCHEME;
   signer: `0x${string}`;
-  core_sha256: `0x${string}`;
-  message: string;
+  domain: {
+    name: "CheapBugsBugIndex";
+    version: "1";
+    chainId: number;
+    verifyingContract: `0x${string}`;
+  };
+  types: typeof PUBLISH_BUG_TYPES;
+  primaryType: "PublishBug";
+  message: Record<keyof PublishAuthorizationMessage, string | number | `0x${string}`>;
   value: `0x${string}`;
 };
 
@@ -78,7 +128,6 @@ type BugBundlePayload = {
   schema: typeof BUG_BUNDLE_SCHEMA;
   version: typeof BUG_BUNDLE_VERSION;
   core: BugBundleCore;
-  signature: BugBundleSignature;
 };
 
 export const isBrokerConfigured = (): boolean => Boolean(env.brokerXmtpAddress);
@@ -125,23 +174,77 @@ const isoAfter = (createdAt: Date, delayMs: number): string => new Date(createdA
 
 const optionalAddress = (address: string): `0x${string}` | "" => (address ? normalizeAddress(address) : "");
 
-const buildBugBundleSignatureMessage = (core: BugBundleCore, coreSha256: `0x${string}`): string =>
-  [
-    "CheapBugs BugBundle authorization",
-    "",
-    "This signature authorizes the configured CheapBugs broker to verify and pin one encrypted BugBundle.",
-    "",
-    `schema: ${core.schema}`,
-    `version: ${core.version}`,
-    `reporter: ${core.reporter}`,
-    `broker: ${core.broker}`,
-    `chain_id: ${core.chain_id}`,
-    `bug_index: ${core.bug_index}`,
-    `core_sha256: ${coreSha256}`,
-    `encrypted_details_sha256: ${core.commitments.encrypted_details_sha256}`,
-    `details_key_commitment: ${core.commitments.details_key_commitment}`,
-    `reveal_after: ${core.reveal_after}`
-  ].join("\n");
+const unixSeconds = (iso: string): bigint => BigInt(Math.floor(Date.parse(iso) / 1000));
+
+const randomUint256 = (): bigint => BigInt(bytesToHex(randomBytes(32)));
+
+const hashString = (value: string): `0x${string}` => keccak256(toBytes(value));
+
+const serializableMessage = (
+  message: PublishAuthorizationMessage
+): Record<keyof PublishAuthorizationMessage, string | number | `0x${string}`> => ({
+  reportHash: message.reportHash,
+  reportIdHash: message.reportIdHash,
+  reporter: message.reporter,
+  createdAt: message.createdAt.toString(),
+  disclosureMode: message.disclosureMode,
+  publicSummaryHash: message.publicSummaryHash,
+  targetKind: message.targetKind,
+  targetRefHash: message.targetRefHash,
+  tagsHash: message.tagsHash,
+  contentHash: message.contentHash,
+  bugBundleHash: message.bugBundleHash,
+  encryptedDetailsHash: message.encryptedDetailsHash,
+  detailsKeyCommitment: message.detailsKeyCommitment,
+  revealAfter: message.revealAfter.toString(),
+  nonce: message.nonce.toString(),
+  deadline: message.deadline.toString(),
+  broker: message.broker
+});
+
+const buildPublishAuthorizationMessage = (
+  core: BugBundleCore,
+  coreSha256: `0x${string}`,
+  nonce: bigint,
+  deadline: bigint
+): PublishAuthorizationMessage => {
+  const reportHash = hashJson({
+    reporter: core.reporter,
+    broker: core.broker,
+    chain_id: core.chain_id,
+    bug_index: core.bug_index,
+    created_at: core.created_at,
+    reveal_after: core.reveal_after,
+    submission: core.submission,
+    encrypted_details_sha256: core.commitments.encrypted_details_sha256,
+    details_key_commitment: core.commitments.details_key_commitment
+  });
+  const reportId = toReportId(reportHash);
+
+  return {
+    reportHash,
+    reportIdHash: hashString(reportId),
+    reporter: core.reporter,
+    createdAt: unixSeconds(core.created_at),
+    disclosureMode: disclosureModeToIndex(core.submission.disclosure_mode),
+    publicSummaryHash: hashString(core.submission.public_summary),
+    targetKind: targetKindToIndex(core.submission.target.kind),
+    targetRefHash: hashString(core.submission.target.reference.toLowerCase()),
+    tagsHash: hashString(core.submission.tags.join(",")),
+    contentHash: hashJson({
+      submission: core.submission,
+      encrypted_details_sha256: core.commitments.encrypted_details_sha256,
+      details_key_commitment: core.commitments.details_key_commitment
+    }),
+    bugBundleHash: coreSha256,
+    encryptedDetailsHash: core.commitments.encrypted_details_sha256,
+    detailsKeyCommitment: core.commitments.details_key_commitment,
+    revealAfter: unixSeconds(core.reveal_after),
+    nonce,
+    deadline,
+    broker: core.broker
+  };
+};
 
 const buildUnsignedBugBundleCore = async (
   input: SubmissionFormInput,
@@ -219,61 +322,84 @@ const buildUnsignedBugBundleCore = async (
   };
 };
 
-const signBugBundleCore = async (
+const signPublishAuthorization = async (
   identity: BrowserXmtpIdentity,
   core: BugBundleCore,
+  coreSha256: `0x${string}`,
   onProgress?: XmtpProgressHandler
-): Promise<BugBundleSignature> => {
-  const coreSha256 = await sha256Hex(stableStringify(core));
-  const message = buildBugBundleSignatureMessage(core, coreSha256);
+): Promise<PublishAuthorization> => {
+  if (!env.bugIndexAddress) {
+    throw new Error("Set VITE_BUG_INDEX_ADDRESS before sending EIP-712 broker publish authorizations.");
+  }
+
+  const domain = {
+    name: "CheapBugsBugIndex" as const,
+    version: "1" as const,
+    chainId: env.chainId,
+    verifyingContract: normalizeAddress(env.bugIndexAddress)
+  };
+  const nonce = randomUint256();
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + PUBLISH_AUTHORIZATION_TTL_SECONDS);
+  const message = buildPublishAuthorizationMessage(core, coreSha256, nonce, deadline);
+  const signingRequest = {
+    domain,
+    types: PUBLISH_BUG_TYPES,
+    primaryType: "PublishBug" as const,
+    message
+  };
 
   if (identity.privateKey) {
-    onProgress?.("signing BugBundle with local key");
+    onProgress?.("signing PublishBug authorization with local key");
     const account = privateKeyToAccount(identity.privateKey);
     return {
-      scheme: BUG_BUNDLE_SIGNATURE_SCHEME,
+      scheme: PUBLISH_AUTHORIZATION_SCHEME,
       signer: normalizeAddress(account.address),
-      core_sha256: coreSha256,
-      message,
-      value: await account.signMessage({ message })
+      domain,
+      types: PUBLISH_BUG_TYPES,
+      primaryType: "PublishBug",
+      message: serializableMessage(message),
+      value: await account.signTypedData(signingRequest)
     };
   }
 
-  if (!identity.signMessage) {
-    throw new Error("XMTP identity cannot sign the BugBundle authorization.");
+  if (!identity.signTypedData) {
+    throw new Error("Wallet cannot sign the CheapBugs EIP-712 publish authorization.");
   }
 
-  onProgress?.("waiting for BugBundle signature");
-  const value = (await identity.signMessage(message)) as `0x${string}`;
-  onProgress?.("BugBundle signature approved");
+  onProgress?.("waiting for PublishBug EIP-712 signature");
+  const value = (await identity.signTypedData(signingRequest)) as `0x${string}`;
+  onProgress?.("PublishBug authorization approved");
   return {
-    scheme: BUG_BUNDLE_SIGNATURE_SCHEME,
+    scheme: PUBLISH_AUTHORIZATION_SCHEME,
     signer: core.reporter,
-    core_sha256: coreSha256,
-    message,
+    domain,
+    types: PUBLISH_BUG_TYPES,
+    primaryType: "PublishBug",
+    message: serializableMessage(message),
     value
   };
 };
 
-const buildSignedBugBundle = async (
+const buildAuthorizedBugBundle = async (
   input: SubmissionFormInput,
   identity: BrowserXmtpIdentity,
   onProgress?: XmtpProgressHandler
-): Promise<{ bugBundle: BugBundlePayload; detailsKey: string }> => {
+): Promise<{ bugBundle: BugBundlePayload; publishAuthorization: PublishAuthorization; detailsKey: string }> => {
   const { core, detailsKeyB64 } = await buildUnsignedBugBundleCore(
     input,
     identity.address,
     env.brokerXmtpAddress,
     new Date()
   );
-  const signature = await signBugBundleCore(identity, core, onProgress);
+  const coreSha256 = await sha256Hex(stableStringify(core));
+  const publishAuthorization = await signPublishAuthorization(identity, core, coreSha256, onProgress);
   return {
     bugBundle: {
       schema: BUG_BUNDLE_SCHEMA,
       version: BUG_BUNDLE_VERSION,
-      core,
-      signature
+      core
     },
+    publishAuthorization,
     detailsKey: detailsKeyB64
   };
 };
@@ -285,7 +411,7 @@ export const buildBrokerSubmissionMessage = async (
 ): Promise<string> => {
   const reporterAddress = normalizeAddress(identity.address);
   const brokerAddress = normalizeAddress(env.brokerXmtpAddress);
-  const { bugBundle, detailsKey } = await buildSignedBugBundle(input, identity, onProgress);
+  const { bugBundle, publishAuthorization, detailsKey } = await buildAuthorizedBugBundle(input, identity, onProgress);
   return stableStringify({
     schema: BROKER_SUBMISSION_SCHEMA,
     type: "submission",
@@ -304,6 +430,7 @@ export const buildBrokerSubmissionMessage = async (
     disclosure_mode: "private",
     tags: [],
     bug_bundle: bugBundle,
+    publish_authorization: publishAuthorization,
     details_key: detailsKey,
     client: {
       name: "cheapbugs-web",

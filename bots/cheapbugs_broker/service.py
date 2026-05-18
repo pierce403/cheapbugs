@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from decimal import Decimal
 
-from .bugbundle import BugBundleError, VerifiedBugBundle, verify_signed_bug_bundle
+from .bugbundle import BugBundleError, VerifiedBugBundle, verify_authorized_bug_bundle
 from .commands import (
     CommandError,
     SUBMISSION_SCHEMA,
@@ -187,7 +187,7 @@ class BrokerBot:
             self.store.mark_message_processed(message_id, "bugbundle_invalid")
             return
         try:
-            verified_bundle = verify_signed_bug_bundle(
+            verified_bundle = verify_authorized_bug_bundle(
                 command,
                 chain_id=self.config.chain_id,
                 bug_index_address=self.config.bug_index_address,
@@ -215,7 +215,7 @@ class BrokerBot:
             reply,
             message_id,
             "bugbundle_valid",
-            "BugBundle signature is valid and encrypted details decrypt cleanly.",
+            "Publish authorization is valid and encrypted BugBundle details decrypt cleanly.",
         )
 
         try:

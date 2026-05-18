@@ -39,7 +39,7 @@ CheapBugs is a static Vite + TypeScript application for Base-native bug reportin
 Current architecture:
 
 - public-safe report metadata is written onchain to the `CheapBugsBugIndex` contract on Base by authorized brokers with reporter EIP-712 signatures
-- BUGZ bonds live in `BondVault`, and treasury/detail-key/reward flows live in `TreasuryVault`
+- BUGZ bonds live in `CheapBugsBondVault`, and treasury/detail-key/reward flows live in `CheapBugsTreasuryVault`
 - private report details are encrypted in the browser and uploaded to IPFS
 - reviewer verdicts are written as EAS attestations on Base
 - auth and wallet connectivity use Thirdweb wallets with injected browser wallet and WalletConnect QR support
@@ -58,27 +58,23 @@ npm run contracts:test
 npm run launch:bug-index:dry-run
 npm run launch:bug-index:forge:dry-run
 npm run launch:bug-index
-npm run launch:token:dry-run
-npm run launch:token
 ```
 
 ## Key Paths
 
 - `contracts/CheapBugsBugIndex.sol`: broker-published Base bug index contract with EIP-712 reporter signatures, bonded voting, key reveal, admin status, and ordered payout coordination
-- `contracts/BondVault.sol`: BUGZ bond escrow with 7-day delayed withdrawals, slashers, and log10 voting levels
-- `contracts/TreasuryVault.sol`: BUGZ treasury, detail-key payment records, broker allowlist, and index-gated reward payouts
-- `contracts/CheapBugsToken.sol`: BUGZ ERC20 extension contract
+- `contracts/CheapBugsBondVault.sol`: live BUGZ bond escrow with 7-day delayed withdrawals, slashers, and log10 voting levels
+- `contracts/CheapBugsTreasuryVault.sol`: live BUGZ treasury, detail-key payment records, broker allowlist, and index-gated reward payouts
 - `cheapbugs.png`: source brand/social artwork dropped at the repo root
 - `public/cheapbugs.png`, `public/cheapbugs-mark.png`, `public/og-image.png`, `public/favicon.png`, `public/favicon.ico`, `public/apple-touch-icon.png`: served brand, OpenGraph, and icon assets derived from `cheapbugs.png`
 - `playwright.config.ts` and `tests/`: Playwright browser tests; add coverage here for UI features
 - `script/LaunchBugIndex.s.sol`: Foundry deploy script for the bug index contract
 - `test/CheapBugsBugIndex.t.sol`: Foundry scenario and fuzz tests for broker publishing, reporter signatures, voting, reveal, and ordered payouts
-- `test/BondVault.t.sol`: Foundry unit and fuzz tests for BUGZ bonding, withdrawal delays, cancellation, slashing, and levels
-- `test/BondVaultInvariant.t.sol`: Foundry invariant test for bond-vault accounting across randomized operations
-- `test/TreasuryVault.t.sol`: Foundry unit and fuzz tests for detail-key purchases and index-gated payouts
-- `scripts/launch-bug-index.mjs`: compile/deploy launcher for the bug index contract
+- `test/CheapBugsBondVault.t.sol`: Foundry unit and fuzz tests for BUGZ bonding, withdrawal delays, cancellation, slashing, and levels
+- `test/CheapBugsBondVaultInvariant.t.sol`: Foundry invariant test for bond-vault accounting across randomized operations
+- `test/CheapBugsTreasuryVault.t.sol`: Foundry unit and fuzz tests for detail-key purchases and index-gated payouts
+- `scripts/launch-bug-index.mjs`: compile/deploy launcher for the CheapBugs contract suite
 - `scripts/launch-bug-index-forge.sh`: shell wrapper for the Forge bug index launcher
-- `scripts/launch-token.mjs`: compile/deploy launcher for the BUGZ token contract
 - `src/contracts/bugIndex.ts`: frontend read/write adapter for the bug index contract
 - `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, connected-wallet balances, optional treasury stats, and patron scans
 - `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
@@ -115,9 +111,10 @@ npm run launch:token
 
 - Base mainnet is the default chain configuration.
 - Direct browser-to-index report writes are disabled. The index accepts broker-published reports only through `publishBug` with a reporter EIP-712 signature.
+- The CheapBugs Solidity contract suite is expected to keep precise NatSpec on externally visible APIs, events, errors, structs, public storage getters, and `@dev` comments for non-obvious internal ledgers/helpers.
 - EAS is currently used for `ReviewVerdict` and a `PayoutRecord` placeholder only. Do not re-add `@ethereum-attestation-service/eas-sdk`; it pulls Hardhat-era dependencies into npm audit. `src/attest/eas.ts` uses direct ethers contract calls against EAS and SchemaRegistry.
-- The bug index contract now includes broker/admin registries, reporter-signed publishing, SHA-256 details-key reveal, bonded up/down votes, and ordered payout completion through `TreasuryVault`. The current frontend review state still comes from EAS until UI/broker wiring moves to the new onchain paths.
-- BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` and is the default `VITE_BUGZ_TOKEN_ADDRESS`.
+- The bug index contract now includes broker/admin registries, reporter-signed publishing, SHA-256 details-key reveal, bonded up/down votes, and ordered payout completion through `CheapBugsTreasuryVault`. The current frontend review state still comes from EAS until UI/broker wiring moves to the new onchain paths.
+- BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` and is the default `VITE_BUGZ_TOKEN_ADDRESS`. The contract suite hardcodes this BUGZ address; do not reintroduce a repo-managed BUGZ token deployment path.
 - The `/token` route reads connected-wallet BUGZ balances and performs static, browser-signed buy/sell swaps through the Uniswap v4 Quoter and Universal Router 2.1.1 on Base. Do not replace this with a backend buy-flow.
 - The frontend nav is now `index`, `submit`, `review`, `token`, `patrons`, with compact login/session controls in the top-right header block. Do not re-add the old chain/storage/wallet/SIWE debug block to the header.
 - The header brand row includes a compact orange GitHub icon link to `https://github.com/pierce403/cheapbugs` immediately to the right of the `cheapbugs` wordmark, followed by build metadata from `src/buildInfo.ts`. The build timestamp is injected as ISO and formatted in the viewer's local timezone.
@@ -143,15 +140,15 @@ npm run launch:token
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; favicon and app icons are served from `public/`.
 - The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views.
 - The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BROKER_XMTP_ADDRESS` overrides that broker. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
-- Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/broker.ts`; the current submit form collects bug type (`0day`, `nday`, `web`, `net`, `intel`), severity, target interest, title, public summary, and private details. The browser generates the details key, encrypts details into `cheapbugs.bug_bundle.v1`, signs the canonical BugBundle core with EIP-191 `eip191_bugbundle_core_v1`, and sends the signed bundle plus out-of-bundle `details_key` to the broker over XMTP. Do not re-add repro/evidence/Signal/target kind/reference/tags/review-access-key fields unless the product direction changes.
-- Browser-to-broker submissions now have broker-verified reporter BugBundle signatures, but they are not yet the final `CheapBugsBugIndex.publishBug` EIP-712 relay signatures. Do not let the broker create live user-attributed onchain bug-index records until browser and broker code create and verify that contract envelope.
-- `bots/cheapbugs_broker/bugbundle.py` verifies signed submitter-built bundles before IPFS pinning: schema, field binding, reporter/broker/chain/index binding, signature recovery, details key commitment, encrypted details hash, AAD, and decryption. `bots/cheapbugs_broker/ipfs.py` pins the verified bundle payload through local Kubo without adding broker status fields. Keep plaintext details out of pinned IPFS JSON.
-- The submit route has an inline `#xmtp-status` indicator for XMTP wallet readiness, registration-signature progress, BugBundle-signature progress, success, and failure. During external-wallet signature waits it also shows `#xmtp-signature-modal` so WalletConnect/mobile approvals are visible. Keep `submit to broker` clickable while disconnected so it can show the wallet-required status instead of doing nothing.
+- Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/broker.ts`; the current submit form collects bug type (`0day`, `nday`, `web`, `net`, `intel`), severity, target interest, title, public summary, and private details. The browser generates the details key, encrypts details into `cheapbugs.bug_bundle.v1`, signs a `PublishBug` EIP-712 authorization over the bundle hash and commitments, and sends the bundle, `publish_authorization`, and out-of-bundle `details_key` to the broker over XMTP. Do not re-add repro/evidence/Signal/target kind/reference/tags/review-access-key fields unless the product direction changes.
+- Browser-to-broker submissions now have broker-verified `CheapBugsBugIndex.publishBug` EIP-712 relay signatures. The broker still must not create live user-attributed onchain bug-index records until its accepted-submission path submits the verified envelope to the index after IPFS pinning.
+- `bots/cheapbugs_broker/bugbundle.py` verifies submitter-built bundles before IPFS pinning: schema, field binding, reporter/broker/chain/index binding, EIP-712 signature recovery, details key commitment, encrypted details hash, AAD, and decryption. `bots/cheapbugs_broker/ipfs.py` pins the verified bundle payload through local Kubo without adding broker status fields. Keep plaintext details out of pinned IPFS JSON.
+- The submit route has an inline `#xmtp-status` indicator for XMTP wallet readiness, registration-signature progress, PublishBug authorization progress, success, and failure. During external-wallet signature waits it also shows `#xmtp-signature-modal` so WalletConnect/mobile approvals are visible. Keep `submit to broker` clickable while disconnected so it can show the wallet-required status instead of doing nothing.
 - During broker submission progress, the submit route shows `#xmtp-processing-modal` with the latest XMTP or broker status message, keeps it open until the broker confirms `Encrypted BugBundle pinned to IPFS: ipfs://...`, then switches the modal into a closeable completed state.
 - Browser XMTP registration can require a wallet signature before any broker message is sent. `src/xmtp/browser.ts` caches identical signature requests, skips redundant registration when the SDK reports the installation is already registered, and checks broker inboxes with both stripped and `0x` Ethereum identifier forms.
 - The Python parser rejects text `!submit` messages, missing core fields, unexpected fields, and invalid provided target references.
 - The broker has three website-initiated JSON-over-XMTP flows: publisher for bug submission/publishing, seller for planned judging-period preview access requests, and bouncer for special Signal group access requests.
-- The broker sends plain text XMTP status messages after each successful submission validation stage: JSON valid, fields well formed, BugBundle signature/details valid, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`.
+- The broker sends plain text XMTP status messages after each successful submission validation stage: JSON valid, fields well formed, publish authorization/details valid, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`.
 - Broker XMTP status messages intentionally use `ctx.send_text` instead of `ctx.send_text_reply`; keep the broker flow independent of nonessential reply-content codec behavior unless live testing proves the reply path is needed and stable.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.
 - The Python broker uses `xmtp==0.1.6`, `signal-cli`, SQLite, and `web3.py`. Use `python3 -m unittest discover -s bots/tests -t bots` for bot tests.
@@ -161,12 +158,12 @@ npm run launch:token
 - Broker `run` startup expects a local Kubo IPFS API at `BROKER_IPFS_API_URL`, defaulting to `http://127.0.0.1:5001`; it checks `/api/v0/version` and a tiny unpinned `/api/v0/add` probe before listening to XMTP.
 - `BROKER_IPFS_GATEWAY_URL` defaults to `https://ipfs.io/ipfs`. `BROKER_IPFS_PRIME_GATEWAY=1` does best-effort gateway priming after add, but this is not durable pinning and may fail if the local Kubo node is not reachable through the IPFS swarm.
 - The new index publish path stores the details-key commitment as SHA-256 of the raw 32-byte details key. Brokers should reveal the raw `bytes32` key onchain, not the base64url string sent through current XMTP messages.
-- `BondVault.getLevel(address)` returns `floor(log10(active whole BUGZ))`; pending withdrawals do not count toward voting level. Users below level 1 have no nonzero onchain vote weight.
-- Index payout completion is ordered by report insertion. The broker calls `CheapBugsBugIndex.completePayout`, which reveals the key if needed and calls `TreasuryVault.payRewardFromIndex`; do not bypass the index by paying directly from the treasury.
+- `CheapBugsBondVault.getLevel(address)` returns `floor(log10(active whole BUGZ))`; pending withdrawals do not count toward voting level. Users below level 1 have no nonzero onchain vote weight.
+- Index payout completion is ordered by report insertion. The broker calls `CheapBugsBugIndex.completePayout`, which reveals the key if needed and calls `CheapBugsTreasuryVault.payRewardFromIndex`; do not bypass the index by paying directly from the treasury.
 - `run-broker.sh` prefers `python3.13`, `python3.12`, `python3.11`, then `python3.10` before generic `python3` so `xmtp-bindings` can use published wheels instead of forcing a Rust source build. Set `BROKER_PYTHON` or `BROKER_VENV_DIR` to override.
 - Broker runtime logs go to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`, with timestamps. New broker submissions intentionally log a clear `NEW SUBMISSION from <reporter>` line and the full raw XMTP JSON payload, including the out-of-bundle details key, so treat broker logs as private disclosure material.
 - Use `./run-broker.sh debug` for XMTP broker crash debugging; it turns on Python DEBUG logs, `PYTHONFAULTHANDLER=1`, `RUST_BACKTRACE=full`, `RUST_LOG=debug`, and defaults to `broker-debug.log`.
-- The current Python broker reward adapter still sends direct ERC20 transfers from the wallet behind `BROKER_KEY`; the new contract architecture should move live rewards to index-ordered `TreasuryVault` payouts before production use.
+- The current Python broker reward adapter still sends direct ERC20 transfers from the wallet behind `BROKER_KEY`; the new contract architecture should move live rewards to index-ordered `CheapBugsTreasuryVault` payouts before production use.
 
 ## Known Issues And Practical Tips
 
@@ -186,8 +183,7 @@ npm run launch:token
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
 - Real XMTP submission requires the default or overridden broker address to point at an already registered broker XMTP inbox.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
-- The bug-index launcher needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY`, `BUG_INDEX_BOND_VAULT_ADDRESS`, and `BUG_INDEX_TREASURY_VAULT_ADDRESS` for a real deployment. Optional initial lists are `BUG_INDEX_INITIAL_BROKERS` and `BUG_INDEX_INITIAL_ADMINS`.
-- The token launcher needs `BUGZ_DEPLOYER_PRIVATE_KEY` for a real deployment.
+- The bug-index launcher deploys the full CheapBugs contract suite and needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` for a real deployment. Optional initial lists are `BUG_INDEX_INITIAL_BROKERS`, `BUG_INDEX_INITIAL_ADMINS`, and `BUG_INDEX_INITIAL_SLASHERS`.
 - `artifacts/` and `dist/` are generated outputs and should not be committed unless the user explicitly asks.
 
 ## Collaborator Preferences

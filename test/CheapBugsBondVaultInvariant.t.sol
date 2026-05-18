@@ -4,17 +4,17 @@ pragma solidity ^0.8.24;
 import { StdInvariant } from "forge-std/StdInvariant.sol";
 import { Test } from "forge-std/Test.sol";
 
-import { BondVault } from "../contracts/BondVault.sol";
+import { CheapBugsBondVault } from "../contracts/CheapBugsBondVault.sol";
 import { MockBugzToken } from "./MockBugzToken.sol";
 
-contract BondVaultHandler is Test {
-    BondVault public immutable vault;
+contract CheapBugsBondVaultHandler is Test {
+    CheapBugsBondVault public immutable vault;
     MockBugzToken public immutable token;
     address public immutable slasher;
 
     address[] public users;
 
-    constructor(BondVault vault_, MockBugzToken token_, address slasher_, address[] memory users_) {
+    constructor(CheapBugsBondVault vault_, MockBugzToken token_, address slasher_, address[] memory users_) {
         vault = vault_;
         token = token_;
         slasher = slasher_;
@@ -80,18 +80,19 @@ contract BondVaultHandler is Test {
     }
 }
 
-contract BondVaultInvariantTest is StdInvariant, Test {
+contract CheapBugsBondVaultInvariantTest is StdInvariant, Test {
+    address internal constant BUGZ_TOKEN_ADDRESS = 0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07;
     MockBugzToken internal token;
-    BondVault internal vault;
-    BondVaultHandler internal handler;
+    CheapBugsBondVault internal vault;
+    CheapBugsBondVaultHandler internal handler;
 
     address internal owner = makeAddr("owner");
     address internal treasury = makeAddr("treasury");
     address internal slasher = makeAddr("slasher");
 
     function setUp() public {
-        token = new MockBugzToken();
-        vault = new BondVault(token, treasury, owner);
+        token = _installMockBugzToken();
+        vault = new CheapBugsBondVault(treasury, owner);
         vm.prank(owner);
         vault.setSlasher(slasher, true);
 
@@ -101,13 +102,13 @@ contract BondVaultInvariantTest is StdInvariant, Test {
         users[2] = makeAddr("invariant-user-2");
         users[3] = makeAddr("invariant-user-3");
 
-        handler = new BondVaultHandler(vault, token, slasher, users);
+        handler = new CheapBugsBondVaultHandler(vault, token, slasher, users);
 
         bytes4[] memory selectors = new bytes4[](4);
-        selectors[0] = BondVaultHandler.bond.selector;
-        selectors[1] = BondVaultHandler.requestWithdrawal.selector;
-        selectors[2] = BondVaultHandler.withdraw.selector;
-        selectors[3] = BondVaultHandler.slash.selector;
+        selectors[0] = CheapBugsBondVaultHandler.bond.selector;
+        selectors[1] = CheapBugsBondVaultHandler.requestWithdrawal.selector;
+        selectors[2] = CheapBugsBondVaultHandler.withdraw.selector;
+        selectors[3] = CheapBugsBondVaultHandler.slash.selector;
 
         targetSelector(FuzzSelector({ addr: address(handler), selectors: selectors }));
         targetContract(address(handler));
@@ -129,5 +130,11 @@ contract BondVaultInvariantTest is StdInvariant, Test {
         }
 
         assertEq(token.balanceOf(address(vault)), listedExposure);
+    }
+
+    function _installMockBugzToken() internal returns (MockBugzToken) {
+        MockBugzToken implementation = new MockBugzToken();
+        vm.etch(BUGZ_TOKEN_ADDRESS, address(implementation).code);
+        return MockBugzToken(BUGZ_TOKEN_ADDRESS);
     }
 }

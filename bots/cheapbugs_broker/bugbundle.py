@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from .models import SubmissionCommand
@@ -14,7 +15,30 @@ from .models import SubmissionCommand
 
 BUG_BUNDLE_SCHEMA = "cheapbugs.bug_bundle.v1"
 BUG_BUNDLE_VERSION = 1
-BUG_BUNDLE_SIGNATURE_SCHEME = "eip191_bugbundle_core_v1"
+PUBLISH_AUTHORIZATION_SCHEME = "eip712_publish_bug_v1"
+PUBLISH_BUG_TYPES = {
+    "PublishBug": [
+        {"name": "reportHash", "type": "bytes32"},
+        {"name": "reportIdHash", "type": "bytes32"},
+        {"name": "reporter", "type": "address"},
+        {"name": "createdAt", "type": "uint64"},
+        {"name": "disclosureMode", "type": "uint8"},
+        {"name": "publicSummaryHash", "type": "bytes32"},
+        {"name": "targetKind", "type": "uint8"},
+        {"name": "targetRefHash", "type": "bytes32"},
+        {"name": "tagsHash", "type": "bytes32"},
+        {"name": "contentHash", "type": "bytes32"},
+        {"name": "bugBundleHash", "type": "bytes32"},
+        {"name": "encryptedDetailsHash", "type": "bytes32"},
+        {"name": "detailsKeyCommitment", "type": "bytes32"},
+        {"name": "revealAfter", "type": "uint64"},
+        {"name": "nonce", "type": "uint256"},
+        {"name": "deadline", "type": "uint64"},
+        {"name": "broker", "type": "address"},
+    ]
+}
+DISCLOSURE_MODES = {"private": 0, "embargoed": 1, "public": 2}
+TARGET_KINDS = {"repo": 0, "package": 1, "domain": 2, "contract": 3, "protocol": 4, "other": 5}
 
 ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
 HEX_32_RE = re.compile(r"^0x[a-fA-F0-9]{64}$")
@@ -26,6 +50,8 @@ B64URL_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 class VerifiedBugBundle:
     payload: dict[str, Any]
     details_key_b64: str
+    publish_authorization: dict[str, Any]
+    report_hash: str
     details_key_commitment: str
     encrypted_details_hash: str
     details: str
@@ -53,29 +79,7 @@ def canonical_json_bytes(value: Any) -> bytes:
     return json.dumps(_canonicalize(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
-def build_bug_bundle_signature_message(core: dict[str, Any], core_sha256: str) -> str:
-    commitments = _dict_field(core, "commitments")
-    return "\n".join(
-        [
-            "CheapBugs BugBundle authorization",
-            "",
-            "This signature authorizes the configured CheapBugs broker to verify and pin one encrypted BugBundle.",
-            "",
-            f"schema: {core.get('schema')}",
-            f"version: {core.get('version')}",
-            f"reporter: {_normalize_address(str(core.get('reporter', '')))}",
-            f"broker: {_normalize_address(str(core.get('broker', '')))}",
-            f"chain_id: {core.get('chain_id')}",
-            f"bug_index: {_optional_address(str(core.get('bug_index', '')))}",
-            f"core_sha256: {core_sha256}",
-            f"encrypted_details_sha256: {commitments.get('encrypted_details_sha256')}",
-            f"details_key_commitment: {commitments.get('details_key_commitment')}",
-            f"reveal_after: {core.get('reveal_after')}",
-        ]
-    )
-
-
-def verify_signed_bug_bundle(
+def verify_authorized_bug_bundle(
     command: SubmissionCommand,
     *,
     chain_id: int,
@@ -85,17 +89,22 @@ def verify_signed_bug_bundle(
     payload = command.bug_bundle
     if not isinstance(payload, dict):
         raise BugBundleError("BugBundle is missing.")
-    _require_keys(payload, {"schema", "version", "core", "signature"}, "BugBundle")
-    _reject_unknown_keys(payload, {"schema", "version", "core", "signature"}, "BugBundle")
+    _require_keys(payload, {"schema", "version", "core"}, "BugBundle")
+    _reject_unknown_keys(payload, {"schema", "version", "core"}, "BugBundle")
     if payload["schema"] != BUG_BUNDLE_SCHEMA:
         raise BugBundleError(f"BugBundle schema must be {BUG_BUNDLE_SCHEMA}.")
     if payload["version"] != BUG_BUNDLE_VERSION:
         raise BugBundleError(f"BugBundle version must be {BUG_BUNDLE_VERSION}.")
 
     core = _dict_field(payload, "core")
-    signature = _dict_field(payload, "signature")
     _validate_core_matches_submission(command, core, chain_id, bug_index_address, configured_broker_address)
-    _verify_signature(command, core, signature)
+    publish_authorization = _verify_publish_authorization(
+        command,
+        core,
+        chain_id=chain_id,
+        bug_index_address=bug_index_address,
+        configured_broker_address=configured_broker_address,
+    )
 
     details_key = _b64url_decode(command.details_key_b64, field_name="details_key")
     if len(details_key) != 32:
@@ -120,6 +129,8 @@ def verify_signed_bug_bundle(
     return VerifiedBugBundle(
         payload=payload,
         details_key_b64=command.details_key_b64,
+        publish_authorization=publish_authorization,
+        report_hash=str(publish_authorization["message"]["reportHash"]).lower(),
         details_key_commitment=details_key_commitment.lower(),
         encrypted_details_hash=encrypted_details_hash.lower(),
         details=_strict_decrypted_string(decrypted, "details", min_length=10, max_length=12_000),
@@ -236,35 +247,139 @@ def _validate_core_matches_submission(
         raise BugBundleError("BugBundle details key commitment alg must be sha256.")
 
 
-def _verify_signature(command: SubmissionCommand, core: dict[str, Any], signature: dict[str, Any]) -> None:
-    _reject_unknown_keys(signature, {"scheme", "signer", "core_sha256", "message", "value"}, "BugBundle signature")
-    if signature.get("scheme") != BUG_BUNDLE_SIGNATURE_SCHEME:
-        raise BugBundleError(f"BugBundle signature scheme must be {BUG_BUNDLE_SIGNATURE_SCHEME}.")
-    signer = _normalize_address(_strict_string(signature, "signer", max_length=42))
+def _verify_publish_authorization(
+    command: SubmissionCommand,
+    core: dict[str, Any],
+    *,
+    chain_id: int,
+    bug_index_address: str,
+    configured_broker_address: str,
+) -> dict[str, Any]:
+    auth = command.publish_authorization
+    if not isinstance(auth, dict):
+        raise BugBundleError("Publish authorization is missing.")
+    _reject_unknown_keys(
+        auth,
+        {"scheme", "signer", "domain", "types", "primaryType", "message", "value"},
+        "Publish authorization",
+    )
+    if auth.get("scheme") != PUBLISH_AUTHORIZATION_SCHEME:
+        raise BugBundleError(f"Publish authorization scheme must be {PUBLISH_AUTHORIZATION_SCHEME}.")
+    signer = _normalize_address(_strict_string(auth, "signer", max_length=42))
     if signer != command.reporter_address:
-        raise BugBundleError("BugBundle signature signer must match reporter_address.")
-    core_sha256 = _strict_hex32(signature, "core_sha256")
-    expected_core_sha256 = f"0x{hashlib.sha256(canonical_json_bytes(core)).hexdigest()}"
-    if core_sha256.lower() != expected_core_sha256:
-        raise BugBundleError("BugBundle signature core hash does not match the bundle core.")
-    message = _strict_string(signature, "message", min_length=20, max_length=2_000)
-    if message != build_bug_bundle_signature_message(core, core_sha256.lower()):
-        raise BugBundleError("BugBundle signature message does not match the bundle core.")
-    value = _strict_string(signature, "value", max_length=132)
+        raise BugBundleError("Publish authorization signer must match reporter_address.")
+    if auth.get("primaryType") != "PublishBug":
+        raise BugBundleError("Publish authorization primaryType must be PublishBug.")
+    if auth.get("types") != PUBLISH_BUG_TYPES:
+        raise BugBundleError("Publish authorization types do not match CheapBugsBugIndex.")
+    value = _strict_string(auth, "value", max_length=132)
     if not SIGNATURE_RE.match(value):
-        raise BugBundleError("BugBundle signature value must be a 65-byte hex signature.")
+        raise BugBundleError("Publish authorization value must be a 65-byte hex signature.")
+
+    domain = _dict_field(auth, "domain")
+    _reject_unknown_keys(domain, {"name", "version", "chainId", "verifyingContract"}, "Publish authorization domain")
+    if domain.get("name") != "CheapBugsBugIndex" or domain.get("version") != "1":
+        raise BugBundleError("Publish authorization domain name/version does not match CheapBugsBugIndex.")
+    domain_chain_id = _strict_uint(domain, "chainId")
+    if domain_chain_id != chain_id:
+        raise BugBundleError("Publish authorization chainId does not match this broker.")
+    verifying_contract = _normalize_address(_strict_string(domain, "verifyingContract", max_length=42))
+    if bug_index_address and verifying_contract != _normalize_address(bug_index_address):
+        raise BugBundleError("Publish authorization verifyingContract does not match this broker.")
+
+    message = _dict_field(auth, "message")
+    _reject_unknown_keys(message, {field["name"] for field in PUBLISH_BUG_TYPES["PublishBug"]}, "Publish authorization message")
+    normalized_message = _normalized_publish_message(message)
+
+    expected_core_sha256 = f"0x{hashlib.sha256(canonical_json_bytes(core)).hexdigest()}"
+    if normalized_message["bugBundleHash"] != expected_core_sha256:
+        raise BugBundleError("Publish authorization bugBundleHash does not match the bundle core.")
+
+    commitments = _dict_field(core, "commitments")
+    if normalized_message["encryptedDetailsHash"] != _strict_hex32(commitments, "encrypted_details_sha256"):
+        raise BugBundleError("Publish authorization encryptedDetailsHash does not match the bundle core.")
+    if normalized_message["detailsKeyCommitment"] != _strict_hex32(commitments, "details_key_commitment"):
+        raise BugBundleError("Publish authorization detailsKeyCommitment does not match the bundle core.")
+    if normalized_message["reporter"] != command.reporter_address:
+        raise BugBundleError("Publish authorization reporter does not match reporter_address.")
+    broker = configured_broker_address or command.broker_address
+    if normalized_message["broker"] != _normalize_address(broker):
+        raise BugBundleError("Publish authorization broker does not match this broker.")
+    if normalized_message["createdAt"] != _iso_to_unix_seconds(_strict_string(core, "created_at", max_length=80)):
+        raise BugBundleError("Publish authorization createdAt does not match the bundle core.")
+    if normalized_message["revealAfter"] != _iso_to_unix_seconds(_strict_string(core, "reveal_after", max_length=80)):
+        raise BugBundleError("Publish authorization revealAfter does not match the bundle core.")
 
     try:
         from eth_account import Account
-        from eth_account.messages import encode_defunct
+        from eth_account.messages import encode_typed_data
+        from eth_utils import keccak
     except ImportError as exc:  # pragma: no cover - covered in broker runtime environment
-        raise BugBundleError("BugBundle signature cannot be verified because eth_account is not installed.") from exc
+        raise BugBundleError("Publish authorization cannot be verified because eth_account is not installed.") from exc
+
+    submission = _dict_field(core, "submission")
+    target = _dict_field(submission, "target")
+    expected_report_hash = _keccak_json(
+        {
+            "reporter": core["reporter"],
+            "broker": core["broker"],
+            "chain_id": core["chain_id"],
+            "bug_index": core["bug_index"],
+            "created_at": core["created_at"],
+            "reveal_after": core["reveal_after"],
+            "submission": submission,
+            "encrypted_details_sha256": commitments["encrypted_details_sha256"],
+            "details_key_commitment": commitments["details_key_commitment"],
+        },
+        keccak,
+    )
+    expected_report_id = f"cb-{expected_report_hash[2:10]}"
+    expected_content_hash = _keccak_json(
+        {
+            "submission": submission,
+            "encrypted_details_sha256": commitments["encrypted_details_sha256"],
+            "details_key_commitment": commitments["details_key_commitment"],
+        },
+        keccak,
+    )
+    expected_hashes = {
+        "reportHash": expected_report_hash,
+        "reportIdHash": _keccak_text(expected_report_id, keccak),
+        "publicSummaryHash": _keccak_text(str(submission["public_summary"]), keccak),
+        "targetRefHash": _keccak_text(str(target["reference"]).lower(), keccak),
+        "tagsHash": _keccak_text(",".join(submission.get("tags") or []), keccak),
+        "contentHash": expected_content_hash,
+    }
+    for field, expected in expected_hashes.items():
+        if normalized_message[field] != expected:
+            raise BugBundleError(f"Publish authorization {field} does not match the bundle core.")
+    if normalized_message["disclosureMode"] != DISCLOSURE_MODES[str(submission["disclosure_mode"])]:
+        raise BugBundleError("Publish authorization disclosureMode does not match the bundle core.")
+    if normalized_message["targetKind"] != TARGET_KINDS[str(target["kind"])]:
+        raise BugBundleError("Publish authorization targetKind does not match the bundle core.")
+
+    typed_data = {
+        "domain": {
+            "name": domain["name"],
+            "version": domain["version"],
+            "chainId": domain_chain_id,
+            "verifyingContract": verifying_contract,
+        },
+        "types": PUBLISH_BUG_TYPES,
+        "primaryType": "PublishBug",
+        "message": normalized_message,
+    }
     try:
-        recovered = str(Account.recover_message(encode_defunct(text=message), signature=value)).lower()
+        recovered = str(Account.recover_message(encode_typed_data(full_message=typed_data), signature=value)).lower()
     except Exception as exc:
-        raise BugBundleError("BugBundle signature could not be recovered.") from exc
+        raise BugBundleError("Publish authorization signature could not be recovered.") from exc
     if recovered != command.reporter_address:
-        raise BugBundleError("BugBundle signature does not recover to reporter_address.")
+        raise BugBundleError("Publish authorization signature does not recover to reporter_address.")
+
+    result = dict(auth)
+    result["domain"] = dict(domain)
+    result["message"] = dict(normalized_message)
+    return result
 
 
 def _validate_aad(core: dict[str, Any], details: dict[str, Any]) -> bytes:
@@ -366,6 +481,61 @@ def _strict_hex32(data: dict[str, Any], name: str) -> str:
     if not HEX_32_RE.match(value):
         raise BugBundleError(f"{name} must be a 32-byte hex value.")
     return value
+
+
+def _strict_uint(data: dict[str, Any], name: str) -> int:
+    value = data.get(name)
+    if isinstance(value, bool):
+        raise BugBundleError(f"{name} must be an unsigned integer.")
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str) and value.isdigit():
+        parsed = int(value, 10)
+    else:
+        raise BugBundleError(f"{name} must be an unsigned integer.")
+    if parsed < 0:
+        raise BugBundleError(f"{name} must be an unsigned integer.")
+    return parsed
+
+
+def _normalized_publish_message(message: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "reportHash": _strict_hex32(message, "reportHash"),
+        "reportIdHash": _strict_hex32(message, "reportIdHash"),
+        "reporter": _normalize_address(_strict_string(message, "reporter", max_length=42)),
+        "createdAt": _strict_uint(message, "createdAt"),
+        "disclosureMode": _strict_uint(message, "disclosureMode"),
+        "publicSummaryHash": _strict_hex32(message, "publicSummaryHash"),
+        "targetKind": _strict_uint(message, "targetKind"),
+        "targetRefHash": _strict_hex32(message, "targetRefHash"),
+        "tagsHash": _strict_hex32(message, "tagsHash"),
+        "contentHash": _strict_hex32(message, "contentHash"),
+        "bugBundleHash": _strict_hex32(message, "bugBundleHash"),
+        "encryptedDetailsHash": _strict_hex32(message, "encryptedDetailsHash"),
+        "detailsKeyCommitment": _strict_hex32(message, "detailsKeyCommitment"),
+        "revealAfter": _strict_uint(message, "revealAfter"),
+        "nonce": _strict_uint(message, "nonce"),
+        "deadline": _strict_uint(message, "deadline"),
+        "broker": _normalize_address(_strict_string(message, "broker", max_length=42)),
+    }
+
+
+def _iso_to_unix_seconds(value: str) -> int:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise BugBundleError("BugBundle timestamp is not a valid ISO-8601 value.") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp())
+
+
+def _keccak_text(value: str, keccak_fn: Any) -> str:
+    return f"0x{keccak_fn(text=value).hex()}"
+
+
+def _keccak_json(value: Any, keccak_fn: Any) -> str:
+    return f"0x{keccak_fn(canonical_json_bytes(value)).hex()}"
 
 
 def _b64url_decode(value: str, *, field_name: str) -> bytes:

@@ -121,13 +121,13 @@ test("submit route shows a wallet-device wait modal during XMTP signature reques
   await expect(dialog).toBeHidden();
 });
 
-test("submit route shows a wallet-device wait modal during BugBundle signing", async ({ page }) => {
+test("submit route shows a wallet-device wait modal during PublishBug signing", async ({ page }) => {
   await page.goto("/submit");
 
   await page.locator("[data-view-root]").evaluate((root) => {
     root.dispatchEvent(
       new CustomEvent("cheapbugs:xmtp-progress", {
-        detail: { message: "waiting for BugBundle signature" }
+        detail: { message: "waiting for PublishBug EIP-712 signature" }
       })
     );
   });
@@ -135,12 +135,12 @@ test("submit route shows a wallet-device wait modal during BugBundle signing", a
   const dialog = page.getByRole("dialog", { name: "wallet signature" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("waiting for signature from wallet device");
-  await expect(dialog).toContainText("Approve the CheapBugs BugBundle authorization");
+  await expect(dialog).toContainText("Approve the CheapBugs PublishBug authorization");
 
   await page.locator("[data-view-root]").evaluate((root) => {
     root.dispatchEvent(
       new CustomEvent("cheapbugs:xmtp-progress", {
-        detail: { message: "BugBundle signature approved" }
+        detail: { message: "PublishBug authorization approved" }
       })
     );
   });

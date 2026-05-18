@@ -12,13 +12,13 @@ from unittest.mock import patch
 
 from cheapbugs_broker.bugbundle import (
     BUG_BUNDLE_SCHEMA,
-    BUG_BUNDLE_SIGNATURE_SCHEME,
     BUG_BUNDLE_VERSION,
+    PUBLISH_AUTHORIZATION_SCHEME,
+    PUBLISH_BUG_TYPES,
     BugBundleError,
     VerifiedBugBundle,
-    build_bug_bundle_signature_message,
     canonical_json_bytes,
-    verify_signed_bug_bundle,
+    verify_authorized_bug_bundle,
 )
 from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
 from cheapbugs_broker.config import BrokerConfig
@@ -51,6 +51,7 @@ class CommandParsingTest(unittest.TestCase):
         self.assertEqual(command.target_ref, "pierce403/cheapbugs")
         self.assertEqual(command.tags, ("parser", "memory"))
         self.assertIsNotNone(command.bug_bundle)
+        self.assertIsNotNone(command.publish_authorization)
         self.assertEqual(command.details_key_b64, DETAILS_KEY_B64)
 
     def test_parse_minimal_json_submission_defaults_broker_fields(self) -> None:
@@ -94,7 +95,14 @@ Private details go here.""",
         with self.assertRaisesRegex(CommandError, "details_key"):
             parse_command(json.dumps(payload))
 
-    def test_verify_real_signed_bugbundle(self) -> None:
+    def test_reject_missing_publish_authorization(self) -> None:
+        payload = valid_submission_payload()
+        del payload["publish_authorization"]
+
+        with self.assertRaisesRegex(CommandError, "publish_authorization"):
+            parse_command(json.dumps(payload))
+
+    def test_verify_real_authorized_bugbundle(self) -> None:
         try:
             from eth_account import Account
             from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -107,26 +115,27 @@ Private details go here.""",
         command = parse_command(json.dumps(payload))
 
         self.assertIsInstance(command, SubmissionCommand)
-        verified = verify_signed_bug_bundle(
+        verified = verify_authorized_bug_bundle(
             command,
             chain_id=8453,
             bug_index_address=WALLET,
         )
         self.assertEqual(verified.details, "Private details go here.")
         self.assertEqual(verified.details_key_b64, DETAILS_KEY_B64)
+        self.assertEqual(verified.publish_authorization["scheme"], PUBLISH_AUTHORIZATION_SCHEME)
 
-    def test_reject_altered_bugbundle_signature_hash(self) -> None:
+    def test_reject_altered_publish_authorization_bundle_hash(self) -> None:
         payload = valid_submission_payload()
-        assert isinstance(payload["bug_bundle"], dict)
-        bundle = dict(payload["bug_bundle"])
-        signature = dict(bundle["signature"])
-        signature["core_sha256"] = "0x" + "9" * 64
-        bundle["signature"] = signature
-        payload["bug_bundle"] = bundle
+        assert isinstance(payload["publish_authorization"], dict)
+        authorization = dict(payload["publish_authorization"])
+        message = dict(authorization["message"])
+        message["bugBundleHash"] = "0x" + "9" * 64
+        authorization["message"] = message
+        payload["publish_authorization"] = authorization
         command = parse_command(json.dumps(payload))
 
-        with self.assertRaisesRegex(BugBundleError, "core hash"):
-            verify_signed_bug_bundle(command, chain_id=8453, bug_index_address=WALLET)
+        with self.assertRaisesRegex(BugBundleError, "bugBundleHash"):
+            verify_authorized_bug_bundle(command, chain_id=8453, bug_index_address=WALLET)
 
     def test_reject_invalid_submission_guidance(self) -> None:
         with self.assertRaisesRegex(CommandError, "bug_type"):
@@ -286,7 +295,7 @@ class BrokerServiceTest(unittest.TestCase):
                 return None
 
             with self.assertLogs("cheapbugs_broker.service", level="INFO") as logs:
-                with patch("cheapbugs_broker.service.verify_signed_bug_bundle", return_value=fake_verified_bundle()):
+                with patch("cheapbugs_broker.service.verify_authorized_bug_bundle", return_value=fake_verified_bundle()):
                     asyncio.run(
                         bot.handle_xmtp_text(
                             json.dumps(valid_submission_payload()),
@@ -322,7 +331,7 @@ class BrokerServiceTest(unittest.TestCase):
             async def reply(message: str) -> None:
                 replies.append(message)
 
-            with patch("cheapbugs_broker.service.verify_signed_bug_bundle", return_value=fake_verified_bundle()):
+            with patch("cheapbugs_broker.service.verify_authorized_bug_bundle", return_value=fake_verified_bundle()):
                 asyncio.run(
                     bot.handle_xmtp_text(
                         json.dumps(valid_submission_payload()),
@@ -335,7 +344,7 @@ class BrokerServiceTest(unittest.TestCase):
 
             self.assertIn("Submission JSON is valid", replies[0])
             self.assertEqual(replies[1], "Submission fields are present and well formed.")
-            self.assertEqual(replies[2], "BugBundle signature is valid and encrypted details decrypt cleanly.")
+            self.assertEqual(replies[2], "Publish authorization is valid and encrypted BugBundle details decrypt cleanly.")
             self.assertIn("Submission target is valid", replies[3])
             self.assertIn("Submission credentials are valid", replies[4])
             self.assertIn("Encrypted BugBundle pinned to IPFS", replies[5])
@@ -359,7 +368,7 @@ class BrokerServiceTest(unittest.TestCase):
                 replies.append(message)
 
             with patch(
-                "cheapbugs_broker.service.verify_signed_bug_bundle",
+                "cheapbugs_broker.service.verify_authorized_bug_bundle",
                 side_effect=BugBundleError("signature does not recover"),
             ):
                 asyncio.run(
@@ -391,7 +400,7 @@ class BrokerServiceTest(unittest.TestCase):
             async def reply(message: str) -> None:
                 replies.append(message)
 
-            with patch("cheapbugs_broker.service.verify_signed_bug_bundle", return_value=fake_verified_bundle()):
+            with patch("cheapbugs_broker.service.verify_authorized_bug_bundle", return_value=fake_verified_bundle()):
                 asyncio.run(
                     bot.handle_xmtp_text(
                         json.dumps(valid_submission_payload()),
@@ -423,7 +432,7 @@ class BrokerServiceTest(unittest.TestCase):
             async def reply(message: str) -> None:
                 replies.append(message)
 
-            with patch("cheapbugs_broker.service.verify_signed_bug_bundle", return_value=fake_verified_bundle()):
+            with patch("cheapbugs_broker.service.verify_authorized_bug_bundle", return_value=fake_verified_bundle()):
                 asyncio.run(
                     bot.handle_xmtp_text(
                         json.dumps(valid_submission_payload()),
@@ -448,8 +457,8 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertIsNotNone(ipfs.last_payload)
             assert isinstance(ipfs.last_payload, dict)
             self.assertNotIn("broker_status", ipfs.last_payload)
-            self.assertEqual(ipfs.last_payload["signature"]["scheme"], BUG_BUNDLE_SIGNATURE_SCHEME)
-            self.assertEqual(ipfs.last_payload["signature"]["signer"], WALLET)
+            self.assertNotIn("signature", ipfs.last_payload)
+            self.assertEqual(ipfs.last_payload["core"]["reporter"], WALLET)
             records = store.mature_unpaid_submissions(now=10_000)
             self.assertEqual(records, [])
 
@@ -484,6 +493,17 @@ class BrokerServiceTest(unittest.TestCase):
 
 
 def valid_submission_payload(**overrides: object) -> dict[str, object]:
+    bug_bundle = fake_bug_bundle(
+        reporter=WALLET,
+        broker=BROKER,
+        bug_type="0day",
+        severity="high",
+        target_interest="critical",
+        title="Parser overflow",
+        public_summary="Public safe summary for reviewers.",
+        target={"kind": "repo", "reference": "pierce403/cheapbugs"},
+        tags=["parser", "memory"],
+    )
     payload: dict[str, object] = {
         "schema": "cheapbugs.bug_submission.v1",
         "type": "submission",
@@ -499,17 +519,8 @@ def valid_submission_payload(**overrides: object) -> dict[str, object]:
         "target": {"kind": "repo", "reference": "pierce403/cheapbugs"},
         "disclosure_mode": "private",
         "tags": ["parser", "memory"],
-        "bug_bundle": fake_bug_bundle(
-            reporter=WALLET,
-            broker=BROKER,
-            bug_type="0day",
-            severity="high",
-            target_interest="critical",
-            title="Parser overflow",
-            public_summary="Public safe summary for reviewers.",
-            target={"kind": "repo", "reference": "pierce403/cheapbugs"},
-            tags=["parser", "memory"],
-        ),
+        "bug_bundle": bug_bundle,
+        "publish_authorization": fake_publish_authorization(bug_bundle["core"]),
         "details_key": DETAILS_KEY_B64,
         "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
     }
@@ -518,6 +529,15 @@ def valid_submission_payload(**overrides: object) -> dict[str, object]:
 
 
 def minimal_submission_payload(**overrides: object) -> dict[str, object]:
+    bug_bundle = fake_bug_bundle(
+        reporter=WALLET,
+        broker=BROKER,
+        bug_type="web",
+        severity="medium",
+        target_interest="high",
+        title="Parser overflow",
+        public_summary="Public safe summary for reviewers.",
+    )
     payload: dict[str, object] = {
         "schema": "cheapbugs.bug_submission.v1",
         "type": "submission",
@@ -529,15 +549,8 @@ def minimal_submission_payload(**overrides: object) -> dict[str, object]:
         "public_summary": "Public safe summary for reviewers.",
         "severity": "medium",
         "target_interest": "high",
-        "bug_bundle": fake_bug_bundle(
-            reporter=WALLET,
-            broker=BROKER,
-            bug_type="web",
-            severity="medium",
-            target_interest="high",
-            title="Parser overflow",
-            public_summary="Public safe summary for reviewers.",
-        ),
+        "bug_bundle": bug_bundle,
+        "publish_authorization": fake_publish_authorization(bug_bundle["core"]),
         "details_key": DETAILS_KEY_B64,
         "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
     }
@@ -615,25 +628,59 @@ def fake_bug_bundle(
             "details_key_commitment_alg": "sha256",
         },
     }
-    core_sha256 = canonical_sha256(core)
     return {
         "schema": BUG_BUNDLE_SCHEMA,
         "version": BUG_BUNDLE_VERSION,
         "core": core,
-        "signature": {
-            "scheme": BUG_BUNDLE_SIGNATURE_SCHEME,
-            "signer": reporter,
-            "core_sha256": core_sha256,
-            "message": build_bug_bundle_signature_message(core, core_sha256),
-            "value": "0x" + "1" * 130,
+    }
+
+
+def fake_publish_authorization(core: object) -> dict[str, object]:
+    assert isinstance(core, dict)
+    commitments = core["commitments"]
+    assert isinstance(commitments, dict)
+    return {
+        "scheme": PUBLISH_AUTHORIZATION_SCHEME,
+        "signer": core["reporter"],
+        "domain": {
+            "name": "CheapBugsBugIndex",
+            "version": "1",
+            "chainId": 8453,
+            "verifyingContract": WALLET,
         },
+        "types": PUBLISH_BUG_TYPES,
+        "primaryType": "PublishBug",
+        "message": {
+            "reportHash": "0x" + "1" * 64,
+            "reportIdHash": "0x" + "2" * 64,
+            "reporter": core["reporter"],
+            "createdAt": 1768608000,
+            "disclosureMode": 0,
+            "publicSummaryHash": "0x" + "3" * 64,
+            "targetKind": 5,
+            "targetRefHash": "0x" + "4" * 64,
+            "tagsHash": "0x" + "5" * 64,
+            "contentHash": "0x" + "6" * 64,
+            "bugBundleHash": canonical_sha256(core),
+            "encryptedDetailsHash": commitments["encrypted_details_sha256"],
+            "detailsKeyCommitment": commitments["details_key_commitment"],
+            "revealAfter": 1769212800,
+            "nonce": 7,
+            "deadline": 1768694400,
+            "broker": core["broker"],
+        },
+        "value": "0x" + "1" * 130,
     }
 
 
 def fake_verified_bundle(payload: dict[str, object] | None = None) -> VerifiedBugBundle:
+    bundle = payload or fake_bug_bundle()
+    auth = fake_publish_authorization(bundle["core"])
     return VerifiedBugBundle(
-        payload=payload or fake_bug_bundle(),
+        payload=bundle,
         details_key_b64=DETAILS_KEY_B64,
+        publish_authorization=auth,
+        report_hash=str(auth["message"]["reportHash"]),
         details_key_commitment=f"0x{hashlib.sha256(DETAILS_KEY).hexdigest()}",
         encrypted_details_hash="0x" + "2" * 64,
         details="Private details go here.",
@@ -644,7 +691,8 @@ def fake_verified_bundle(payload: dict[str, object] | None = None) -> VerifiedBu
 
 
 def real_signed_submission_payload(reporter: str, account: object, aesgcm_cls: object) -> dict[str, object]:
-    from eth_account.messages import encode_defunct
+    from eth_account.messages import encode_typed_data
+    from eth_utils import keccak
 
     target = {"kind": "repo", "reference": "pierce403/cheapbugs"}
     submission = {
@@ -696,8 +744,58 @@ def real_signed_submission_payload(reporter: str, account: object, aesgcm_cls: o
         },
     }
     core_sha256 = canonical_sha256(core)
-    message = build_bug_bundle_signature_message(core, core_sha256)
-    signed = account.sign_message(encode_defunct(text=message))
+    report_hash = f"0x{keccak(canonical_json_bytes({
+        'reporter': core['reporter'],
+        'broker': core['broker'],
+        'chain_id': core['chain_id'],
+        'bug_index': core['bug_index'],
+        'created_at': core['created_at'],
+        'reveal_after': core['reveal_after'],
+        'submission': submission,
+        'encrypted_details_sha256': core['commitments']['encrypted_details_sha256'],
+        'details_key_commitment': core['commitments']['details_key_commitment'],
+    })).hex()}"
+    report_id = f"cb-{report_hash[2:10]}"
+    content_hash = f"0x{keccak(canonical_json_bytes({
+        'submission': submission,
+        'encrypted_details_sha256': core['commitments']['encrypted_details_sha256'],
+        'details_key_commitment': core['commitments']['details_key_commitment'],
+    })).hex()}"
+    message = {
+        "reportHash": report_hash,
+        "reportIdHash": f"0x{keccak(text=report_id).hex()}",
+        "reporter": reporter,
+        "createdAt": 1768608000,
+        "disclosureMode": 0,
+        "publicSummaryHash": f"0x{keccak(text=submission['public_summary']).hex()}",
+        "targetKind": 0,
+        "targetRefHash": f"0x{keccak(text=target['reference'].lower()).hex()}",
+        "tagsHash": f"0x{keccak(text=','.join(submission['tags'])).hex()}",
+        "contentHash": content_hash,
+        "bugBundleHash": core_sha256,
+        "encryptedDetailsHash": core["commitments"]["encrypted_details_sha256"],
+        "detailsKeyCommitment": core["commitments"]["details_key_commitment"],
+        "revealAfter": 1769212800,
+        "nonce": 42,
+        "deadline": 1768694400,
+        "broker": BROKER,
+    }
+    domain = {
+        "name": "CheapBugsBugIndex",
+        "version": "1",
+        "chainId": 8453,
+        "verifyingContract": WALLET,
+    }
+    signed = account.sign_message(
+        encode_typed_data(
+            full_message={
+                "domain": domain,
+                "types": PUBLISH_BUG_TYPES,
+                "primaryType": "PublishBug",
+                "message": message,
+            }
+        )
+    )
     return {
         "schema": "cheapbugs.bug_submission.v1",
         "type": "submission",
@@ -710,13 +808,15 @@ def real_signed_submission_payload(reporter: str, account: object, aesgcm_cls: o
             "schema": BUG_BUNDLE_SCHEMA,
             "version": BUG_BUNDLE_VERSION,
             "core": core,
-            "signature": {
-                "scheme": BUG_BUNDLE_SIGNATURE_SCHEME,
-                "signer": reporter,
-                "core_sha256": core_sha256,
-                "message": message,
-                "value": "0x" + signed.signature.hex().removeprefix("0x"),
-            },
+        },
+        "publish_authorization": {
+            "scheme": PUBLISH_AUTHORIZATION_SCHEME,
+            "signer": reporter,
+            "domain": domain,
+            "types": PUBLISH_BUG_TYPES,
+            "primaryType": "PublishBug",
+            "message": message,
+            "value": "0x" + signed.signature.hex().removeprefix("0x"),
         },
         "details_key": DETAILS_KEY_B64,
         "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},

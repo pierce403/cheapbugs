@@ -10,12 +10,12 @@ export const bugIndexAbi = [
       {
         "name": "initialBondVault",
         "type": "address",
-        "internalType": "contract IBondVault"
+        "internalType": "contract ICheapBugsBondVault"
       },
       {
         "name": "initialTreasuryVault",
         "type": "address",
-        "internalType": "contract ITreasuryVault"
+        "internalType": "contract ICheapBugsTreasuryVault"
       },
       {
         "name": "initialBrokers",
@@ -115,7 +115,7 @@ export const bugIndexAbi = [
       {
         "name": "",
         "type": "address",
-        "internalType": "contract IBondVault"
+        "internalType": "contract ICheapBugsBondVault"
       }
     ],
     "stateMutability": "view"
@@ -893,7 +893,7 @@ export const bugIndexAbi = [
       {
         "name": "newBondVault",
         "type": "address",
-        "internalType": "contract IBondVault"
+        "internalType": "contract ICheapBugsBondVault"
       }
     ],
     "outputs": [],
@@ -924,7 +924,7 @@ export const bugIndexAbi = [
       {
         "name": "newTreasuryVault",
         "type": "address",
-        "internalType": "contract ITreasuryVault"
+        "internalType": "contract ICheapBugsTreasuryVault"
       }
     ],
     "outputs": [],
@@ -969,7 +969,7 @@ export const bugIndexAbi = [
       {
         "name": "",
         "type": "address",
-        "internalType": "contract ITreasuryVault"
+        "internalType": "contract ICheapBugsTreasuryVault"
       }
     ],
     "stateMutability": "view"
@@ -1453,17 +1453,6 @@ export const bugIndexAbi = [
         "name": "account",
         "type": "address",
         "internalType": "address"
-      }
-    ]
-  },
-  {
-    "type": "error",
-    "name": "PayoutAlreadyCompleted",
-    "inputs": [
-      {
-        "name": "reportHash",
-        "type": "bytes32",
-        "internalType": "bytes32"
       }
     ]
   },
