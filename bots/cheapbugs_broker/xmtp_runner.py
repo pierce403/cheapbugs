@@ -3,11 +3,104 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
+from typing import Any
 
 from .config import BrokerConfig
 from .service import BrokerBot
+
+
+def patch_xmtp_backend_connector(native_bindings: Any) -> bool:
+    """Bridge xmtp 0.1.6's client wrapper to the updated bindings connector."""
+
+    original = getattr(native_bindings, "connect_to_backend", None)
+    if original is None:
+        return False
+
+    try:
+        parameter_count = len(inspect.signature(original).parameters)
+    except (TypeError, ValueError):
+        return False
+    if parameter_count != 6:
+        return False
+
+    async def connect_to_backend_compat(*args: Any) -> Any:
+        if len(args) == 7:
+            host, gateway_host, _is_secure, client_mode, app_version, auth_callback, auth_handle = args
+            if client_mode is None and hasattr(native_bindings, "FfiClientMode"):
+                client_mode = native_bindings.FfiClientMode.DEFAULT
+            return await original(host, gateway_host, client_mode, app_version, auth_callback, auth_handle)
+        return await original(*args)
+
+    setattr(native_bindings, "connect_to_backend", connect_to_backend_compat)
+    return True
+
+
+def patch_xmtp_client_factory(native_bindings: Any) -> bool:
+    """Bridge xmtp 0.1.6's client wrapper to the updated create_client binding."""
+
+    patched = False
+    if not hasattr(native_bindings, "FfiSyncWorkerMode") and hasattr(native_bindings, "FfiDeviceSyncMode"):
+        setattr(native_bindings, "FfiSyncWorkerMode", native_bindings.FfiDeviceSyncMode)
+        patched = True
+
+    original = getattr(native_bindings, "create_client", None)
+    if original is None:
+        return patched
+
+    try:
+        parameter_count = len(inspect.signature(original).parameters)
+    except (TypeError, ValueError):
+        return patched
+    if parameter_count != 10 or not hasattr(native_bindings, "DbOptions"):
+        return patched
+
+    async def create_client_compat(*args: Any) -> Any:
+        if len(args) == 12:
+            (
+                api,
+                sync_api,
+                db_path,
+                encryption_key,
+                inbox_id,
+                account_identifier,
+                nonce,
+                legacy_signed_private_key_proto,
+                _device_sync_server_url,
+                device_sync_mode,
+                allow_offline,
+                fork_recovery_opts,
+            ) = args
+            db_options = native_bindings.DbOptions(
+                db=db_path,
+                encryption_key=encryption_key,
+                max_db_pool_size=None,
+                min_db_pool_size=None,
+            )
+            return await original(
+                api,
+                sync_api,
+                db_options,
+                inbox_id,
+                account_identifier,
+                nonce,
+                legacy_signed_private_key_proto,
+                device_sync_mode,
+                allow_offline,
+                fork_recovery_opts,
+            )
+        return await original(*args)
+
+    setattr(native_bindings, "create_client", create_client_compat)
+    return True
+
+
+def patch_xmtp_native_compat(native_bindings: Any) -> bool:
+    connector_patched = patch_xmtp_backend_connector(native_bindings)
+    factory_patched = patch_xmtp_client_factory(native_bindings)
+    return connector_patched or factory_patched
 
 
 def plain_text_status_sender(ctx):
@@ -22,10 +115,14 @@ def plain_text_status_sender(ctx):
 async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
     logger = logging.getLogger(__name__)
     try:
+        from xmtp.bindings import NativeBindings
         from xmtp.types import ClientOptions, LogLevel
         from xmtp_agent import Agent
     except ImportError as exc:
         raise RuntimeError("Install bot dependencies with: pip install -r requirements-broker.txt") from exc
+
+    if patch_xmtp_native_compat(NativeBindings):
+        logger.info("installed xmtp native compatibility shim")
 
     options = ClientOptions(
         env=config.xmtp_env,

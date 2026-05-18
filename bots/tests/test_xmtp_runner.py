@@ -3,7 +3,11 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from cheapbugs_broker.xmtp_runner import plain_text_status_sender
+from cheapbugs_broker.xmtp_runner import (
+    patch_xmtp_backend_connector,
+    patch_xmtp_client_factory,
+    plain_text_status_sender,
+)
 
 
 class PlainTextStatusSenderTest(unittest.TestCase):
@@ -28,3 +32,133 @@ class FakeContext:
     async def send_text_reply(self, text: str) -> None:
         self.used_reply_content_type = True
         raise AssertionError(f"unexpected reply-content send: {text}")
+
+
+class BackendConnectorCompatTest(unittest.TestCase):
+    def test_patch_bridges_old_client_call_to_new_bindings_signature(self) -> None:
+        bindings = FakeBindings()
+
+        self.assertTrue(patch_xmtp_backend_connector(bindings))
+        result = asyncio.run(
+            bindings.connect_to_backend(
+                "https://grpc.production.xmtp.network",
+                None,
+                True,
+                None,
+                "cheapbugs-test",
+                None,
+                None,
+            )
+        )
+
+        self.assertEqual(result, "api-client")
+        self.assertEqual(
+            bindings.calls,
+            [
+                (
+                    "https://grpc.production.xmtp.network",
+                    None,
+                    FakeBindings.FfiClientMode.DEFAULT,
+                    "cheapbugs-test",
+                    None,
+                    None,
+                )
+            ],
+        )
+
+    def test_patch_bridges_old_create_client_call_to_new_bindings_signature(self) -> None:
+        bindings = FakeBindings()
+
+        self.assertTrue(patch_xmtp_client_factory(bindings))
+        result = asyncio.run(
+            bindings.create_client(
+                "api",
+                "sync-api",
+                ".broker/xmtp.db3",
+                b"key",
+                "inbox",
+                "identifier",
+                0,
+                None,
+                None,
+                bindings.FfiSyncWorkerMode.DISABLED,
+                None,
+                None,
+            )
+        )
+
+        self.assertEqual(result, "xmtp-client")
+        self.assertIs(bindings.FfiSyncWorkerMode, FakeBindings.FfiDeviceSyncMode)
+        self.assertEqual(len(bindings.client_calls), 1)
+        self.assertEqual(bindings.client_calls[0][0:2], ("api", "sync-api"))
+        self.assertEqual(bindings.client_calls[0][2].db, ".broker/xmtp.db3")
+        self.assertEqual(bindings.client_calls[0][2].encryption_key, b"key")
+        self.assertEqual(bindings.client_calls[0][3:], ("inbox", "identifier", 0, None, "disabled", None, None))
+
+
+class FakeBindings:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+        self.client_calls: list[tuple[object, ...]] = []
+
+    class FfiClientMode:
+        DEFAULT = "default"
+
+    class FfiDeviceSyncMode:
+        ENABLED = "enabled"
+        DISABLED = "disabled"
+
+    class DbOptions:
+        def __init__(
+            self,
+            *,
+            db: str | None,
+            encryption_key: bytes | None,
+            max_db_pool_size: int | None,
+            min_db_pool_size: int | None,
+        ) -> None:
+            self.db = db
+            self.encryption_key = encryption_key
+            self.max_db_pool_size = max_db_pool_size
+            self.min_db_pool_size = min_db_pool_size
+
+    async def connect_to_backend(
+        self,
+        host: str,
+        gateway_host: str | None,
+        client_mode: object,
+        app_version: str | None,
+        auth_callback: object,
+        auth_handle: object,
+    ) -> str:
+        self.calls.append((host, gateway_host, client_mode, app_version, auth_callback, auth_handle))
+        return "api-client"
+
+    async def create_client(
+        self,
+        api: object,
+        sync_api: object,
+        db_options: DbOptions,
+        inbox_id: str,
+        account_identifier: object,
+        nonce: int,
+        legacy_signed_private_key_proto: bytes | None,
+        device_sync_mode: object,
+        allow_offline: bool | None,
+        fork_recovery_opts: object,
+    ) -> str:
+        self.client_calls.append(
+            (
+                api,
+                sync_api,
+                db_options,
+                inbox_id,
+                account_identifier,
+                nonce,
+                legacy_signed_private_key_proto,
+                device_sync_mode,
+                allow_offline,
+                fork_recovery_opts,
+            )
+        )
+        return "xmtp-client"
