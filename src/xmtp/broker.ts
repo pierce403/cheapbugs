@@ -6,8 +6,28 @@ import { sendXmtpDm, type BrowserXmtpIdentity, type XmtpProgressHandler } from "
 
 export const BROKER_SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1";
 export const BROKER_SUBMISSION_VERSION = 1;
+const BROKER_IPFS_CONFIRMATION_PATTERN = /Encrypted BugBundle pinned to IPFS:\s*ipfs:\/\//i;
+const BROKER_TERMINAL_FAILURE_PATTERN = new RegExp(
+  [
+    "Invalid JSON command",
+    "JSON command must",
+    "Missing required submission field",
+    "Unexpected submission field",
+    "Submission (?:schema|version|JSON) must",
+    "Unsupported disclosure mode",
+    "Submission (?:target|credentials) is invalid",
+    "BugBundle IPFS publish failed"
+  ].join("|"),
+  "i"
+);
+const BROKER_IPFS_CONFIRMATION_TIMEOUT_MS = 120 * 1000;
 
 export const isBrokerConfigured = (): boolean => Boolean(env.brokerXmtpAddress);
+
+const extractIpfsUri = (text?: string): string | undefined => {
+  const match = text?.match(/ipfs:\/\/[^\s)]+/i);
+  return match?.[0].replace(/[.,;:]+$/, "");
+};
 
 export const buildBrokerSubmissionMessage = (
   input: SubmissionFormInput,
@@ -40,5 +60,15 @@ export const sendBrokerSubmission = async (
   }
 
   const message = buildBrokerSubmissionMessage(input, identity.address);
-  return sendXmtpDm(identity, env.brokerXmtpAddress, message, onProgress);
+  const result = await sendXmtpDm(identity, env.brokerXmtpAddress, message, onProgress, {
+    completionPattern: BROKER_IPFS_CONFIRMATION_PATTERN,
+    failurePattern: BROKER_TERMINAL_FAILURE_PATTERN,
+    timeoutMs: BROKER_IPFS_CONFIRMATION_TIMEOUT_MS,
+    waitingMessage: "waiting for broker validation and IPFS publish",
+    onReply: (message) => onProgress?.(`broker: ${message}`)
+  });
+  return {
+    ...result,
+    ipfsUri: extractIpfsUri(result.completionText)
+  };
 };

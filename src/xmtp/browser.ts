@@ -10,6 +10,19 @@ export type BrowserXmtpIdentity = {
 };
 
 export type XmtpProgressHandler = (message: string) => void;
+export type XmtpReplyWaitOptions = {
+  completionPattern: RegExp;
+  failurePattern?: RegExp;
+  timeoutMs?: number;
+  onReply?: XmtpProgressHandler;
+  waitingMessage?: string;
+};
+export type XmtpDmSendResult = {
+  conversationId: string;
+  messageId: string;
+  replyMessages: string[];
+  completionText?: string;
+};
 
 type XmtpClientCache = {
   address: `0x${string}`;
@@ -26,6 +39,8 @@ const signatureInFlight = new Map<string, Promise<string>>();
 
 const SIGNATURE_CACHE_FALLBACK_MS = 5 * 60 * 1000;
 const SIGNATURE_REFRESH_SKEW_MS = 60 * 1000;
+const BROKER_REPLY_POLL_MS = 1500;
+const DEFAULT_REPLY_TIMEOUT_MS = 120 * 1000;
 
 const toIdentifierHex = (address: string): string =>
   address.startsWith("0x") || address.startsWith("0X") ? address.slice(2).toLowerCase() : address.toLowerCase();
@@ -139,6 +154,134 @@ const clientIsRegistered = async (client: any): Promise<boolean> => {
   return Boolean(client.isRegistered);
 };
 
+const sleep = (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds));
+
+const messageText = (message: any): string | null => {
+  if (typeof message?.content === "string") {
+    return message.content;
+  }
+  if (typeof message?.fallback === "string") {
+    return message.fallback;
+  }
+  return null;
+};
+
+const waitForXmtpReply = async (
+  dm: any,
+  sdk: any,
+  senderInboxId: string | undefined,
+  sentMessageId: string,
+  startedAtMs: number,
+  options: XmtpReplyWaitOptions,
+  onProgress?: XmtpProgressHandler
+): Promise<{ replyMessages: string[]; completionText: string }> => {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REPLY_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+  const sentAfterNs = BigInt(Math.max(0, startedAtMs - 5000)) * 1_000_000n;
+  const seenMessages = new Set<string>();
+  const replyMessages: string[] = [];
+  let stream: any | null = null;
+
+  const considerMessage = (message: any): string | null => {
+    const id = String(message?.id ?? "");
+    if (!id || seenMessages.has(id) || id === sentMessageId) {
+      return null;
+    }
+    if (senderInboxId && message?.senderInboxId === senderInboxId) {
+      seenMessages.add(id);
+      return null;
+    }
+
+    const text = messageText(message);
+    if (!text) {
+      seenMessages.add(id);
+      return null;
+    }
+    seenMessages.add(id);
+    replyMessages.push(text);
+    options.onReply?.(text);
+    return text;
+  };
+
+  const checkTerminalText = (text: string): string | null => {
+    if (options.failurePattern?.test(text)) {
+      throw new Error(text);
+    }
+    return options.completionPattern.test(text) ? text : null;
+  };
+
+  const checkExistingMessages = async (): Promise<string | null> => {
+    await dm.sync?.().catch(() => undefined);
+    const messagesPromise =
+      typeof dm.messages === "function"
+        ? dm.messages({
+            sentAfterNs,
+            limit: 50n,
+            direction: sdk.SortDirection?.Ascending ?? 0,
+            sortBy: sdk.MessageSortBy?.SentAt ?? 0
+          })
+        : Promise.resolve([]);
+    const messages = await messagesPromise.catch(() => []);
+    for (const message of messages ?? []) {
+      const text = considerMessage(message);
+      if (text) {
+        const completeText = checkTerminalText(text);
+        if (completeText) {
+          return completeText;
+        }
+      }
+    }
+    return null;
+  };
+
+  onProgress?.(options.waitingMessage ?? "waiting for broker status replies");
+  try {
+    stream = await dm.stream?.({
+      disableSync: true,
+      retryAttempts: 2,
+      retryDelay: BROKER_REPLY_POLL_MS
+    });
+  } catch {
+    stream = null;
+  }
+
+  let pendingStreamMessage: Promise<any> | null = stream?.next?.() ?? null;
+  try {
+    while (Date.now() < deadline) {
+      const completeFromHistory = await checkExistingMessages();
+      if (completeFromHistory) {
+        return { replyMessages, completionText: completeFromHistory };
+      }
+
+      if (pendingStreamMessage) {
+        const streamResult = await Promise.race([
+          pendingStreamMessage,
+          sleep(BROKER_REPLY_POLL_MS).then(() => null)
+        ]);
+        if (streamResult?.done) {
+          pendingStreamMessage = null;
+        } else if (streamResult?.value) {
+          const text = considerMessage(streamResult.value);
+          if (text) {
+            const completeText = checkTerminalText(text);
+            if (completeText) {
+              return { replyMessages, completionText: completeText };
+            }
+          }
+          pendingStreamMessage = stream?.next?.() ?? null;
+        }
+      } else {
+        await sleep(BROKER_REPLY_POLL_MS);
+      }
+    }
+  } finally {
+    await stream?.return?.().catch(() => undefined);
+  }
+
+  throw new Error(`Timed out waiting ${Math.round(timeoutMs / 1000)} seconds for broker IPFS confirmation.`);
+};
+
 export const connectBrowserXmtp = async (
   identity: BrowserXmtpIdentity,
   onProgress?: XmtpProgressHandler,
@@ -183,8 +326,9 @@ export const sendXmtpDm = async (
   identity: BrowserXmtpIdentity,
   recipientAddress: `0x${string}`,
   message: string,
-  onProgress?: XmtpProgressHandler
-): Promise<{ conversationId: string; messageId: string }> => {
+  onProgress?: XmtpProgressHandler,
+  waitForReply?: XmtpReplyWaitOptions
+): Promise<XmtpDmSendResult> => {
   const sdk = await loadSdk(onProgress);
   const client = await connectBrowserXmtp(identity, onProgress, sdk);
   const recipient = normalizeAddress(recipientAddress);
@@ -216,10 +360,16 @@ export const sendXmtpDm = async (
   onProgress?.("opening broker DM");
   const dm = await client.conversations.createDm(inboxId);
   onProgress?.("sending broker submission");
+  const sentAtMs = Date.now();
   const messageId = await dm.sendText(message);
   onProgress?.("broker submission sent");
+  const replyResult = waitForReply
+    ? await waitForXmtpReply(dm, sdk, client.inboxId, messageId, sentAtMs, waitForReply, onProgress)
+    : { replyMessages: [] };
   return {
     conversationId: dm.id,
-    messageId
+    messageId,
+    replyMessages: replyResult.replyMessages,
+    completionText: "completionText" in replyResult ? replyResult.completionText : undefined
   };
 };

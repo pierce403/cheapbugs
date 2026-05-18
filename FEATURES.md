@@ -116,7 +116,7 @@ cheapbugs/
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, `bug_type`, `severity`, `target_interest`, title, public summary, private details, and client metadata.
   - The frontend does not yet attach a reporter signature over the submission payload; broker-relayed onchain attribution must stay disabled until the reporter-signed relay feature exists.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
-  - The submit route shows a processing-submission modal while broker XMTP submission work is in progress.
+  - The submit route shows a processing-submission modal while broker XMTP submission work is in progress, keeps it open across broker status replies, and only marks the submission complete after the broker confirms the BugBundle is pinned to IPFS.
   - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve XMTP registration.
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
@@ -125,10 +125,11 @@ cheapbugs/
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid provided target references, and invalid reporter credentials.
   - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
   - Broker status messages intentionally avoid XMTP reply-content encoding so the submission flow does not depend on nonessential reply-content codec behavior.
+  - After sending the submission DM, the browser waits for broker plain text replies in the same XMTP conversation. `Encrypted BugBundle pinned to IPFS: ipfs://...` is treated as terminal success; target, credential, JSON, or IPFS failure replies are terminal errors.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:
   - [x] Python unit tests cover strict JSON parsing, required fields, target validation, staged status messages, and credential failure.
-  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, and structured XMTP submit UI.
+  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, field ordering, and structured XMTP submit UI including the IPFS-confirmation modal state.
   - [ ] Add reporter-signed payload envelopes before the broker can submit user-attributed records onchain.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
 

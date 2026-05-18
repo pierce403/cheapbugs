@@ -49,6 +49,8 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
   await expect(page.getByText("xmtp broker wallet: 0xea6995fc3674e1e94736766f5eeefb0506e4ef32")).toBeVisible();
   await expect(page.getByTestId("xmtp-status")).toContainText("xmtp: wallet required");
   await expect(page.getByRole("button", { name: "submit to broker" })).toBeEnabled();
+  await expect(page.locator("#submit-form label").nth(0)).toContainText("title");
+  await expect(page.locator("#submit-form label").nth(1)).toContainText("bug type");
   await expect(page.getByLabel("bug type")).toHaveValue("0day");
   await expect(page.getByLabel("severity")).toHaveValue("1");
   await expect(page.locator("#severity-output")).toHaveText("medium");
@@ -136,4 +138,19 @@ test("submit route shows a processing modal during broker submission progress", 
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("processing submission");
   await expect(dialog).toContainText("opening broker DM");
+
+  await page.locator("[data-view-root]").evaluate((root) => {
+    root.dispatchEvent(
+      new CustomEvent("cheapbugs:xmtp-progress", {
+        detail: { message: "broker: Encrypted BugBundle pinned to IPFS: ipfs://bafybrokerbundle." }
+      })
+    );
+  });
+
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("ipfs://bafybrokerbundle");
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  await expect(page.getByTestId("xmtp-status")).toContainText("broker: IPFS live");
+  await dialog.getByRole("button", { name: "close" }).click();
+  await expect(dialog).toBeHidden();
 });

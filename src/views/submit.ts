@@ -20,6 +20,7 @@ type SignatureWaitState = {
 type ProcessingState = {
   open: boolean;
   detail: string;
+  complete: boolean;
 };
 
 let persistedXmtpStatus: XmtpStatus | null = null;
@@ -29,7 +30,8 @@ let persistedSignatureWait: SignatureWaitState = {
 };
 let persistedProcessing: ProcessingState = {
   open: false,
-  detail: "Preparing broker submission."
+  detail: "Preparing broker submission.",
+  complete: false
 };
 let submitInFlight = false;
 
@@ -126,6 +128,8 @@ const isSignatureWaitProgress = (message: string): boolean => /waiting for .*xmt
 const isSignatureSettledProgress = (message: string): boolean =>
   /xmtp wallet signature approved|using cached xmtp wallet signature/i.test(message);
 
+const isIpfsConfirmationProgress = (message: string): boolean => /Encrypted BugBundle pinned to IPFS:\s*ipfs:\/\//i.test(message);
+
 const statusMarkup = (status = initialXmtpStatus()): string => `
   <div id="xmtp-status" class="xmtp-status xmtp-status-${status.tone}" role="status" aria-live="polite" data-testid="xmtp-status">
     <span class="xmtp-status-light" aria-hidden="true"></span>
@@ -166,15 +170,19 @@ const processingModalMarkup = (state = persistedProcessing): string => `
     aria-modal="true"
     aria-label="processing submission"
     aria-live="polite"
+    aria-busy="${state.complete ? "false" : "true"}"
     data-testid="xmtp-processing-modal"
     ${state.open ? "" : "hidden"}
   >
-    <section class="processing-modal panel" aria-busy="true">
-      <div class="signature-spinner" aria-hidden="true"></div>
+    <section id="xmtp-processing-panel" class="processing-modal panel${state.complete ? " is-complete" : ""}" aria-busy="${state.complete ? "false" : "true"}">
+      <div id="xmtp-processing-spinner" class="signature-spinner" aria-hidden="true" ${state.complete ? "hidden" : ""}></div>
       <div class="signature-modal-copy">
         <div class="panel-title">[ broker submission ]</div>
         <strong>processing submission</strong>
         <p id="xmtp-processing-detail">${escapeHtml(state.detail)}</p>
+        <button id="xmtp-processing-close" class="button secondary" type="button" ${state.complete ? "" : "hidden"}>
+          close
+        </button>
       </div>
     </section>
   </div>
@@ -200,12 +208,12 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
 
     <form id="submit-form" class="panel stack-form">
       <div class="panel-title">[ report fields ]</div>
+      <label>title<input name="title" required maxlength="120" placeholder="Heap corruption in parser" /></label>
       <label>bug type<select name="bugType" required>${bugTypeOptionsMarkup()}</select></label>
       <div class="two-column slider-grid">
         ${sliderMarkup("severity", "severity")}
         ${sliderMarkup("targetInterest", "target interest")}
       </div>
-      <label>title<input name="title" required maxlength="120" placeholder="Heap corruption in parser" /></label>
       <label>public summary<textarea name="publicSummary" rows="3" required placeholder="Redacted public-safe summary for browsing and indexing."></textarea></label>
       <label>details<textarea name="details" rows="7" required placeholder="Private details only."></textarea></label>
       <button id="submit-to-broker" class="button" type="submit">
@@ -228,7 +236,10 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
     const signatureModal = root.querySelector<HTMLElement>("#xmtp-signature-modal");
     const signatureDetail = root.querySelector<HTMLElement>("#xmtp-signature-detail");
     const processingModal = root.querySelector<HTMLElement>("#xmtp-processing-modal");
+    const processingPanel = root.querySelector<HTMLElement>("#xmtp-processing-panel");
     const processingDetail = root.querySelector<HTMLElement>("#xmtp-processing-detail");
+    const processingSpinner = root.querySelector<HTMLElement>("#xmtp-processing-spinner");
+    const processingClose = root.querySelector<HTMLButtonElement>("#xmtp-processing-close");
     const ratingInputs = Array.from(root.querySelectorAll<HTMLInputElement>("input[data-rating-output]"));
 
     for (const input of ratingInputs) {
@@ -280,10 +291,15 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       }
     };
 
-    const setProcessing = (open: boolean, detail = "Preparing broker submission.") => {
-      persistedProcessing = { open, detail };
+    const setProcessing = (open: boolean, detail = "Preparing broker submission.", complete = false) => {
+      persistedProcessing = { open, detail, complete };
       processingModal?.toggleAttribute("hidden", !open);
       processingModal?.classList.toggle("is-open", open);
+      processingModal?.setAttribute("aria-busy", complete ? "false" : "true");
+      processingPanel?.classList.toggle("is-complete", complete);
+      processingPanel?.setAttribute("aria-busy", complete ? "false" : "true");
+      processingSpinner?.toggleAttribute("hidden", complete);
+      processingClose?.toggleAttribute("hidden", !complete);
       if (processingDetail) {
         processingDetail.textContent = detail;
       }
@@ -299,8 +315,13 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         setSignatureWait(false);
       }
 
-      setProcessing(true, message);
-      setStatus("working", "xmtp: sending", message);
+      if (isIpfsConfirmationProgress(message)) {
+        setProcessing(true, message, true);
+        setStatus("sent", "broker: IPFS live", message);
+      } else {
+        setProcessing(true, message);
+        setStatus("working", "xmtp: sending", message);
+      }
       appLog.info("submit: broker XMTP progress", { message });
     };
 
@@ -310,6 +331,9 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         handleXmtpProgress(message);
       }
     }) as EventListener);
+    processingClose?.addEventListener("click", () => {
+      setProcessing(false);
+    });
 
     form?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -327,6 +351,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
 
       const formData = new FormData(form);
       submitInFlight = true;
+      let terminalModalShown = false;
       submitButton?.setAttribute("disabled", "true");
       submitButton?.setAttribute("aria-busy", "true");
       setProcessing(true, "Preparing broker submission.");
@@ -358,16 +383,25 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         const result = await sendBrokerSubmission(xmtpIdentity, input, (message) => {
           root.dispatchEvent(new CustomEvent(XMTP_PROGRESS_EVENT, { detail: { message } }));
         });
-        setStatus("sent", "xmtp: sent", `Broker message ${result.messageId} sent.`);
+        const successDetail = result.ipfsUri
+          ? `BugBundle is live on IPFS: ${result.ipfsUri}. Broker message ${result.messageId} was sent.`
+          : `Broker message ${result.messageId} sent and the broker confirmed the BugBundle is live on IPFS.`;
+        setProcessing(true, successDetail, true);
+        setStatus("sent", "broker: IPFS live", successDetail);
+        terminalModalShown = true;
         form.reset();
         appLog.info("submit: broker submission sent", result);
       } catch (error) {
         const message = xmtpErrorMessage(error);
+        setProcessing(true, `Submission failed: ${message}`, true);
+        terminalModalShown = true;
         setStatus("error", "xmtp: failed", message);
         appLog.error("submit: broker submission failed", error);
       } finally {
         setSignatureWait(false);
-        setProcessing(false);
+        if (!terminalModalShown) {
+          setProcessing(false);
+        }
         submitInFlight = false;
         submitButton?.removeAttribute("disabled");
         submitButton?.removeAttribute("aria-busy");
