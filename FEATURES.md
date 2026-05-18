@@ -168,7 +168,7 @@ cheapbugs/
 - **Properties**:
   - `VITE_BROKER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed.
   - The frontend form collects bug type, severity, target interest, title, public summary, and private details. Repro steps, evidence, Signal recipient, contact hints, target kind/reference fields, tags, and review access keys are intentionally not user-facing.
-  - Bug type is a malleable broker-triage hint with current values `0day`, `nday`, `web`, `net`, and `intel`.
+  - Bug type is a malleable broker-triage hint with current values `0day`, `nday`, `web`, `web3`, `net`, and `intel`.
   - Severity and target interest are malleable broker-triage hints with current slider values `low`, `medium`, `high`, and `critical`.
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, broker-triage target defaults, client metadata, an encrypted `bug_bundle`, a reporter EIP-712 `publish_authorization`, and an out-of-bundle `details_key`.
   - The frontend generates the random details key, encrypts details into the BugBundle with AES-256-GCM, hashes the canonical BugBundle core, and signs the `PublishBug` EIP-712 message that the index verifies.

@@ -52,6 +52,9 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
   await expect(page.locator("#submit-form label").nth(0)).toContainText("title");
   await expect(page.locator("#submit-form label").nth(1)).toContainText("bug type");
   await expect(page.getByLabel("bug type")).toHaveValue("0day");
+  await expect(page.getByLabel("bug type").locator('option[value="web3"]')).toHaveText(
+    "web3 : bug in smart contracts, wallets, dapps, or onchain protocols"
+  );
   await expect(page.getByLabel("severity")).toHaveValue("1");
   await expect(page.locator("#severity-output")).toHaveText("medium");
   await expect(page.getByLabel("target interest")).toHaveValue("1");

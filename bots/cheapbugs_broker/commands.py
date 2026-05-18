@@ -21,7 +21,7 @@ B64URL_32_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
 SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1"
 SUBMISSION_VERSION = 1
-BUG_TYPES = {"0day", "nday", "web", "net", "intel"}
+BUG_TYPES = {"0day", "nday", "web", "web3", "net", "intel"}
 RATING_VALUES = {"low", "medium", "high", "critical"}
 TARGET_KINDS = {"repo", "package", "domain", "contract", "protocol", "other"}
 DISCLOSURE_MODES = {"private", "embargoed", "public"}

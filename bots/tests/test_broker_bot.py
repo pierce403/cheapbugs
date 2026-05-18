@@ -68,6 +68,27 @@ class CommandParsingTest(unittest.TestCase):
         self.assertEqual(command.target_interest, "high")
         self.assertEqual(command.repro_steps, "")
 
+    def test_parse_web3_submission_category(self) -> None:
+        payload = valid_submission_payload(bug_type="web3")
+        assert isinstance(payload["bug_bundle"], dict)
+        payload["bug_bundle"] = fake_bug_bundle(
+            reporter=WALLET,
+            broker=BROKER,
+            bug_type="web3",
+            severity="high",
+            target_interest="critical",
+            title="Parser overflow",
+            public_summary="Public safe summary for reviewers.",
+            target={"kind": "repo", "reference": "pierce403/cheapbugs"},
+            tags=["parser", "memory"],
+        )
+        payload["publish_authorization"] = fake_publish_authorization(payload["bug_bundle"]["core"])
+
+        command = parse_command(json.dumps(payload))
+
+        self.assertIsInstance(command, SubmissionCommand)
+        self.assertEqual(command.bug_type, "web3")
+
     def test_reject_text_submission(self) -> None:
         with self.assertRaisesRegex(CommandError, "strict CheapBugs JSON schema"):
             parse_command(

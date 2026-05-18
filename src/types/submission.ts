@@ -14,6 +14,10 @@ export const BUG_TYPE_OPTIONS = [
     label: "web : bug in some webapp somewhere in the world"
   },
   {
+    value: "web3",
+    label: "web3 : bug in smart contracts, wallets, dapps, or onchain protocols"
+  },
+  {
     value: "net",
     label: "net : bug in some network service somewhere in the world"
   },
