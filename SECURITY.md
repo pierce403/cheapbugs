@@ -118,6 +118,7 @@ The broker still must not create live bug-index records until its accepted-submi
 - Detail-key purchases are onchain payment records for broker verification; the broker still decides whether and when to deliver a key offchain.
 - Rewards can only be paid by the configured index and only for brokers also authorized by the treasury.
 - A bad treasury/index configuration can block payouts or pay from an unintended treasury. The launcher checks the deployed wiring, and operators should still record the verified addresses before funding the treasury.
+- Deployment manifests under `deployments/` are public reproducibility records. They include deployer and role addresses, constructor arguments, bytecode hashes, generated artifacts, and transaction hashes, but must not include private keys, explorer API keys, or unredacted RPC URLs.
 
 ### BUGZ Credentials And Reputation
 

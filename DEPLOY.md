@@ -40,6 +40,8 @@ npm run launch:bug-index:forge:dry-run
 
 This compiles the contracts, writes artifacts, refreshes the frontend ABI modules, and lets you simulate the Foundry deployment path without broadcasting.
 
+The Node dry run also writes the tracked reproducibility manifest at `deployments/base-8453/cheapbugs-contract-suite.latest.json` and full generated contract artifacts under `deployments/base-8453/generated/latest/`.
+
 ## 3. Deploy The CheapBugs Contract Suite To Base
 
 ```bash
@@ -59,6 +61,8 @@ The script deploys and wires `CheapBugsTreasuryVault`, `CheapBugsBondVault`, and
 If `BUG_INDEX_DEPLOYER_PRIVATE_KEY` is unset, the launchers use `BROKER_KEY` as the deployer. In that fallback mode, the broker wallet is also added as the initial index/treasury broker when `BUG_INDEX_INITIAL_BROKERS` is empty. Ownership is then transferred to `BUG_INDEX_OWNER`.
 
 Real deployments verify all three contracts on Etherscan/BaseScan by default after post-deploy wiring checks pass. The script fails before broadcasting if `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY` is missing, unless `BUG_INDEX_VERIFY_CONTRACTS=0` is set.
+
+The Node launcher records a detailed deploy log for every successful real deployment. It updates `deployments/base-8453/cheapbugs-contract-suite.latest.json`, writes an address-specific manifest named `deployments/base-8453/cheapbugs-contract-suite.<index-address>.json`, and commits-ready generated artifacts under `deployments/base-8453/generated/<index-address>/`. The manifest includes compiler versions, optimizer settings, `via_ir`, source/package hashes, constructor arguments, transaction hashes, gas data, explorer verification command inputs, and the paths/hashes for all generated contract artifacts. It intentionally omits private keys, explorer API keys, and full RPC URLs.
 
 The script prints the deployed index address as:
 
@@ -131,6 +135,7 @@ If you publish the app itself to IPFS, validate your gateway and asset-path beha
 ## Operational Notes
 
 - The smart contracts cover the planned onchain mechanics for bonding, slashing, detail-key payment records, broker-published reports, bonded voting, details-key reveal, and ordered treasury payouts. The full production system is not ready until the broker submits accepted XMTP/IPFS submissions to `CheapBugsBugIndex.publishBug`, live XMTP smoke tests pass, and operational keys/funding are finalized.
+- Deployment manifests under `deployments/` are intentionally tracked reproducibility records. `artifacts/`, `out/`, `cache/`, and `broadcast/` remain transient Foundry/launcher output unless a future task explicitly says otherwise.
 - Public report metadata is immutable once written onchain.
 - Private report details stay encrypted, but the encrypted blob CID is public because it is stored onchain.
 - Review trust is currently driven by the configured reviewer allowlist.

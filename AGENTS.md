@@ -75,6 +75,8 @@ npm run launch:bug-index
 - `test/CheapBugsTreasuryVault.t.sol`: Foundry unit and fuzz tests for detail-key purchases and index-gated payouts
 - `scripts/launch-bug-index.mjs`: compile/deploy launcher for the CheapBugs contract suite
 - `scripts/launch-bug-index-forge.sh`: shell wrapper for the Forge bug index launcher
+- `deployments/base-8453/cheapbugs-contract-suite.latest.json`: tracked reproducibility manifest for the latest CheapBugs contract-suite dry run or deployment
+- `deployments/base-8453/generated/latest/`: tracked generated Foundry artifacts for the latest contract-suite build
 - `src/contracts/bugIndex.ts`: frontend read/write adapter for the bug index contract
 - `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, connected-wallet balances, optional treasury stats, and patron scans
 - `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
@@ -120,6 +122,7 @@ npm run launch:bug-index
 - The header brand row includes a compact orange GitHub icon link to `https://github.com/pierce403/cheapbugs` immediately to the right of the `cheapbugs` wordmark, followed by build metadata from `src/buildInfo.ts`. The build timestamp is injected as ISO and formatted in the viewer's local timezone.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
 - The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes. Real contract-suite deployments verify all three contracts on Etherscan/BaseScan by default; set `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY`, and use `BUG_INDEX_VERIFY_CONTRACTS=0` only for intentional unverified deploys.
+- The Node launcher records reproducibility data under `deployments/base-8453/`: latest and address-specific manifests plus full generated contract artifacts. These files are intentionally tracked and include compiler/tool versions, optimizer settings, constructor args, transaction logs for broadcasts, verification inputs, and generated ABI/bytecode artifacts. They must not include private keys, explorer API keys, or unredacted RPC URLs.
 - Contract-suite launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set, otherwise fall back to `BROKER_KEY`. When `BROKER_KEY` is the deployer and `BUG_INDEX_INITIAL_BROKERS` is empty, the broker wallet is seeded as an initial broker. Default final ownership transfers to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3`.
 - The JS launchers use `forge build` plus Foundry artifacts from `out/...` instead of npm `solc`; keep npm `solc` out of `package.json` unless its audit footprint has been reviewed.
 - Foundry is now configured with `contracts/` as the source directory, `script/` for deploy scripts, and `test/` for scenario coverage.
@@ -185,7 +188,7 @@ npm run launch:bug-index
 - Real XMTP submission requires the default or overridden broker address to point at an already registered broker XMTP inbox.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
 - The bug-index launcher deploys the full CheapBugs contract suite and needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` or `BROKER_KEY`, plus `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY` for a default real deployment. Optional initial lists are `BUG_INDEX_INITIAL_BROKERS`, `BUG_INDEX_INITIAL_ADMINS`, and `BUG_INDEX_INITIAL_SLASHERS`.
-- `artifacts/` and `dist/` are generated outputs and should not be committed unless the user explicitly asks.
+- `artifacts/`, `out/`, `cache/`, `broadcast/`, and `dist/` are generated outputs and should not be committed unless the user explicitly asks. `deployments/` is the exception for committed contract-suite reproducibility records.
 
 ## Collaborator Preferences
 

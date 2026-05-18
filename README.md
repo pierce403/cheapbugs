@@ -182,8 +182,10 @@ The CheapBugs contract launcher:
 - writes `artifacts/CheapBugsBugIndex.json`
 - writes `artifacts/CheapBugsBondVault.json`
 - writes `artifacts/CheapBugsTreasuryVault.json`
+- writes tracked reproducibility manifests and full generated contract artifacts under [deployments/](deployments/)
 - refreshes [src/contracts/bugIndexAbi.ts](src/contracts/bugIndexAbi.ts) so the frontend ABI stays aligned with the deployed contract
 - deploys and wires the bond vault, treasury vault, and index together
+- verifies real deployments on Etherscan/BaseScan by default
 - uses the live Base BUGZ token address hardcoded in the vault contracts
 
 ## Key Paths

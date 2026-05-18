@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 
 import { createPublicClient, createWalletClient, encodeAbiParameters, formatEther, http, isAddress } from "viem";
@@ -9,6 +10,9 @@ import { base } from "viem/chains";
 
 const projectRoot = process.cwd();
 const artifactDir = path.join(projectRoot, "artifacts");
+const deploymentRoot = path.join(projectRoot, "deployments", `base-${base.id}`);
+const latestDeploymentManifestPath = path.join(deploymentRoot, "cheapbugs-contract-suite.latest.json");
+const latestGeneratedArtifactsDir = path.join(deploymentRoot, "generated", "latest");
 const frontendAbiPath = path.join(projectRoot, "src", "contracts", "bugIndexAbi.ts");
 const defaultContractOwner = "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3";
 
@@ -52,9 +56,63 @@ const loadEnvFile = (filePath, { overridePreviousFile = false } = {}) => {
 loadEnvFile(path.join(projectRoot, ".env"));
 loadEnvFile(path.join(projectRoot, ".env.local"), { overridePreviousFile: true });
 
+const relativePath = (filePath) => path.relative(projectRoot, filePath).split(path.sep).join("/");
+
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+const readFileIfExists = (filePath) => (fs.existsSync(filePath) ? fs.readFileSync(filePath) : null);
+
+const fileDigest = (filePath) => {
+  const file = readFileIfExists(filePath);
+  return file === null
+    ? null
+    : {
+        path: relativePath(filePath),
+        sha256: sha256(file),
+        bytes: file.byteLength
+      };
+};
+
+const execText = (command, args) => {
+  try {
+    const output = execFileSync(command, args, {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    return output || null;
+  } catch {
+    return null;
+  }
+};
+
+const redactUrl = (value) => {
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return "(invalid URL)";
+  }
+};
+
+const bigintReplacer = (_key, value) => (typeof value === "bigint" ? value.toString() : value);
+
+const writeJsonFile = (filePath, value) => {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(value, bigintReplacer, 2)}\n`);
+};
+
 const rpcUrl = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const dryRun = process.argv.includes("--dry-run") || process.env.BUG_INDEX_DRY_RUN === "1";
-const deployerKeySource = process.env.BUG_INDEX_DEPLOYER_PRIVATE_KEY ? "BUG_INDEX_DEPLOYER_PRIVATE_KEY" : "BROKER_KEY";
+const deployerKeySource = process.env.BUG_INDEX_DEPLOYER_PRIVATE_KEY
+  ? "BUG_INDEX_DEPLOYER_PRIVATE_KEY"
+  : process.env.BROKER_KEY
+    ? "BROKER_KEY"
+    : null;
 const deployerKey = process.env.BUG_INDEX_DEPLOYER_PRIVATE_KEY || process.env.BROKER_KEY;
 const verifyContracts = !dryRun && process.env.BUG_INDEX_VERIFY_CONTRACTS !== "0";
 const etherscanApiKey = process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY;
@@ -94,6 +152,41 @@ const parseCsvAddresses = (value, label) =>
       return entry;
     });
 
+const normalizePrivateKey = (value) => (value.startsWith("0x") ? value : `0x${value}`);
+
+const loadDeployerAccount = () => {
+  if (!deployerKey) {
+    return null;
+  }
+
+  try {
+    return privateKeyToAccount(normalizePrivateKey(deployerKey));
+  } catch {
+    if (dryRun) {
+      console.warn(`${deployerKeySource || "deployer private key"} is not a valid private key; dry-run manifest will omit the deployer address.`);
+      return null;
+    }
+    console.error(`${deployerKeySource || "deployer private key"} is not a valid private key.`);
+    process.exit(1);
+  }
+};
+
+const deployerAccount = loadDeployerAccount();
+const owner = process.env.BUG_INDEX_OWNER || defaultContractOwner;
+if (!isAddress(owner)) {
+  console.error(`BUG_INDEX_OWNER is not a valid address: ${owner}`);
+  process.exit(1);
+}
+
+const hasExplicitInitialBrokers = (process.env.BUG_INDEX_INITIAL_BROKERS || "").trim() !== "";
+const initialBrokers = hasExplicitInitialBrokers
+  ? parseCsvAddresses(process.env.BUG_INDEX_INITIAL_BROKERS, "BUG_INDEX_INITIAL_BROKERS")
+  : deployerKeySource === "BROKER_KEY" && deployerAccount
+    ? [deployerAccount.address]
+    : [];
+const initialAdmins = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_ADMINS, "BUG_INDEX_INITIAL_ADMINS");
+const initialSlashers = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_SLASHERS, "BUG_INDEX_INITIAL_SLASHERS");
+
 try {
   execFileSync("forge", ["build"], { cwd: projectRoot, stdio: "inherit" });
 } catch {
@@ -101,7 +194,7 @@ try {
   process.exit(1);
 }
 
-const loadContract = ({ source, name, artifact }) => {
+const loadContract = ({ source, name, artifact, contractId }) => {
   const foundryArtifactPath = path.join(projectRoot, "out", source, `${name}.json`);
   if (!fs.existsSync(foundryArtifactPath)) {
     console.error(`Foundry artifact was not created: ${foundryArtifactPath}`);
@@ -111,6 +204,7 @@ const loadContract = ({ source, name, artifact }) => {
   const contractOutput = JSON.parse(fs.readFileSync(foundryArtifactPath, "utf8"));
   const abi = contractOutput.abi;
   const bytecode = contractOutput.bytecode?.object;
+  const deployedBytecode = contractOutput.deployedBytecode?.object;
 
   if (!Array.isArray(abi) || typeof bytecode !== "string" || bytecode === "0x") {
     console.error(`Foundry artifact is missing ABI or bytecode: ${foundryArtifactPath}`);
@@ -132,7 +226,19 @@ const loadContract = ({ source, name, artifact }) => {
     )
   );
 
-  return { abi, bytecode, artifactPath };
+  return {
+    abi,
+    artifactPath,
+    bytecode,
+    contractId,
+    contractOutput,
+    deployedBytecode,
+    foundryArtifactPath,
+    metadata: contractOutput.metadata ?? null,
+    name,
+    rawMetadata: contractOutput.rawMetadata ?? null,
+    source
+  };
 };
 
 const compiled = {
@@ -143,7 +249,283 @@ const compiled = {
 
 fs.writeFileSync(frontendAbiPath, `export const bugIndexAbi = ${JSON.stringify(compiled.index.abi, null, 2)} as const;\n`);
 
+const bytecodeBytes = (value) =>
+  typeof value === "string" && value.startsWith("0x") ? Math.max(0, (value.length - 2) / 2) : null;
+
+const metadataSources = () => {
+  const sourcePaths = new Set([
+    "foundry.toml",
+    "remappings.txt",
+    "package.json",
+    "package-lock.json",
+    "script/LaunchBugIndex.s.sol",
+    "scripts/launch-bug-index.mjs"
+  ]);
+
+  for (const contract of Object.values(compiled)) {
+    for (const sourcePath of Object.keys(contract.metadata?.sources ?? {})) {
+      sourcePaths.add(sourcePath);
+    }
+  }
+
+  return [...sourcePaths]
+    .sort()
+    .map((sourcePath) => fileDigest(path.join(projectRoot, sourcePath)))
+    .filter(Boolean);
+};
+
+const writeGeneratedArtifacts = (targetDir) => {
+  const generatedArtifacts = {};
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  for (const [key, contract] of Object.entries(compiled)) {
+    const filePath = path.join(targetDir, `${contract.name}.json`);
+    writeJsonFile(filePath, {
+      schema: "cheapbugs.generated-contract-artifact.v1",
+      contractName: contract.name,
+      sourceName: `contracts/${contract.source}`,
+      contractId: contract.contractId,
+      foundryArtifactPath: relativePath(contract.foundryArtifactPath),
+      generatedBy: {
+        command: "forge build",
+        foundryProfile: "default"
+      },
+      artifact: contract.contractOutput
+    });
+    generatedArtifacts[key] = fileDigest(filePath);
+  }
+
+  return generatedArtifacts;
+};
+
+const foundryBuildSettings = {
+  profile: "default",
+  src: "contracts",
+  test: "test",
+  script: "script",
+  out: "out",
+  libs: ["lib", "node_modules"],
+  cache_path: "cache/foundry",
+  solc_version: "0.8.24",
+  optimizer: true,
+  optimizer_runs: 200,
+  via_ir: true
+};
+
+const toolVersions = () => ({
+  node: process.version,
+  npm:
+    execText("npm", ["--version"]) ||
+    process.env.npm_config_user_agent?.match(/(?:^|\s)npm\/([^\s]+)/u)?.[1] ||
+    null,
+  forge: execText("forge", ["--version"]),
+  cast: execText("cast", ["--version"]),
+  anvil: execText("anvil", ["--version"])
+});
+
+const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+
+const gitSnapshot = () => {
+  const statusShort = execText("git", [
+    "status",
+    "--short",
+    "--untracked-files=all",
+    "--",
+    "contracts",
+    "foundry.toml",
+    "remappings.txt",
+    "package.json",
+    "package-lock.json",
+    "script/LaunchBugIndex.s.sol",
+    "scripts/launch-bug-index.mjs"
+  ]);
+  return {
+    branch: execText("git", ["branch", "--show-current"]),
+    commit: execText("git", ["rev-parse", "HEAD"]),
+    statusShort: statusShort ? statusShort.split(/\r?\n/u).filter(Boolean) : []
+  };
+};
+
+const constructorInputs = (abi) => abi.find((entry) => entry.type === "constructor")?.inputs ?? [];
+
+const plannedConstructorArguments = () => ({
+  treasuryVault: {
+    contractName: contracts.treasuryVault.name,
+    inputs: constructorInputs(compiled.treasuryVault.abi),
+    values: deployerAccount ? [deployerAccount.address] : [null],
+    encoded: deployerAccount ? encodeAbiParameters([{ type: "address" }], [deployerAccount.address]) : null
+  },
+  bondVault: {
+    contractName: contracts.bondVault.name,
+    inputs: constructorInputs(compiled.bondVault.abi),
+    values: [null, deployerAccount ? deployerAccount.address : null],
+    encoded: null
+  },
+  index: {
+    contractName: contracts.index.name,
+    inputs: constructorInputs(compiled.index.abi),
+    values: [deployerAccount ? deployerAccount.address : null, null, null, initialBrokers, initialAdmins],
+    encoded: null
+  }
+});
+
+const buildVerifyContractArgs = (address, contractId, constructorArgs) => {
+  const args = [
+    "verify-contract",
+    "--verifier",
+    "etherscan",
+    "--chain",
+    String(base.id),
+    "--rpc-url",
+    rpcUrl,
+    "--watch",
+    "--compiler-version",
+    "0.8.24",
+    "--num-of-optimizations",
+    "200",
+    "--via-ir",
+    "--constructor-args",
+    constructorArgs,
+    address,
+    contractId
+  ];
+
+  if (etherscanApiVersion) {
+    args.splice(8, 0, "--etherscan-api-version", etherscanApiVersion);
+  }
+
+  return args;
+};
+
+const sanitizedCommandArgs = (args) =>
+  args.map((arg, index) => {
+    if (args[index - 1] === "--rpc-url") {
+      return redactUrl(arg);
+    }
+    return arg;
+  });
+
+const contractSummary = (key, generatedArtifacts) => {
+  const contract = compiled[key];
+  return {
+    contractName: contract.name,
+    sourceName: `contracts/${contract.source}`,
+    contractId: contract.contractId,
+    foundryArtifactPath: relativePath(contract.foundryArtifactPath),
+    ignoredLauncherArtifactPath: relativePath(contract.artifactPath),
+    committedGeneratedArtifact: generatedArtifacts[key],
+    compiler: contract.metadata?.compiler ?? null,
+    optimizer: contract.metadata?.settings?.optimizer ?? null,
+    viaIR: contract.metadata?.settings?.viaIR ?? null,
+    evmVersion: contract.metadata?.settings?.evmVersion ?? null,
+    remappings: contract.metadata?.settings?.remappings ?? [],
+    constructorInputs: constructorInputs(contract.abi),
+    abiItems: contract.abi.length,
+    methodIdentifiers: contract.contractOutput.methodIdentifiers ?? null,
+    bytecode: {
+      sha256: sha256(contract.bytecode),
+      bytes: bytecodeBytes(contract.bytecode)
+    },
+    deployedBytecode: {
+      sha256: typeof contract.deployedBytecode === "string" ? sha256(contract.deployedBytecode) : null,
+      bytes: bytecodeBytes(contract.deployedBytecode)
+    },
+    rawMetadata: {
+      sha256: typeof contract.rawMetadata === "string" ? sha256(contract.rawMetadata) : null,
+      bytes: typeof contract.rawMetadata === "string" ? Buffer.byteLength(contract.rawMetadata) : null
+    }
+  };
+};
+
+const buildDeploymentManifest = ({
+  mode,
+  status,
+  generatedArtifacts,
+  deployedContracts = null,
+  transactions = [],
+  constructorArguments = plannedConstructorArguments(),
+  verificationResults = []
+}) => ({
+  schema: "cheapbugs.contract-suite-deploy-log.v1",
+  mode,
+  status,
+  generatedAt: mode === "dry-run" ? null : new Date().toISOString(),
+  network: {
+    chainName: base.name,
+    chainId: base.id,
+    rpcUrl: redactUrl(rpcUrl)
+  },
+  launchPlan: {
+    script: "scripts/launch-bug-index.mjs",
+    argv: process.argv.slice(2),
+    deployer: {
+      address: deployerAccount?.address ?? null,
+      keySource: deployerKeySource,
+      privateKeyRecorded: false
+    },
+    finalOwner: owner,
+    initialBrokers,
+    initialAdmins,
+    initialSlashers,
+    verification: {
+      requested: verifyContracts,
+      verifier: "etherscan",
+      apiKeyConfigured: Boolean(etherscanApiKey),
+      apiKeyRecorded: false,
+      etherscanApiVersion: etherscanApiVersion || null
+    }
+  },
+  build: {
+    toolVersions: toolVersions(),
+    package: {
+      name: packageJson.name,
+      version: packageJson.version,
+      packageJson: fileDigest(path.join(projectRoot, "package.json")),
+      packageLock: fileDigest(path.join(projectRoot, "package-lock.json"))
+    },
+    git: gitSnapshot(),
+    foundry: {
+      configFile: fileDigest(path.join(projectRoot, "foundry.toml")),
+      settings: foundryBuildSettings
+    },
+    sourceFiles: metadataSources()
+  },
+  contracts: Object.fromEntries(Object.keys(compiled).map((key) => [key, contractSummary(key, generatedArtifacts)])),
+  constructorArguments,
+  deployedContracts,
+  transactions,
+  verificationResults,
+  reproduction: {
+    commands: [
+      "git checkout <recorded commit>",
+      "git submodule update --init --recursive",
+      "npm install",
+      "forge build",
+      "npm run launch:bug-index:dry-run"
+    ],
+    notes: [
+      "Private keys, API keys, and full RPC URLs are intentionally omitted from this manifest.",
+      "Full generated contract artifacts are committed under the committedGeneratedArtifact paths."
+    ]
+  }
+});
+
+const writeDeploymentManifest = (filePath, manifest) => {
+  writeJsonFile(filePath, manifest);
+  console.log(`Deployment manifest: ${relativePath(filePath)}`);
+};
+
+const latestGeneratedArtifacts = writeGeneratedArtifacts(latestGeneratedArtifactsDir);
+
 if (dryRun) {
+  writeDeploymentManifest(
+    latestDeploymentManifestPath,
+    buildDeploymentManifest({
+      mode: "dry-run",
+      status: "build-only",
+      generatedArtifacts: latestGeneratedArtifacts
+    })
+  );
   console.log("Dry run complete.");
   console.log(`Index artifact: ${compiled.index.artifactPath}`);
   console.log(`Bond vault artifact: ${compiled.bondVault.artifactPath}`);
@@ -164,20 +546,7 @@ if (verifyContracts && !etherscanApiKey) {
   process.exit(1);
 }
 
-const account = privateKeyToAccount(deployerKey.startsWith("0x") ? deployerKey : `0x${deployerKey}`);
-const owner = process.env.BUG_INDEX_OWNER || defaultContractOwner;
-if (!isAddress(owner)) {
-  console.error(`BUG_INDEX_OWNER is not a valid address: ${owner}`);
-  process.exit(1);
-}
-const hasExplicitInitialBrokers = (process.env.BUG_INDEX_INITIAL_BROKERS || "").trim() !== "";
-const initialBrokers = hasExplicitInitialBrokers
-  ? parseCsvAddresses(process.env.BUG_INDEX_INITIAL_BROKERS, "BUG_INDEX_INITIAL_BROKERS")
-  : deployerKeySource === "BROKER_KEY"
-    ? [account.address]
-    : [];
-const initialAdmins = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_ADMINS, "BUG_INDEX_INITIAL_ADMINS");
-const initialSlashers = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_SLASHERS, "BUG_INDEX_INITIAL_SLASHERS");
+const account = deployerAccount;
 
 const publicClient = createPublicClient({
   chain: base,
@@ -233,6 +602,15 @@ const ensureFunded = async () => {
   console.log(`Deployer balance: ${formatEther(balance)} ETH`);
 };
 
+const receiptLog = (receipt) => ({
+  transactionHash: receipt.transactionHash,
+  blockNumber: receipt.blockNumber,
+  gasUsed: receipt.gasUsed,
+  cumulativeGasUsed: receipt.cumulativeGasUsed,
+  effectiveGasPrice: receipt.effectiveGasPrice ?? null,
+  status: receipt.status
+});
+
 const deploy = async (label, abi, bytecode, args) => {
   console.log(`Deploying ${label}...`);
   const txHash = await walletClient.deployContract({ abi, bytecode, args });
@@ -242,7 +620,12 @@ const deploy = async (label, abi, bytecode, args) => {
     throw new Error(`${label} deployment failed in transaction ${txHash}.`);
   }
   console.log(`${label}: ${receipt.contractAddress}`);
-  return receipt.contractAddress;
+  return {
+    type: "deployment",
+    label,
+    address: receipt.contractAddress,
+    ...receiptLog(receipt)
+  };
 };
 
 const write = async (label, address, abi, functionName, args) => {
@@ -252,6 +635,14 @@ const write = async (label, address, abi, functionName, args) => {
   if (receipt.status !== "success") {
     throw new Error(`${label} failed in transaction ${txHash}.`);
   }
+  return {
+    type: "write",
+    label,
+    contractAddress: address,
+    functionName,
+    args,
+    ...receiptLog(receipt)
+  };
 };
 
 const assertContractRead = async (label, address, abi, functionName, args, expected) => {
@@ -268,34 +659,24 @@ const assertContractRead = async (label, address, abi, functionName, args, expec
 };
 
 const verifyContract = async (label, address, contractId, constructorArgs) => {
+  const args = buildVerifyContractArgs(address, contractId, constructorArgs);
+  const command = {
+    executable: "forge",
+    args: sanitizedCommandArgs(args)
+  };
+
   if (!verifyContracts) {
-    return;
+    return {
+      label,
+      address,
+      contractId,
+      constructorArgs,
+      status: "skipped",
+      command
+    };
   }
 
   console.log(`Verifying ${label} on Etherscan...`);
-  const args = [
-    "verify-contract",
-    "--verifier",
-    "etherscan",
-    "--chain",
-    String(base.id),
-    "--rpc-url",
-    rpcUrl,
-    "--watch",
-    "--compiler-version",
-    "0.8.24",
-    "--num-of-optimizations",
-    "200",
-    "--via-ir",
-    "--constructor-args",
-    constructorArgs,
-    address,
-    contractId
-  ];
-
-  if (etherscanApiVersion) {
-    args.splice(8, 0, "--etherscan-api-version", etherscanApiVersion);
-  }
 
   try {
     execFileSync("forge", args, {
@@ -306,6 +687,14 @@ const verifyContract = async (label, address, contractId, constructorArgs) => {
         ETHERSCAN_API_KEY: etherscanApiKey
       }
     });
+    return {
+      label,
+      address,
+      contractId,
+      constructorArgs,
+      status: "passed",
+      command
+    };
   } catch {
     console.error(`${label} deployed at ${address}, but explorer verification failed.`);
     console.error(`Constructor arguments: ${constructorArgs}`);
@@ -357,63 +746,146 @@ console.log(`Initial slashers: ${initialSlashers.length ? initialSlashers.join("
 try {
   await ensureFunded();
 
-  const treasuryVaultAddress = await deploy(
+  const transactions = [];
+
+  const treasuryDeployment = await deploy(
     "CheapBugsTreasuryVault",
     compiled.treasuryVault.abi,
     compiled.treasuryVault.bytecode,
     [account.address]
   );
+  transactions.push(treasuryDeployment);
+  const treasuryVaultAddress = treasuryDeployment.address;
   const treasuryConstructorArgs = encodeAbiParameters([{ type: "address" }], [account.address]);
-  const bondVaultAddress = await deploy(
+  const bondDeployment = await deploy(
     "CheapBugsBondVault",
     compiled.bondVault.abi,
     compiled.bondVault.bytecode,
     [treasuryVaultAddress, account.address]
   );
+  transactions.push(bondDeployment);
+  const bondVaultAddress = bondDeployment.address;
   const bondConstructorArgs = encodeAbiParameters(
     [{ type: "address" }, { type: "address" }],
     [treasuryVaultAddress, account.address]
   );
-  const indexAddress = await deploy("CheapBugsBugIndex", compiled.index.abi, compiled.index.bytecode, [
+  const indexDeployment = await deploy("CheapBugsBugIndex", compiled.index.abi, compiled.index.bytecode, [
     account.address,
     bondVaultAddress,
     treasuryVaultAddress,
     initialBrokers,
     initialAdmins
   ]);
+  transactions.push(indexDeployment);
+  const indexAddress = indexDeployment.address;
   const indexConstructorArgs = encodeAbiParameters(
     [{ type: "address" }, { type: "address" }, { type: "address" }, { type: "address[]" }, { type: "address[]" }],
     [account.address, bondVaultAddress, treasuryVaultAddress, initialBrokers, initialAdmins]
   );
+  const constructorArguments = {
+    treasuryVault: {
+      contractName: contracts.treasuryVault.name,
+      inputs: constructorInputs(compiled.treasuryVault.abi),
+      values: [account.address],
+      encoded: treasuryConstructorArgs
+    },
+    bondVault: {
+      contractName: contracts.bondVault.name,
+      inputs: constructorInputs(compiled.bondVault.abi),
+      values: [treasuryVaultAddress, account.address],
+      encoded: bondConstructorArgs
+    },
+    index: {
+      contractName: contracts.index.name,
+      inputs: constructorInputs(compiled.index.abi),
+      values: [account.address, bondVaultAddress, treasuryVaultAddress, initialBrokers, initialAdmins],
+      encoded: indexConstructorArgs
+    }
+  };
 
-  await write("Setting treasury index...", treasuryVaultAddress, compiled.treasuryVault.abi, "setIndex", [indexAddress]);
+  transactions.push(
+    await write("Setting treasury index...", treasuryVaultAddress, compiled.treasuryVault.abi, "setIndex", [
+      indexAddress
+    ])
+  );
   for (const broker of initialBrokers) {
-    await write(`Allowing treasury broker ${broker}...`, treasuryVaultAddress, compiled.treasuryVault.abi, "setBroker", [
-      broker,
-      true
-    ]);
+    transactions.push(
+      await write(`Allowing treasury broker ${broker}...`, treasuryVaultAddress, compiled.treasuryVault.abi, "setBroker", [
+        broker,
+        true
+      ])
+    );
   }
   for (const slasher of initialSlashers) {
-    await write(`Allowing bond slasher ${slasher}...`, bondVaultAddress, compiled.bondVault.abi, "setSlasher", [
-      slasher,
-      true
-    ]);
+    transactions.push(
+      await write(`Allowing bond slasher ${slasher}...`, bondVaultAddress, compiled.bondVault.abi, "setSlasher", [
+        slasher,
+        true
+      ])
+    );
   }
   if (owner.toLowerCase() !== account.address.toLowerCase()) {
-    await write("Transferring treasury ownership...", treasuryVaultAddress, ownableAbi, "transferOwnership", [owner]);
-    await write("Transferring bond vault ownership...", bondVaultAddress, ownableAbi, "transferOwnership", [owner]);
-    await write("Transferring index ownership...", indexAddress, ownableAbi, "transferOwnership", [owner]);
+    transactions.push(
+      await write("Transferring treasury ownership...", treasuryVaultAddress, ownableAbi, "transferOwnership", [owner])
+    );
+    transactions.push(
+      await write("Transferring bond vault ownership...", bondVaultAddress, ownableAbi, "transferOwnership", [owner])
+    );
+    transactions.push(await write("Transferring index ownership...", indexAddress, ownableAbi, "transferOwnership", [owner]));
   }
 
   await verifyDeploymentState(treasuryVaultAddress, bondVaultAddress, indexAddress);
-  await verifyContract(
-    "CheapBugsTreasuryVault",
-    treasuryVaultAddress,
-    contracts.treasuryVault.contractId,
-    treasuryConstructorArgs
+  const deployedContracts = {
+    treasuryVault: treasuryVaultAddress,
+    bondVault: bondVaultAddress,
+    index: indexAddress
+  };
+  const deploymentGeneratedArtifacts = writeGeneratedArtifacts(
+    path.join(deploymentRoot, "generated", indexAddress.toLowerCase())
   );
-  await verifyContract("CheapBugsBondVault", bondVaultAddress, contracts.bondVault.contractId, bondConstructorArgs);
-  await verifyContract("CheapBugsBugIndex", indexAddress, contracts.index.contractId, indexConstructorArgs);
+  const deploymentManifestPath = path.join(deploymentRoot, `cheapbugs-contract-suite.${indexAddress.toLowerCase()}.json`);
+  const writeBroadcastManifests = (status, verificationResults) => {
+    writeDeploymentManifest(
+      deploymentManifestPath,
+      buildDeploymentManifest({
+        mode: "broadcast",
+        status,
+        generatedArtifacts: deploymentGeneratedArtifacts,
+        deployedContracts,
+        transactions,
+        constructorArguments,
+        verificationResults
+      })
+    );
+    const refreshedLatestGeneratedArtifacts = writeGeneratedArtifacts(latestGeneratedArtifactsDir);
+    writeDeploymentManifest(
+      latestDeploymentManifestPath,
+      buildDeploymentManifest({
+        mode: "broadcast",
+        status,
+        generatedArtifacts: refreshedLatestGeneratedArtifacts,
+        deployedContracts,
+        transactions,
+        constructorArguments,
+        verificationResults
+      })
+    );
+  };
+
+  writeBroadcastManifests("deployed-verification-pending", []);
+
+  const verificationResults = [
+    await verifyContract(
+      "CheapBugsTreasuryVault",
+      treasuryVaultAddress,
+      contracts.treasuryVault.contractId,
+      treasuryConstructorArgs
+    ),
+    await verifyContract("CheapBugsBondVault", bondVaultAddress, contracts.bondVault.contractId, bondConstructorArgs),
+    await verifyContract("CheapBugsBugIndex", indexAddress, contracts.index.contractId, indexConstructorArgs)
+  ];
+
+  writeBroadcastManifests(verifyContracts ? "deployed-and-verified" : "deployed-unverified", verificationResults);
 
   console.log("");
   console.log("CheapBugs contracts deployed.");
