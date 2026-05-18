@@ -144,6 +144,7 @@ npm run launch:token
 - During broker submission progress, the submit route shows `#xmtp-processing-modal` with the latest XMTP progress message.
 - Browser XMTP registration can require a wallet signature before any broker message is sent. `src/xmtp/browser.ts` caches identical signature requests, skips redundant registration when the SDK reports the installation is already registered, and checks broker inboxes with both stripped and `0x` Ethereum identifier forms.
 - The Python parser rejects text `!submit` messages, missing core fields, unexpected fields, and invalid provided target references.
+- The broker has three website-initiated JSON-over-XMTP flows: publisher for bug submission/publishing, seller for planned judging-period preview access requests, and bouncer for special Signal group access requests.
 - The broker sends plain text XMTP status messages after each successful submission validation stage: JSON valid, fields well formed, target valid, credentials valid. Submission credentials use `BROKER_SUBMISSION_MIN_BUGZ` plus `BROKER_REPUTATION_BLOCKLIST`.
 - Broker XMTP status messages intentionally use `ctx.send_text` instead of `ctx.send_text_reply`; keep the broker flow independent of nonessential reply-content codec behavior unless live testing proves the reply path is needed and stable.
 - The XMTP browser SDK needs the Vite alias and `scripts/fix-xmtp-wasm-worker.mjs` shim for the sqlite worker file, matching the working pattern from `../converge.cv`.

@@ -151,8 +151,12 @@ cheapbugs/
 ### Python Broker Bot
 
 - **Stability**: in-progress
-- **Description**: Optional Python runtime receives XMTP DMs, validates commands, optionally relays accepted submissions to a private Signal group, stores broker state in SQLite, tracks Signal reactions, and pays BUGZ rewards when Signal is configured.
+- **Description**: Optional Python runtime receives website-initiated JSON commands over XMTP, validates broker flows, optionally relays accepted submissions to a private Signal group, stores broker state in SQLite, tracks Signal reactions, and pays BUGZ rewards when Signal is configured.
 - **Properties**:
+  - The broker has three distinct incoming XMTP message flows, all initiated by interaction with the main website and sent as strict JSON commands over XMTP.
+  - Publisher flow: the currently active work path where a submitter sends a bug submission to the broker for validation, staged status replies, broker-managed review-key handling, and future publish/pin/attestation/registry work.
+  - Seller flow: planned, not implemented. A user on the site requests access to preview a bug that is still inside its judging period. The broker will validate the request, enforce the relevant eligibility/payment/access rules, and return access status over XMTP.
+  - Bouncer flow: planned, partially represented by existing access-request command handling. A user on the site requests access to the special Signal group. The broker validates credentials and, when Signal is configured, grants or denies group access.
   - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`.
   - `run-broker.sh` loads `.env`, validates mandatory `BROKER_KEY`, prepares a `.venv-broker*` virtualenv, initializes the SQLite store, and runs the broker.
   - `run-broker.sh` prefers Python 3.10 through 3.13 over generic `python3` so `xmtp-bindings` can use published wheels when available; `BROKER_PYTHON` and `BROKER_VENV_DIR` override this.
@@ -172,6 +176,7 @@ cheapbugs/
   - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, SQLite maturity, reaction parsing, and reward math.
   - [x] `python3 -m compileall bots scripts/broker-bot.py` checks Python syntax.
   - [x] `bash -n run-broker.sh` checks the root launcher syntax.
+  - [ ] Add website-to-XMTP JSON command tests for publisher, seller, and bouncer flows.
   - [ ] Add integration smoke tests with a disposable XMTP wallet and Signal group before production broker launch.
 
 ### EAS Reviewer Verdicts
