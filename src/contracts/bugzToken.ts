@@ -91,7 +91,7 @@ export const clearBugzTokenCache = (): void => {
 
 const bugzTokenAddress = (): `0x${string}` => {
   if (!chainConfig.bugzTokenAddress) {
-    throw new Error("Set VITE_BUGZ_TOKEN_ADDRESS to the deployed BUGZ token contract.");
+    throw new Error("Set VITE_BUGZ_TOKEN_ADDRESS to the live BUGZ token address.");
   }
 
   return chainConfig.bugzTokenAddress;

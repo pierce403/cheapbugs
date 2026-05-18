@@ -131,13 +131,14 @@ cheapbugs/
   - On payout completion, the index reveals the details key if needed, calls `CheapBugsTreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
   - Direct browser-to-index submission is disabled; `src/contracts/bugIndex.ts` keeps read helpers and exposes no direct write helper.
-  - Launcher scripts refresh frontend ABI files after compilation and deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together.
+  - Launcher scripts refresh frontend ABI files after compilation, deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together, check the deployed wiring, and verify all three contracts on Etherscan/BaseScan by default for real deployments.
 - **Test Criteria**:
   - [x] `npm run contracts:build` compiles Solidity contracts.
   - [x] `npm run contracts:test` covers broker publication, reporter signatures, nonce replay, deadline expiry, reveal timing, details-key commitment checks, admin status, bonded voting, ordered payouts, zero-payout invalid bugs, treasury broker removal, role abuse, and treasury transfer integration.
   - [x] Forge fuzz tests cover reveal-window rejection, bonded-vote weight math, and payout multiplier math.
   - [x] `npm run launch:bug-index:dry-run` validates the Node launcher and frontend ABI refresh.
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
+  - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
 
 ### Removed Direct Submission Path
 

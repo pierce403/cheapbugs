@@ -3,7 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
 
-import { createPublicClient, createWalletClient, formatEther, http, isAddress } from "viem";
+import { createPublicClient, createWalletClient, encodeAbiParameters, formatEther, http, isAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 
@@ -14,22 +14,28 @@ const frontendAbiPath = path.join(projectRoot, "src", "contracts", "bugIndexAbi.
 const rpcUrl = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const dryRun = process.argv.includes("--dry-run") || process.env.BUG_INDEX_DRY_RUN === "1";
 const deployerKey = process.env.BUG_INDEX_DEPLOYER_PRIVATE_KEY;
+const verifyContracts = !dryRun && process.env.BUG_INDEX_VERIFY_CONTRACTS !== "0";
+const etherscanApiKey = process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY;
+const etherscanApiVersion = process.env.ETHERSCAN_API_VERSION;
 
 const contracts = {
   index: {
     source: "CheapBugsBugIndex.sol",
     name: "CheapBugsBugIndex",
-    artifact: "CheapBugsBugIndex.json"
+    artifact: "CheapBugsBugIndex.json",
+    contractId: "contracts/CheapBugsBugIndex.sol:CheapBugsBugIndex"
   },
   bondVault: {
     source: "CheapBugsBondVault.sol",
     name: "CheapBugsBondVault",
-    artifact: "CheapBugsBondVault.json"
+    artifact: "CheapBugsBondVault.json",
+    contractId: "contracts/CheapBugsBondVault.sol:CheapBugsBondVault"
   },
   treasuryVault: {
     source: "CheapBugsTreasuryVault.sol",
     name: "CheapBugsTreasuryVault",
-    artifact: "CheapBugsTreasuryVault.json"
+    artifact: "CheapBugsTreasuryVault.json",
+    contractId: "contracts/CheapBugsTreasuryVault.sol:CheapBugsTreasuryVault"
   }
 };
 
@@ -114,6 +120,12 @@ if (!deployerKey) {
   process.exit(1);
 }
 
+if (verifyContracts && !etherscanApiKey) {
+  console.error("Missing ETHERSCAN_API_KEY or BASESCAN_API_KEY for contract verification.");
+  console.error("Set BUG_INDEX_VERIFY_CONTRACTS=0 only when intentionally deploying without explorer verification.");
+  process.exit(1);
+}
+
 const account = privateKeyToAccount(deployerKey.startsWith("0x") ? deployerKey : `0x${deployerKey}`);
 const owner = process.env.BUG_INDEX_OWNER || account.address;
 if (!isAddress(owner)) {
@@ -133,6 +145,13 @@ const walletClient = createWalletClient({
 });
 
 const ownableAbi = [
+  {
+    type: "function",
+    name: "owner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }]
+  },
   {
     type: "function",
     name: "transferOwnership",
@@ -189,6 +208,97 @@ const write = async (label, address, abi, functionName, args) => {
   }
 };
 
+const assertContractRead = async (label, address, abi, functionName, args, expected) => {
+  const actual = await publicClient.readContract({ address, abi, functionName, args });
+  if (typeof actual === "string" && typeof expected === "string") {
+    if (actual.toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(`${label} check failed: expected ${expected}, got ${actual}.`);
+    }
+    return;
+  }
+  if (actual !== expected) {
+    throw new Error(`${label} check failed: expected ${String(expected)}, got ${String(actual)}.`);
+  }
+};
+
+const verifyContract = async (label, address, contractId, constructorArgs) => {
+  if (!verifyContracts) {
+    return;
+  }
+
+  console.log(`Verifying ${label} on Etherscan...`);
+  const args = [
+    "verify-contract",
+    "--verifier",
+    "etherscan",
+    "--chain",
+    String(base.id),
+    "--rpc-url",
+    rpcUrl,
+    "--watch",
+    "--compiler-version",
+    "0.8.24",
+    "--num-of-optimizations",
+    "200",
+    "--via-ir",
+    "--constructor-args",
+    constructorArgs,
+    address,
+    contractId
+  ];
+
+  if (etherscanApiVersion) {
+    args.splice(8, 0, "--etherscan-api-version", etherscanApiVersion);
+  }
+
+  try {
+    execFileSync("forge", args, {
+      cwd: projectRoot,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        ETHERSCAN_API_KEY: etherscanApiKey
+      }
+    });
+  } catch {
+    console.error(`${label} deployed at ${address}, but explorer verification failed.`);
+    console.error(`Constructor arguments: ${constructorArgs}`);
+    throw new Error(`${label} verification failed.`);
+  }
+};
+
+const verifyDeploymentState = async (treasuryVaultAddress, bondVaultAddress, indexAddress) => {
+  console.log("Checking deployed contract wiring...");
+  await assertContractRead("Treasury index", treasuryVaultAddress, compiled.treasuryVault.abi, "index", [], indexAddress);
+  await assertContractRead("Bond treasury", bondVaultAddress, compiled.bondVault.abi, "treasury", [], treasuryVaultAddress);
+  await assertContractRead("Index bond vault", indexAddress, compiled.index.abi, "bondVault", [], bondVaultAddress);
+  await assertContractRead("Index treasury vault", indexAddress, compiled.index.abi, "treasuryVault", [], treasuryVaultAddress);
+  await assertContractRead("Treasury owner", treasuryVaultAddress, ownableAbi, "owner", [], owner);
+  await assertContractRead("Bond vault owner", bondVaultAddress, ownableAbi, "owner", [], owner);
+  await assertContractRead("Index owner", indexAddress, ownableAbi, "owner", [], owner);
+
+  for (const broker of initialBrokers) {
+    await assertContractRead(`Index broker ${broker}`, indexAddress, compiled.index.abi, "brokers", [broker], true);
+    await assertContractRead(
+      `Treasury broker ${broker}`,
+      treasuryVaultAddress,
+      compiled.treasuryVault.abi,
+      "brokers",
+      [broker],
+      true
+    );
+  }
+  for (const admin of initialAdmins) {
+    await assertContractRead(`Index admin ${admin}`, indexAddress, compiled.index.abi, "admins", [admin], true);
+  }
+  for (const slasher of initialSlashers) {
+    await assertContractRead(`Bond slasher ${slasher}`, bondVaultAddress, compiled.bondVault.abi, "slashers", [
+      slasher
+    ], true);
+  }
+  console.log("Deployment wiring checks passed.");
+};
+
 console.log("Deploying CheapBugs contracts to Base...");
 console.log(`RPC: ${rpcUrl}`);
 console.log(`Deployer: ${account.address}`);
@@ -206,10 +316,15 @@ try {
     compiled.treasuryVault.bytecode,
     [account.address]
   );
+  const treasuryConstructorArgs = encodeAbiParameters([{ type: "address" }], [account.address]);
   const bondVaultAddress = await deploy(
     "CheapBugsBondVault",
     compiled.bondVault.abi,
     compiled.bondVault.bytecode,
+    [treasuryVaultAddress, account.address]
+  );
+  const bondConstructorArgs = encodeAbiParameters(
+    [{ type: "address" }, { type: "address" }],
     [treasuryVaultAddress, account.address]
   );
   const indexAddress = await deploy("CheapBugsBugIndex", compiled.index.abi, compiled.index.bytecode, [
@@ -219,6 +334,10 @@ try {
     initialBrokers,
     initialAdmins
   ]);
+  const indexConstructorArgs = encodeAbiParameters(
+    [{ type: "address" }, { type: "address" }, { type: "address" }, { type: "address[]" }, { type: "address[]" }],
+    [account.address, bondVaultAddress, treasuryVaultAddress, initialBrokers, initialAdmins]
+  );
 
   await write("Setting treasury index...", treasuryVaultAddress, compiled.treasuryVault.abi, "setIndex", [indexAddress]);
   for (const broker of initialBrokers) {
@@ -238,6 +357,16 @@ try {
     await write("Transferring bond vault ownership...", bondVaultAddress, ownableAbi, "transferOwnership", [owner]);
     await write("Transferring index ownership...", indexAddress, ownableAbi, "transferOwnership", [owner]);
   }
+
+  await verifyDeploymentState(treasuryVaultAddress, bondVaultAddress, indexAddress);
+  await verifyContract(
+    "CheapBugsTreasuryVault",
+    treasuryVaultAddress,
+    contracts.treasuryVault.contractId,
+    treasuryConstructorArgs
+  );
+  await verifyContract("CheapBugsBondVault", bondVaultAddress, contracts.bondVault.contractId, bondConstructorArgs);
+  await verifyContract("CheapBugsBugIndex", indexAddress, contracts.index.contractId, indexConstructorArgs);
 
   console.log("");
   console.log("CheapBugs contracts deployed.");

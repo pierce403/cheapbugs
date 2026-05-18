@@ -114,6 +114,8 @@ npm run test:e2e
 npm run launch:bug-index
 ```
 
+Real deployments verify `CheapBugsTreasuryVault`, `CheapBugsBondVault`, and `CheapBugsBugIndex` on Etherscan/BaseScan by default after the script checks deployed wiring. Set `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY`; use `BUG_INDEX_VERIFY_CONTRACTS=0` only when intentionally skipping verification.
+
 6. Start the app:
 
 ```bash

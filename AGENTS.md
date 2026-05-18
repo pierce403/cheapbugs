@@ -119,7 +119,7 @@ npm run launch:bug-index
 - The frontend nav is now `index`, `submit`, `review`, `token`, `patrons`, with compact login/session controls in the top-right header block. Do not re-add the old chain/storage/wallet/SIWE debug block to the header.
 - The header brand row includes a compact orange GitHub icon link to `https://github.com/pierce403/cheapbugs` immediately to the right of the `cheapbugs` wordmark, followed by build metadata from `src/buildInfo.ts`. The build timestamp is injected as ISO and formatted in the viewer's local timezone.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
-- The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes.
+- The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes. Real contract-suite deployments verify all three contracts on Etherscan/BaseScan by default; set `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY`, and use `BUG_INDEX_VERIFY_CONTRACTS=0` only for intentional unverified deploys.
 - The JS launchers use `forge build` plus Foundry artifacts from `out/...` instead of npm `solc`; keep npm `solc` out of `package.json` unless its audit footprint has been reviewed.
 - Foundry is now configured with `contracts/` as the source directory, `script/` for deploy scripts, and `test/` for scenario coverage.
 - `forge-std` is tracked as the `lib/forge-std` git submodule, so fresh clones need `git submodule update --init --recursive` before `forge build` or `forge test`.
@@ -183,7 +183,7 @@ npm run launch:bug-index
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
 - Real XMTP submission requires the default or overridden broker address to point at an already registered broker XMTP inbox.
 - Real verdict writes require `VITE_REVIEW_VERDICT_SCHEMA_UID` to be set.
-- The bug-index launcher deploys the full CheapBugs contract suite and needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` for a real deployment. Optional initial lists are `BUG_INDEX_INITIAL_BROKERS`, `BUG_INDEX_INITIAL_ADMINS`, and `BUG_INDEX_INITIAL_SLASHERS`.
+- The bug-index launcher deploys the full CheapBugs contract suite and needs `BUG_INDEX_DEPLOYER_PRIVATE_KEY` plus `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY` for a default real deployment. Optional initial lists are `BUG_INDEX_INITIAL_BROKERS`, `BUG_INDEX_INITIAL_ADMINS`, and `BUG_INDEX_INITIAL_SLASHERS`.
 - `artifacts/` and `dist/` are generated outputs and should not be committed unless the user explicitly asks.
 
 ## Collaborator Preferences

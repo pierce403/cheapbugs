@@ -27,6 +27,9 @@ Launcher values:
 - `BUG_INDEX_INITIAL_BROKERS`
 - `BUG_INDEX_INITIAL_ADMINS`
 - `BUG_INDEX_INITIAL_SLASHERS`
+- `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY` for contract verification
+- `ETHERSCAN_API_VERSION` only when your Foundry/Etherscan setup requires an explicit API version
+- `BUG_INDEX_VERIFY_CONTRACTS=0` only when intentionally deploying without explorer verification
 
 ## 2. Dry Run The Contract Build
 
@@ -53,6 +56,8 @@ The Forge launcher uses [script/LaunchBugIndex.s.sol](script/LaunchBugIndex.s.so
 
 The script deploys and wires `CheapBugsTreasuryVault`, `CheapBugsBondVault`, and `CheapBugsBugIndex`. Vaults hardcode the live Base BUGZ token address.
 
+Real deployments verify all three contracts on Etherscan/BaseScan by default after post-deploy wiring checks pass. The script fails before broadcasting if `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY` is missing, unless `BUG_INDEX_VERIFY_CONTRACTS=0` is set.
+
 The script prints the deployed index address as:
 
 ```bash
@@ -73,7 +78,7 @@ Optional placeholder now:
 
 You can register from the reviewer UI, but for a real deployment you should pin the returned schema UIDs in `.env.local` so every client reads and writes the same schema IDs.
 
-## 6. Build Static Assets
+## 5. Build Static Assets
 
 ```bash
 npm run build
@@ -81,7 +86,7 @@ npm run build
 
 The site outputs to `dist/`.
 
-## 7. Publish Static Assets
+## 6. Publish Static Assets
 
 ### GitHub Pages
 
@@ -117,16 +122,17 @@ You can still deploy `dist/` to other static hosts, for example:
 
 The repo already includes `public/_redirects` for Netlify-style SPA routing.
 
-## 8. Optional IPFS Publishing
+## 7. Optional IPFS Publishing
 
 If you publish the app itself to IPFS, validate your gateway and asset-path behavior against the IPFS docs before treating it as the primary production origin.
 
 ## Operational Notes
 
+- The smart contracts cover the planned onchain mechanics for bonding, slashing, detail-key payment records, broker-published reports, bonded voting, details-key reveal, and ordered treasury payouts. The full production system is not ready until the broker submits accepted XMTP/IPFS submissions to `CheapBugsBugIndex.publishBug`, live XMTP smoke tests pass, and operational keys/funding are finalized.
 - Public report metadata is immutable once written onchain.
 - Private report details stay encrypted, but the encrypted blob CID is public because it is stored onchain.
 - Review trust is currently driven by the configured reviewer allowlist.
-- The bug index contract now also supports reviewer-only onchain vote records for contract-level testing and future extensions, but the current frontend still computes live review state from EAS.
-- The token manager and patrons leaderboard are safe to deploy before BUGZ exists, but they only become live once the relevant `VITE_BUGZ_*` values are configured. The patrons board prefers the Etherscan V2 holder API and falls back to Transfer-log reconstruction from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`.
+- The bug index contract supports bonded onchain vote records for contract-level testing and future extensions, but the current frontend still computes live review state from EAS.
+- The token manager and patrons leaderboard use the live Base BUGZ token by default and only need `VITE_BUGZ_*` overrides for alternate deployments or optional display rows. The patrons board prefers the Etherscan V2 holder API and falls back to Transfer-log reconstruction from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`.
 - Pinata should only be enabled when `VITE_PINATA_PRESIGN_ENDPOINT` points to a helper that returns presigned upload URLs.
-- The BUGZ token contract is not part of the current app runtime and exists as an extension point for later token features.
+- This repo no longer deploys a BUGZ token contract; the vaults hardcode the live Base BUGZ address.
