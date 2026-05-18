@@ -223,9 +223,11 @@ class BrokerServiceTest(unittest.TestCase):
 
         output = "\n".join(logs.output)
         self.assertIn("xmtp message received", output)
+        self.assertIn(f"NEW SUBMISSION from {WALLET}", output)
+        self.assertIn("NEW SUBMISSION full_json", output)
         self.assertIn("submission command parsed", output)
         self.assertIn("submission recorded", output)
-        self.assertNotIn("Private details go here.", output)
+        self.assertIn("Private details go here.", output)
 
     def test_submission_replies_with_validation_stages_before_relay(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

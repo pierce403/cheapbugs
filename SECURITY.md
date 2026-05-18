@@ -60,7 +60,7 @@ Until this exists, the broker must not create bug-index records that claim to be
 - `BROKER_KEY` is the single broker wallet key. It controls the broker XMTP identity and signs BUGZ payout transfers.
 - Base RPC and BUGZ token defaults are public configuration, not secrets.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
-- Broker logs are written to `BROKER_LOG_PATH` and stdout. They should contain operational metadata and broker actions, not private report detail bodies.
+- Broker logs are written to `BROKER_LOG_PATH` and stdout. New submissions intentionally log the full raw XMTP JSON payload, including private report detail bodies, for development visibility. Treat `broker.log` and debug logs as private disclosure material and do not share them outside trusted project operators.
 - Broker debug mode can include third-party XMTP/Rust diagnostics. Inspect debug logs before sharing them outside the project.
 - Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
 - The broker wallet must be deliberately funded and capped before live payouts. Rewards are ERC20 transfers, not mints.

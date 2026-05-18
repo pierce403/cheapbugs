@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
@@ -69,6 +70,19 @@ class BrokerBot:
             )
             await self._handle_access(command, message_id, reply)
             return
+        self.logger.info(
+            "NEW SUBMISSION from %s message_id=%s conversation_id=%s xmtp_sender=%s title=%r",
+            command.reporter_address,
+            message_id,
+            conversation_id,
+            sender_address or "unknown",
+            command.title,
+        )
+        self.logger.info(
+            "NEW SUBMISSION full_json message_id=%s payload=%s",
+            message_id,
+            _json_blob_for_log(text),
+        )
         self.logger.info(
             "submission command parsed message_id=%s reporter=%s title=%r target=%s:%s details_chars=%s",
             message_id,
@@ -367,3 +381,7 @@ def _format_token_amount(amount_wei: int, decimals: int) -> str:
     scale = Decimal(10) ** decimals
     value = Decimal(amount_wei) / scale
     return f"{value.normalize():f}"
+
+
+def _json_blob_for_log(text: str) -> str:
+    return json.dumps(text, ensure_ascii=True)

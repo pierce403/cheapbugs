@@ -156,7 +156,7 @@ cheapbugs/
   - `run-broker.sh` loads `.env`, validates mandatory `BROKER_KEY`, prepares a `.venv-broker*` virtualenv, initializes the SQLite store, and runs the broker.
   - `run-broker.sh` prefers Python 3.10 through 3.13 over generic `python3` so `xmtp-bindings` can use published wheels when available; `BROKER_PYTHON` and `BROKER_VENV_DIR` override this.
   - Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base BUGZ token and can be overridden for local testing.
-  - Broker runtime logs are timestamped to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`; logs record message metadata and broker actions without dumping private detail bodies.
+  - Broker runtime logs are timestamped to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`; new submissions log a clear `NEW SUBMISSION from <reporter>` line and the full raw XMTP JSON payload, including private detail bodies.
   - `./run-broker.sh debug` enables Python DEBUG logging, Python fault-handler output, Rust XMTP backtraces, `RUST_LOG=debug`, and a default `broker-debug.log`.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
   - The broker dependency is pinned to `xmtp==0.1.6`, which pulls `xmtp-bindings>=0.1.6`.
