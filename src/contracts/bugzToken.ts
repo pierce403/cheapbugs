@@ -1,4 +1,4 @@
-import { Contract, Interface, JsonRpcProvider, parseUnits } from "ethers";
+import { Contract, Interface, parseUnits } from "ethers";
 
 import { chainConfig } from "../config/chains";
 import { QueryCache } from "../lib/cache";
@@ -7,6 +7,7 @@ import { appLog } from "../lib/logger";
 import { normalizeAddress } from "../lib/utils";
 
 import { bugzTokenAbi } from "./bugzTokenAbi";
+import { createBaseReadProvider } from "./rpcProvider";
 
 type TokenMetadata = {
   name: string;
@@ -56,7 +57,7 @@ const HOLDER_SCAN_BLOCK_STEP = 10_000;
 const HOLDER_API_OFFSET = 100;
 const cache = new Map<string, MemoryRecord<unknown>>();
 const holderLocalCache = new QueryCache("cheapbugs.patrons.v1");
-const readProvider = new JsonRpcProvider(chainConfig.rpcUrl, chainConfig.id);
+const readProvider = createBaseReadProvider();
 const transferInterface = new Interface(bugzTokenAbi);
 const transferEvent = transferInterface.getEvent("Transfer");
 

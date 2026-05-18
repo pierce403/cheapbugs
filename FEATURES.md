@@ -192,6 +192,7 @@ cheapbugs/
 - **Description**: The `/token` route reads BUGZ balances and performs browser-signed Uniswap v4 buy/sell swaps on Base.
 - **Properties**:
   - BUGZ defaults to Base token `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`.
+  - Base contract read providers disable JSON-RPC batching and use a static network so public Base RPC endpoints do not reject oversized batches during concurrent header/token reads.
   - Buy/sell uses the Clanker-created Uniswap v4 WETH/BUGZ pool key, v4 Quoter, and Universal Router 2.1.1.
   - Buy wraps ETH through the router; sell requires ERC20 plus Permit2 approvals.
   - Trading does not depend on `VITE_BUGZ_TREASURY_ADDRESS`.

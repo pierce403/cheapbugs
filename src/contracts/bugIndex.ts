@@ -1,4 +1,4 @@
-import { Contract, JsonRpcProvider } from "ethers";
+import { Contract } from "ethers";
 
 import { chainConfig } from "../config/chains";
 import type { SubmissionPublic } from "../types/submission";
@@ -13,6 +13,7 @@ import {
 } from "../lib/utils";
 
 import { bugIndexAbi } from "./bugIndexAbi";
+import { createBaseReadProvider } from "./rpcProvider";
 
 type ContractSubmission = {
   reportHash: `0x${string}`;
@@ -38,7 +39,7 @@ const bugIndexAddress = (): `0x${string}` => {
 
 export const isBugIndexConfigured = (): boolean => Boolean(chainConfig.bugIndexAddress);
 
-const readProvider = new JsonRpcProvider(chainConfig.rpcUrl, chainConfig.id);
+const readProvider = createBaseReadProvider();
 
 const readContract = () => new Contract(bugIndexAddress(), bugIndexAbi, readProvider);
 

@@ -1,7 +1,6 @@
 import {
   AbiCoder,
   Contract,
-  JsonRpcProvider,
   parseEther,
   parseUnits
 } from "ethers";
@@ -12,6 +11,7 @@ import type { HexString } from "../types/domain";
 import { normalizeAddress } from "../lib/utils";
 
 import { clearBugzTokenCache, getBugzTokenMetadata } from "./bugzToken";
+import { createBaseReadProvider } from "./rpcProvider";
 
 const BASE_CHAIN_ID = 8453;
 const WETH_BASE = "0x4200000000000000000000000000000000000006";
@@ -89,7 +89,7 @@ export type BugzTradeResult = {
   quote: BugzTradeQuote;
 };
 
-const readProvider = new JsonRpcProvider(chainConfig.rpcUrl, chainConfig.id);
+const readProvider = createBaseReadProvider();
 let poolCache: { value: BugzPool; expiresAt: number } | null = null;
 
 const shortenError = (message: string): string => (message.length > 220 ? `${message.slice(0, 217)}...` : message);

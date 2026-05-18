@@ -1,4 +1,4 @@
-import { JsonRpcProvider, Wallet as EthersWallet, verifyMessage, type Signer } from "ethers";
+import { Wallet as EthersWallet, verifyMessage, type Signer } from "ethers";
 import { createThirdwebClient } from "thirdweb";
 import { ethers6Adapter } from "thirdweb/adapters/ethers6";
 import { autoConnect, createWallet, getInstalledWallets, walletConnect, type Wallet } from "thirdweb/wallets";
@@ -10,6 +10,7 @@ import { APP_METADATA } from "../lib/constants";
 import { emptyEnsProfile, refreshEnsProfile as refreshEnsProfileFromNetwork, resolveEnsProfile } from "../lib/ens";
 import { appLog } from "../lib/logger";
 import { normalizeAddress, shortHash } from "../lib/utils";
+import { createBaseReadProvider } from "../contracts/rpcProvider";
 import type { SessionState } from "../types/app";
 import type { HexString } from "../types/domain";
 import type { BrowserXmtpIdentity } from "../xmtp/browser";
@@ -60,7 +61,7 @@ const THIRDWEB_CONNECTED_WALLET_IDS_KEY = "thirdweb:connected-wallet-ids";
 const THIRDWEB_ACTIVE_WALLET_ID_KEY = "thirdweb:active-wallet-id";
 const THIRDWEB_ACTIVE_CHAIN_KEY = "thirdweb:active-chain";
 const THIRDWEB_LAST_USED_WALLET_ID_KEY = "thirdweb:last-used-wallet-id";
-const BASE_RPC_PROVIDER = new JsonRpcProvider(chainConfig.rpcUrl, chainConfig.id);
+const BASE_RPC_PROVIDER = createBaseReadProvider();
 const wcWallet = walletConnect();
 const thirdwebDisabledMessage =
   "Auth is unavailable because VITE_THIRDWEB_CLIENT_ID is not configured for this deployment.";

@@ -42,9 +42,17 @@ const seedLocalIdentity = async (page: Page): Promise<void> => {
   }, localIdentity);
 };
 
-const fulfillRpc = async (page: Page, url: string, handler: (request: RpcRequest) => RpcResponse): Promise<void> => {
+const fulfillRpc = async (
+  page: Page,
+  url: string,
+  handler: (request: RpcRequest) => RpcResponse,
+  options: { rejectBatch?: boolean } = {}
+): Promise<void> => {
   await page.route(url, async (route) => {
     const payload = JSON.parse(route.request().postData() || "{}") as RpcRequest | RpcRequest[];
+    if (Array.isArray(payload) && options.rejectBatch) {
+      throw new Error("unexpected JSON-RPC batch");
+    }
     const requests = Array.isArray(payload) ? payload : [payload];
     const responses = requests.map(handler);
 
@@ -179,39 +187,44 @@ test("shows loading and logs a loud console error when header BUGZ balance fails
     }
   });
   await seedLocalIdentity(page);
-  await fulfillRpc(page, "https://mainnet.base.org/**", (request) => {
-    switch (request.method) {
-      case "eth_chainId":
-        return { id: request.id, jsonrpc: "2.0", result: "0x2105" };
-      case "net_version":
-        return { id: request.id, jsonrpc: "2.0", result: "8453" };
-      case "eth_call": {
-        const call = (request.params?.[0] ?? {}) as { data?: string };
-        const selector = call.data?.slice(0, 10).toLowerCase();
-        if (selector === "0x70a08231") {
-          return {
-            id: request.id,
-            jsonrpc: "2.0",
-            error: { code: -32000, message: "BUGZ balance RPC unavailable" }
-          };
-        }
+  await fulfillRpc(
+    page,
+    "https://mainnet.base.org/**",
+    (request) => {
+      switch (request.method) {
+        case "eth_chainId":
+          return { id: request.id, jsonrpc: "2.0", result: "0x2105" };
+        case "net_version":
+          return { id: request.id, jsonrpc: "2.0", result: "8453" };
+        case "eth_call": {
+          const call = (request.params?.[0] ?? {}) as { data?: string };
+          const selector = call.data?.slice(0, 10).toLowerCase();
+          if (selector === "0x70a08231") {
+            return {
+              id: request.id,
+              jsonrpc: "2.0",
+              error: { code: -32000, message: "BUGZ balance RPC unavailable" }
+            };
+          }
 
-        const result =
-          selector === "0x06fdde03"
-            ? abiCoder.encode(["string"], ["CheapBugs"])
-            : selector === "0x95d89b41"
-              ? abiCoder.encode(["string"], ["BUGZ"])
-              : selector === "0x313ce567"
-                ? abiCoder.encode(["uint8"], [18])
-                : selector === "0x18160ddd"
-                  ? abiCoder.encode(["uint256"], [10_000_000n * 10n ** 18n])
-                  : "0x";
-        return { id: request.id, jsonrpc: "2.0", result };
+          const result =
+            selector === "0x06fdde03"
+              ? abiCoder.encode(["string"], ["CheapBugs"])
+              : selector === "0x95d89b41"
+                ? abiCoder.encode(["string"], ["BUGZ"])
+                : selector === "0x313ce567"
+                  ? abiCoder.encode(["uint8"], [18])
+                  : selector === "0x18160ddd"
+                    ? abiCoder.encode(["uint256"], [10_000_000n * 10n ** 18n])
+                    : "0x";
+          return { id: request.id, jsonrpc: "2.0", result };
+        }
+        default:
+          return { id: request.id, jsonrpc: "2.0", result: "0x" };
       }
-      default:
-        return { id: request.id, jsonrpc: "2.0", result: "0x" };
-    }
-  });
+    },
+    { rejectBatch: true }
+  );
   await mockEnsRpc(page, { ensName: null });
 
   await page.goto("/");
