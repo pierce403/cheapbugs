@@ -28,7 +28,10 @@ class CommandParsingTest(unittest.TestCase):
         self.assertIsInstance(command, SubmissionCommand)
         self.assertEqual(command.reporter_address, WALLET)
         self.assertEqual(command.signal_recipient, "+15551234567")
+        self.assertEqual(command.bug_type, "0day")
         self.assertEqual(command.title, "Parser overflow")
+        self.assertEqual(command.severity, "high")
+        self.assertEqual(command.target_interest, "critical")
         self.assertEqual(command.target_kind, "repo")
         self.assertEqual(command.target_ref, "pierce403/cheapbugs")
         self.assertEqual(command.tags, ("parser", "memory"))
@@ -42,7 +45,9 @@ class CommandParsingTest(unittest.TestCase):
         self.assertEqual(command.target_ref, "broker triage")
         self.assertEqual(command.disclosure_mode, "private")
         self.assertEqual(command.tags, tuple())
-        self.assertEqual(command.severity, "unrated")
+        self.assertEqual(command.bug_type, "web")
+        self.assertEqual(command.severity, "medium")
+        self.assertEqual(command.target_interest, "high")
         self.assertEqual(command.repro_steps, "")
 
     def test_reject_text_submission(self) -> None:
@@ -165,9 +170,11 @@ class StoreTest(unittest.TestCase):
             command = SubmissionCommand(
                 reporter_address=WALLET,
                 signal_recipient="+15551234567",
+                bug_type="0day",
                 title="Title",
                 summary="Summary",
                 severity="high",
+                target_interest="critical",
                 body="Details",
             )
             record = store.create_submission(
@@ -356,12 +363,14 @@ def valid_submission_payload(**overrides: object) -> dict[str, object]:
         "version": 1,
         "reporter_address": WALLET,
         "signal_recipient": "+15551234567",
+        "bug_type": "0day",
         "title": "Parser overflow",
         "public_summary": "Public safe summary for reviewers.",
         "details": "Private details go here.",
         "repro_steps": "Run the attached proof of concept.",
         "evidence": "Crash trace",
-        "suggested_severity": "high",
+        "severity": "high",
+        "target_interest": "critical",
         "target": {"kind": "repo", "reference": "pierce403/cheapbugs"},
         "disclosure_mode": "private",
         "tags": ["parser", "memory"],
@@ -378,9 +387,12 @@ def minimal_submission_payload(**overrides: object) -> dict[str, object]:
         "type": "submission",
         "version": 1,
         "reporter_address": WALLET,
+        "bug_type": "web",
         "title": "Parser overflow",
         "public_summary": "Public safe summary for reviewers.",
         "details": "Private details go here.",
+        "severity": "medium",
+        "target_interest": "high",
         "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
     }
     payload.update(overrides)

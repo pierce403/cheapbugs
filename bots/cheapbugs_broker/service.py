@@ -84,9 +84,12 @@ class BrokerBot:
             _json_blob_for_log(text),
         )
         self.logger.info(
-            "submission command parsed message_id=%s reporter=%s title=%r target=%s:%s details_chars=%s",
+            "submission command parsed message_id=%s reporter=%s bug_type=%s severity=%s target_interest=%s title=%r target=%s:%s details_chars=%s",
             message_id,
             command.reporter_address,
+            command.bug_type,
+            command.severity,
+            command.target_interest,
             command.title,
             command.target_kind,
             command.target_ref,
@@ -346,7 +349,9 @@ def format_signal_submission(command: SubmissionCommand) -> str:
     heading_lines = [
         "[CheapBugs submission]",
         f"Reporter: {command.reporter_address}",
+        f"Bug type: {command.bug_type}",
         f"Severity: {command.severity}",
+        f"Target interest: {command.target_interest}",
     ]
     if command.signal_recipient != "broker-managed":
         heading_lines.append(f"Signal: {command.signal_recipient}")

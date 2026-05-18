@@ -20,6 +20,8 @@ TAG_RE = re.compile(r"^[a-z0-9][a-z0-9+.#_-]{0,31}$")
 
 SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1"
 SUBMISSION_VERSION = 1
+BUG_TYPES = {"0day", "nday", "web", "net", "intel"}
+RATING_VALUES = {"low", "medium", "high", "critical"}
 TARGET_KINDS = {"repo", "package", "domain", "contract", "protocol", "other"}
 DISCLOSURE_MODES = {"private", "embargoed", "public"}
 SUBMISSION_ALLOWED_KEYS = {
@@ -28,12 +30,14 @@ SUBMISSION_ALLOWED_KEYS = {
     "version",
     "reporter_address",
     "signal_recipient",
+    "bug_type",
     "title",
     "public_summary",
     "details",
     "repro_steps",
     "evidence",
-    "suggested_severity",
+    "severity",
+    "target_interest",
     "target",
     "disclosure_mode",
     "tags",
@@ -45,9 +49,12 @@ SUBMISSION_REQUIRED_KEYS = {
     "type",
     "version",
     "reporter_address",
+    "bug_type",
     "title",
     "public_summary",
     "details",
+    "severity",
+    "target_interest",
 }
 CLIENT_ALLOWED_KEYS = {"name", "sent_at"}
 
@@ -106,6 +113,14 @@ def _strict_string_present(data: dict[str, Any], name: str, *, max_length: int =
     if len(normalized) > max_length:
         raise CommandError(f"Field {name} is too long.")
     return normalized
+
+
+def _strict_choice(data: dict[str, Any], name: str, choices: set[str]) -> str:
+    value = _strict_string(data, name, max_length=40).lower()
+    if value not in choices:
+        expected = ", ".join(sorted(choices))
+        raise CommandError(f"Field {name} must be one of: {expected}.")
+    return value
 
 
 def _strict_tags(data: dict[str, Any]) -> tuple[str, ...]:
@@ -218,9 +233,11 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
     title = _strict_string(data, "title", min_length=3, max_length=120)
     summary = _strict_string(data, "public_summary", min_length=10, max_length=2_000)
     details = _strict_string(data, "details", min_length=10, max_length=12_000)
+    bug_type = _strict_choice(data, "bug_type", BUG_TYPES)
+    severity = _strict_choice(data, "severity", RATING_VALUES)
+    target_interest = _strict_choice(data, "target_interest", RATING_VALUES)
     repro_steps = _strict_string_present(data, "repro_steps", max_length=8_000) if "repro_steps" in data else ""
     evidence = _strict_string_present(data, "evidence", max_length=8_000) if "evidence" in data else ""
-    severity = _strict_string(data, "suggested_severity", max_length=40) if "suggested_severity" in data else "unrated"
     contact_hints = _strict_string_present(data, "contact_hints", max_length=1_000) if "contact_hints" in data else ""
     tags = _strict_tags(data)
 
@@ -235,9 +252,11 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
     return SubmissionCommand(
         reporter_address=reporter_address,
         signal_recipient=signal_recipient,
+        bug_type=bug_type,
         title=title,
         summary=summary,
         severity=severity,
+        target_interest=target_interest,
         body="\n\n".join(body_parts),
         target_kind=target_kind,
         target_ref=target_ref,
@@ -333,9 +352,12 @@ def command_help() -> str:
         '  "type": "submission",\n'
         '  "version": 1,\n'
         '  "reporter_address": "0x...",\n'
+        '  "bug_type": "0day",\n'
         '  "title": "Short report title",\n'
         '  "public_summary": "Public-safe summary",\n'
-        '  "details": "Private details"\n'
+        '  "details": "Private details",\n'
+        '  "severity": "high",\n'
+        '  "target_interest": "medium"\n'
         "}\n\n"
         "The broker fills omitted workflow metadata during triage. "
         "Signal access requests may still use !access with wallet and signal fields."

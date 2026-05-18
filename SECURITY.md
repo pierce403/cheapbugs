@@ -27,12 +27,15 @@ Before the broker may pin, attest, or register a user-attributed bug report onch
 
 Required properties:
 
-- The browser builds canonical `cheapbugs.bug_submission.v1` JSON and computes a payload hash.
-- The reporter signs an EIP-712 typed message that binds schema, version, reporter, broker wallet, Base chain id, bug-index contract address, payload hash, created time, and a nonce or deadline.
-- The XMTP message carries the payload plus the signature envelope.
-- The broker verifies the envelope before doing IPFS, EAS, or registry writes.
+- The browser builds a canonical `cheapbugs.bug_bundle.v1` commitment from the unsigned bundle core.
+- The browser generates a random details key, encrypts private details into the bundle, and keeps the details key outside the IPFS-bound bundle.
+- The reporter signs an EIP-712 typed message that binds schema, version, reporter, broker wallet, Base chain id, bug-index contract address, bundle/core hash, encrypted details hash, details-key commitment, reveal time, created time, and a nonce or deadline.
+- The XMTP message carries the signed BugBundle plus the out-of-bundle details key.
+- The broker verifies the envelope, confirms the supplied details key matches the bundle commitment, decrypts details for objective well-formedness checks, and pins the signed bundle bytes without modification before doing EAS or registry writes.
 - `CheapBugsBugIndex` verifies the reporter signature for broker-relayed submissions and stores the recovered reporter, not a broker-supplied reporter field.
 - The contract rejects invalid signatures, wrong broker/domain, wrong chain or contract, expired signatures, duplicate report hashes, and replayed nonces if nonce tracking is added.
+- The contract stores the bundle CID/commitments and details-key commitment when the broker registers the report.
+- The contract accepts the details key only after the 7-day judgment period and only when it matches the stored key commitment.
 - If contract wallets are supported, the relay path must support EIP-1271 signature validation.
 
 Until this exists, the broker must not create bug-index records that claim to be from a user address.
@@ -54,9 +57,9 @@ Until this exists, the broker must not create bug-index records that claim to be
 
 ### Broker
 
-- The broker is trusted to receive private submissions, hold review keys, pin private material to IPFS, optionally create EAS attestations, and relay accepted reports.
+- The broker is trusted to receive private submissions, hold unrevealed details keys, pin signed encrypted BugBundles to IPFS, optionally create EAS attestations, and relay accepted reports.
 - The broker is not trusted to choose the reporter address for onchain attribution.
-- Broker compromise can expose submissions it has received, review keys it holds, Signal relay data, SQLite state, and the `BROKER_KEY` available to the process.
+- Broker compromise can expose submissions it has received, unrevealed details keys it holds, Signal relay data, SQLite state, and the `BROKER_KEY` available to the process.
 - `BROKER_KEY` is the single broker wallet key. It controls the broker XMTP identity and signs BUGZ payout transfers.
 - Base RPC and BUGZ token defaults are public configuration, not secrets.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
@@ -68,7 +71,8 @@ Until this exists, the broker must not create bug-index records that claim to be
 ### IPFS And Pinata
 
 - Private report material must not be uploaded in plaintext by the browser.
-- In the broker flow, broker-side pinning may hold private report material or encrypted private material depending on the final product design.
+- In the planned broker flow, IPFS stores a single signed BugBundle JSON object whose `details` section is encrypted ciphertext.
+- Details keys must not be included in IPFS bundles. They are held by the broker during the judgment period and later published through the bug index after the reveal window opens.
 - IPFS CIDs and gateway responses are untrusted input. Rendering code must sanitize and validate fetched content.
 - Pinata credentials must stay out of browser code.
 
@@ -84,7 +88,8 @@ Until this exists, the broker must not create bug-index records that claim to be
 - The current direct submission path sets `reporter = msg.sender`.
 - A future broker-relay path must verify reporter signatures inside the contract before assigning user attribution.
 - Public onchain fields must remain safe for permanent disclosure.
-- Private details must be represented onchain only by CIDs, hashes, commitments, or other non-plaintext references.
+- Private details must be represented onchain only by CIDs, hashes, commitments, or other non-plaintext references until the 7-day judgment period has ended.
+- After the judgment period, the index may store the details key so browsers can fetch the encrypted IPFS bundle and decrypt details locally.
 
 ### BUGZ Credentials And Reputation
 

@@ -2,6 +2,7 @@ import { authController } from "../services";
 import { env } from "../config/env";
 import { appLog } from "../lib/logger";
 import { escapeHtml } from "../lib/utils";
+import { BUG_TYPE_OPTIONS, SUBMISSION_RATING_VALUES, type BugType, type SubmissionRating } from "../types/submission";
 import { sendBrokerSubmission } from "../xmtp/broker";
 
 import type { AppViewContext, ViewResult } from "./types";
@@ -35,6 +36,49 @@ let submitInFlight = false;
 const XMTP_PROGRESS_EVENT = "cheapbugs:xmtp-progress";
 const signatureWaitDetail =
   "Approve the XMTP registration signature in your wallet app or browser extension. This does not send a transaction.";
+
+const bugTypeOptionsMarkup = (): string =>
+  BUG_TYPE_OPTIONS.map(
+    (option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`
+  ).join("");
+
+const ratingFromFormValue = (value: FormDataEntryValue | null): SubmissionRating => {
+  const index = Number.parseInt(String(value ?? "1"), 10);
+  return SUBMISSION_RATING_VALUES[index] ?? "medium";
+};
+
+const bugTypeFromFormValue = (value: FormDataEntryValue | null): BugType => {
+  const normalized = String(value ?? "");
+  return BUG_TYPE_OPTIONS.some((option) => option.value === normalized) ? (normalized as BugType) : "0day";
+};
+
+const sliderMarkup = (name: "severity" | "targetInterest", label: string, initialIndex = 1): string => {
+  const outputId = `${name}-output`;
+  const inputId = `${name}-slider`;
+  const initialValue = SUBMISSION_RATING_VALUES[initialIndex] ?? "medium";
+  return `
+    <label class="slider-field" for="${inputId}">
+      <span class="slider-label-row">
+        <span>${escapeHtml(label)}</span>
+        <output id="${outputId}" for="${inputId}">${escapeHtml(initialValue)}</output>
+      </span>
+      <input
+        id="${inputId}"
+        name="${name}Index"
+        type="range"
+        min="0"
+        max="${SUBMISSION_RATING_VALUES.length - 1}"
+        step="1"
+        value="${initialIndex}"
+        aria-label="${escapeHtml(label)}"
+        data-rating-output="${outputId}"
+      />
+      <span class="slider-scale" aria-hidden="true">
+        ${SUBMISSION_RATING_VALUES.map((rating) => `<span>${escapeHtml(rating)}</span>`).join("")}
+      </span>
+    </label>
+  `;
+};
 
 const initialXmtpStatus = (): XmtpStatus => {
   if (persistedXmtpStatus && (submitInFlight || persistedXmtpStatus.tone === "sent" || persistedXmtpStatus.tone === "error")) {
@@ -143,7 +187,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       <div class="panel-title">[ submit report ]</div>
       <p class="warning-copy">
         Never place sensitive bug details in the public summary unless you intentionally want them public. Private details are sent
-        to the broker over XMTP. The broker generates and holds the review key.
+        to the broker over XMTP for validation and future signed BugBundle publishing.
       </p>
       <p class="helper-copy">xmtp broker wallet: ${escapeHtml(env.brokerXmtpAddress)}</p>
       ${statusMarkup()}
@@ -156,6 +200,11 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
 
     <form id="submit-form" class="panel stack-form">
       <div class="panel-title">[ report fields ]</div>
+      <label>bug type<select name="bugType" required>${bugTypeOptionsMarkup()}</select></label>
+      <div class="two-column slider-grid">
+        ${sliderMarkup("severity", "severity")}
+        ${sliderMarkup("targetInterest", "target interest")}
+      </div>
       <label>title<input name="title" required maxlength="120" placeholder="Heap corruption in parser" /></label>
       <label>public summary<textarea name="publicSummary" rows="3" required placeholder="Redacted public-safe summary for browsing and indexing."></textarea></label>
       <label>details<textarea name="details" rows="7" required placeholder="Private details only."></textarea></label>
@@ -180,6 +229,20 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
     const signatureDetail = root.querySelector<HTMLElement>("#xmtp-signature-detail");
     const processingModal = root.querySelector<HTMLElement>("#xmtp-processing-modal");
     const processingDetail = root.querySelector<HTMLElement>("#xmtp-processing-detail");
+    const ratingInputs = Array.from(root.querySelectorAll<HTMLInputElement>("input[data-rating-output]"));
+
+    for (const input of ratingInputs) {
+      const updateOutput = () => {
+        const outputId = input.dataset.ratingOutput;
+        const output = outputId ? root.querySelector<HTMLOutputElement>(`#${outputId}`) : null;
+        if (output) {
+          output.value = ratingFromFormValue(input.value);
+          output.textContent = ratingFromFormValue(input.value);
+        }
+      };
+      input.addEventListener("input", updateOutput);
+      updateOutput();
+    }
 
     const setSignatureWait = (open: boolean, detail = signatureWaitDetail) => {
       persistedSignatureWait = { open, detail };
@@ -269,12 +332,14 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       setProcessing(true, "Preparing broker submission.");
       try {
         const input = {
+          bugType: bugTypeFromFormValue(formData.get("bugType")),
+          severity: ratingFromFormValue(formData.get("severityIndex")),
+          targetInterest: ratingFromFormValue(formData.get("targetInterestIndex")),
           title: String(formData.get("title") || ""),
           publicSummary: String(formData.get("publicSummary") || ""),
           details: String(formData.get("details") || ""),
           reproSteps: "",
           evidence: "",
-          suggestedSeverity: "unrated",
           contactHints: "",
           targetKind: "other" as never,
           targetRef: "",

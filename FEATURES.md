@@ -43,6 +43,7 @@ cheapbugs/
 - Public-safe report metadata is stored on Base in `CheapBugsBugIndex`.
 - Sensitive dossier content must be encrypted in the browser before IPFS upload on the legacy path.
 - XMTP broker submissions are private XMTP DMs to the broker and are not encrypted into IPFS by the static app path.
+- The planned broker publishing path uses a submitter-signed `BugBundle` JSON file on IPFS, with encrypted details in the bundle and the reveal key kept out of IPFS until the onchain reveal window opens.
 - Reviewer verdicts are EAS attestations on Base and are read through EAS GraphQL.
 - The Python broker is an optional off-static runtime with SQLite state; it does not change the frontend deployment model.
 
@@ -109,8 +110,10 @@ cheapbugs/
 - **Description**: The submit route sends bug submissions as strict JSON XMTP DMs to the default broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`.
 - **Properties**:
   - `VITE_BROKER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed.
-  - The frontend form currently collects only title, public summary, and private details; repro steps, evidence, severity, Signal recipient, contact hints, target fields, tags, and review access keys are intentionally not user-facing.
-  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, title, public summary, private details, and client metadata.
+  - The frontend form collects bug type, severity, target interest, title, public summary, and private details. Repro steps, evidence, Signal recipient, contact hints, target kind/reference fields, tags, and review access keys are intentionally not user-facing.
+  - Bug type is a malleable broker-triage hint with current values `0day`, `nday`, `web`, `net`, and `intel`.
+  - Severity and target interest are malleable broker-triage hints with current slider values `low`, `medium`, `high`, and `critical`.
+  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, `bug_type`, `severity`, `target_interest`, title, public summary, private details, and client metadata.
   - The frontend does not yet attach a reporter signature over the submission payload; broker-relayed onchain attribution must stay disabled until the reporter-signed relay feature exists.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
   - The submit route shows a processing-submission modal while broker XMTP submission work is in progress.
@@ -118,8 +121,8 @@ cheapbugs/
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
   - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.
-  - The broker owns review-key generation and retention for this flow.
-  - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid provided target references, and invalid reporter credentials.
+  - The planned BugBundle path has the submitter generate the details key and send it to the broker outside the signed IPFS bundle; do not expose a frontend review access key field on the broker path.
+  - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid provided target references, and invalid reporter credentials.
   - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
   - Broker status messages intentionally avoid XMTP reply-content encoding so the submission flow does not depend on nonessential reply-content codec behavior.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
@@ -129,18 +132,36 @@ cheapbugs/
   - [ ] Add reporter-signed payload envelopes before the broker can submit user-attributed records onchain.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
 
+### BugBundle IPFS Reveal Model
+
+- **Stability**: planned, not implemented
+- **Description**: A submitted bug will become one versioned `BugBundle` JSON object pinned to IPFS, with public metadata, broker-triage guidance, encrypted details, and the reporter signature in one immutable blob.
+- **Properties**:
+  - The bundle schema is planned as `cheapbugs.bug_bundle.v1`.
+  - The bundle includes public fields such as reporter, broker, chain id, reveal timing, title, public summary, `bug_type`, `severity`, and `target_interest`.
+  - The bundle includes the encrypted `details` ciphertext and encryption metadata, but never the details key.
+  - The submitter generates the random details key, encrypts the details, signs the bundle commitment, and sends the signed bundle plus the out-of-bundle details key to the broker over XMTP.
+  - The broker verifies the signature, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, then pins the signed bundle bytes to IPFS without modification.
+  - The bug index stores the bundle CID, bundle/content commitments, reveal time, and details-key commitment.
+  - After the 7-day judgment period, the details key is added to the bug index. Browsers can then fetch the bundle from IPFS, read the key from the index, decrypt details locally, and render the bug as ordinary readable content.
+- **Test Criteria**:
+  - [ ] Browser tests cover bundle construction, details encryption, key commitment generation, and signature prompt state.
+  - [ ] Broker tests prove the broker rejects altered bundles, bad signatures, mismatched details keys, and unintelligible decrypted details.
+  - [ ] Contract tests prove keys cannot be revealed before the judgment window and revealed keys must match the stored commitment.
+  - [ ] Read-path tests cover automatic post-reveal IPFS fetch and browser decryption.
+
 ### Reporter-Signed Broker Relay
 
 - **Stability**: planned, not implemented
 - **Description**: Let the broker pin private submission material to IPFS and optionally submit EAS or bug-index records without being able to forge reports from other users.
 - **Properties**:
-  - The browser must create a canonical submission payload hash and an EIP-712 signature from the reporter before sending the XMTP message.
-  - The signed message must bind at least schema, version, reporter, broker wallet, Base chain id, bug-index contract address, payload hash, created time, and a nonce or deadline.
-  - The broker may transform storage details, pin IPFS, and pay gas, but it must not be able to choose or alter the reporter address accepted by the registry.
+  - The browser must create a canonical BugBundle commitment and an EIP-712 signature from the reporter before sending the publish XMTP message.
+  - The signed message must bind at least schema, version, reporter, broker wallet, Base chain id, bug-index contract address, bundle/core hash, encrypted details hash, details-key commitment, reveal time, created time, and a nonce or deadline.
+  - The broker may verify, pin IPFS, and pay gas, but it must not be able to choose or alter the reporter address or signed bundle content accepted by the registry.
   - `CheapBugsBugIndex` must reject broker-relayed submissions unless the reporter signature recovers to the claimed reporter, or validates through EIP-1271 if contract-wallet support is added.
   - The contract must prevent replay of the same signed submission across brokers, chains, contracts, or duplicate report hashes.
   - XMTP sender identity is useful broker-side evidence, but it is not enough for the smart-contract-level anti-forgery claim.
-  - Private plaintext details must never be placed onchain; onchain records should contain public metadata, IPFS CIDs or commitments, and content hashes only.
+  - Private plaintext details must never be placed onchain; onchain records should contain public metadata, IPFS CIDs, commitments, content hashes, and post-window details keys only.
 - **Test Criteria**:
   - [ ] Contract tests prove a broker cannot submit a forged report for an arbitrary reporter.
   - [ ] Contract tests prove valid reporter signatures are accepted through the broker-relay path.

@@ -25,9 +25,11 @@ CREATE TABLE IF NOT EXISTS submissions (
   id TEXT PRIMARY KEY,
   reporter_address TEXT NOT NULL,
   reporter_signal TEXT NOT NULL,
+  bug_type TEXT NOT NULL DEFAULT '0day',
   title TEXT NOT NULL,
   summary TEXT NOT NULL,
   severity TEXT NOT NULL,
+  target_interest TEXT NOT NULL DEFAULT 'medium',
   body TEXT NOT NULL,
   xmtp_conversation_id TEXT NOT NULL,
   xmtp_message_id TEXT NOT NULL UNIQUE,
@@ -82,6 +84,7 @@ class BrokerStore:
     def init(self) -> None:
         with self.session() as conn:
             conn.executescript(SCHEMA)
+            _ensure_submission_columns(conn)
 
     def message_seen(self, message_id: str) -> bool:
         with self.session() as conn:
@@ -119,19 +122,21 @@ class BrokerStore:
             conn.execute(
                 """
                 INSERT INTO submissions (
-                  id, reporter_address, reporter_signal, title, summary, severity, body,
+                  id, reporter_address, reporter_signal, bug_type, title, summary, severity, target_interest, body,
                   xmtp_conversation_id, xmtp_message_id, signal_group_id,
                   signal_message_timestamp, status, created_at, matures_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
                     command.reporter_address,
                     command.signal_recipient,
+                    command.bug_type,
                     command.title,
                     command.summary,
                     command.severity,
+                    command.target_interest,
                     command.body,
                     xmtp_conversation_id,
                     xmtp_message_id,
@@ -260,9 +265,11 @@ def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
         id=str(row["id"]),
         reporter_address=str(row["reporter_address"]),
         reporter_signal=str(row["reporter_signal"]),
+        bug_type=str(row["bug_type"]),
         title=str(row["title"]),
         summary=str(row["summary"]),
         severity=str(row["severity"]),
+        target_interest=str(row["target_interest"]),
         body=str(row["body"]),
         xmtp_conversation_id=str(row["xmtp_conversation_id"]),
         xmtp_message_id=str(row["xmtp_message_id"]),
@@ -276,3 +283,11 @@ def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
         payout_tx_hash=str(row["payout_tx_hash"]) if row["payout_tx_hash"] is not None else None,
         error=str(row["error"]) if row["error"] is not None else None,
     )
+
+
+def _ensure_submission_columns(conn: sqlite3.Connection) -> None:
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(submissions)").fetchall()}
+    if "bug_type" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN bug_type TEXT NOT NULL DEFAULT '0day'")
+    if "target_interest" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN target_interest TEXT NOT NULL DEFAULT 'medium'")

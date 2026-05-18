@@ -1,6 +1,6 @@
 import { activeStorageProvider } from "../storage";
 import type { ReviewVerdict } from "../types/review";
-import type { SubmissionBundle, SubmissionPrivate, SubmissionPublic } from "../types/submission";
+import type { BugType, SubmissionBundle, SubmissionPrivate, SubmissionPublic, SubmissionRating } from "../types/submission";
 import type { DisclosureMode, Impact, RewardClass, TargetKind, Validity } from "../types/domain";
 
 import { createReviewVerdictAttestation } from "../attest/eas";
@@ -12,12 +12,14 @@ import { getReportAccessKey, saveReportAccessKey } from "./report-access";
 import { hashJson, hashText, normalizeAddress, parseTags, toReportId } from "./utils";
 
 export type SubmissionFormInput = {
+  bugType: BugType;
   title: string;
   publicSummary: string;
   details: string;
   reproSteps: string;
   evidence: string;
-  suggestedSeverity: string;
+  severity: SubmissionRating;
+  targetInterest: SubmissionRating;
   contactHints: string;
   targetKind: TargetKind;
   targetRef: string;
@@ -40,11 +42,13 @@ export const submitReport = async (
 ) => {
   const createdAt = new Date().toISOString();
   const privateSubmission: SubmissionPrivate = {
+    bugType: input.bugType,
     title: input.title.trim(),
     details: input.details.trim(),
     reproSteps: input.reproSteps.trim(),
     evidence: input.evidence.trim(),
-    suggestedSeverity: input.suggestedSeverity.trim(),
+    severity: input.severity,
+    targetInterest: input.targetInterest,
     contactHints: input.contactHints.trim(),
     targetRef: input.targetRef.trim()
   };

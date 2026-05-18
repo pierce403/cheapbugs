@@ -9,9 +9,11 @@ from dataclasses import dataclass, field
 class SubmissionCommand:
     reporter_address: str
     signal_recipient: str
+    bug_type: str
     title: str
     summary: str
     severity: str
+    target_interest: str
     body: str
     target_kind: str = "other"
     target_ref: str = ""
@@ -37,9 +39,11 @@ class SubmissionRecord:
     id: str
     reporter_address: str
     reporter_signal: str
+    bug_type: str
     title: str
     summary: str
     severity: str
+    target_interest: str
     body: str
     xmtp_conversation_id: str
     xmtp_message_id: str

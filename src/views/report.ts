@@ -35,6 +35,9 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
       privateView = `
         <table class="data-table">
           <tbody>
+            <tr><th>bug type</th><td>${escapeHtml(textOrDash(privateSubmission.bugType))}</td></tr>
+            <tr><th>severity</th><td>${escapeHtml(textOrDash(privateSubmission.severity))}</td></tr>
+            <tr><th>target interest</th><td>${escapeHtml(textOrDash(privateSubmission.targetInterest))}</td></tr>
             <tr><th>title</th><td>${escapeHtml(privateSubmission.title)}</td></tr>
             <tr><th>details</th><td>${newlineToBreaks(privateSubmission.details)}</td></tr>
             <tr><th>repro</th><td>${newlineToBreaks(privateSubmission.reproSteps)}</td></tr>
