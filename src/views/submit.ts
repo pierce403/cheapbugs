@@ -125,10 +125,17 @@ const xmtpErrorMessage = (error: unknown): string => {
 
 const isSignatureWaitProgress = (message: string): boolean => /waiting for .*xmtp wallet signature/i.test(message);
 
+const isBrokerSignatureWaitProgress = (message: string): boolean => /waiting for broker submission signature/i.test(message);
+
 const isSignatureSettledProgress = (message: string): boolean =>
-  /xmtp wallet signature approved|using cached xmtp wallet signature/i.test(message);
+  /xmtp wallet signature approved|using cached xmtp wallet signature|broker submission signature approved/i.test(message);
 
 const isIpfsConfirmationProgress = (message: string): boolean => /Encrypted BugBundle pinned to IPFS:\s*ipfs:\/\//i.test(message);
+
+const signatureWaitDetailForProgress = (message: string): string =>
+  isBrokerSignatureWaitProgress(message)
+    ? "Approve the CheapBugs submission authorization in your wallet app or browser extension. This signs the report payload and does not send a transaction."
+    : signatureWaitDetail;
 
 const statusMarkup = (status = initialXmtpStatus()): string => `
   <div id="xmtp-status" class="xmtp-status xmtp-status-${status.tone}" role="status" aria-live="polite" data-testid="xmtp-status">
@@ -309,8 +316,8 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
     };
 
     const handleXmtpProgress = (message: string) => {
-      if (isSignatureWaitProgress(message)) {
-        setSignatureWait(true);
+      if (isSignatureWaitProgress(message) || isBrokerSignatureWaitProgress(message)) {
+        setSignatureWait(true, signatureWaitDetailForProgress(message));
       } else if (isSignatureSettledProgress(message)) {
         setSignatureWait(false);
       }

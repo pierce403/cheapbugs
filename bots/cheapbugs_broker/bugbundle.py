@@ -104,14 +104,29 @@ def build_unsigned_encrypted_bug_bundle(
             "details_key_commitment_alg": "sha256",
         },
     }
+    signature_payload = None
+    if command.signature is not None:
+        signature_payload = {
+            "scheme": command.signature.scheme,
+            "signer": command.signature.signer,
+            "payload_sha256": command.signature.payload_sha256,
+            "message": command.signature.message,
+            "value": command.signature.value,
+            "verified_by_broker": True,
+        }
+
     payload = {
         "schema": BUG_BUNDLE_SCHEMA,
         "version": BUG_BUNDLE_VERSION,
         "core": core,
-        "signature": None,
+        "signature": signature_payload,
         "broker_status": {
-            "reporter_signature": "not_implemented",
-            "note": "Interim broker-encrypted bundle; reporter-signed bundle relay is not implemented yet.",
+            "reporter_signature": "verified" if signature_payload else "missing",
+            "note": (
+                "Interim broker-encrypted bundle; reporter signature verified over the canonical XMTP submission payload."
+                if signature_payload
+                else "Interim broker-encrypted bundle; reporter signature missing."
+            ),
         },
     }
     return BuiltBugBundle(

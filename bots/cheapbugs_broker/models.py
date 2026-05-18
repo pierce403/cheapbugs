@@ -27,6 +27,7 @@ class SubmissionCommand:
     severity: str
     target_interest: str
     body: str
+    broker_address: str = ""
     target_kind: str = "other"
     target_ref: str = ""
     disclosure_mode: str = "private"
@@ -35,6 +36,16 @@ class SubmissionCommand:
     repro_steps: str = ""
     evidence: str = ""
     contact_hints: str = ""
+    signature: "SubmissionSignature | None" = None
+
+
+@dataclass(frozen=True)
+class SubmissionSignature:
+    scheme: str
+    signer: str
+    payload_sha256: str
+    message: str
+    value: str
 
 
 @dataclass(frozen=True)

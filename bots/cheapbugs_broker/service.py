@@ -10,7 +10,14 @@ from collections.abc import Awaitable, Callable
 from decimal import Decimal
 
 from .bugbundle import build_unsigned_encrypted_bug_bundle
-from .commands import CommandError, SUBMISSION_SCHEMA, command_help, parse_command, validate_submission_target
+from .commands import (
+    CommandError,
+    SUBMISSION_SCHEMA,
+    command_help,
+    parse_command,
+    validate_submission_target,
+    verify_submission_signature,
+)
 from .config import BrokerConfig
 from .models import AccessCommand, PinnedBugBundle, SubmissionCommand
 from .rewards import reward_tokens, tokens_to_wei
@@ -163,6 +170,36 @@ class BrokerBot:
         )
         await self._reply(reply, message_id, "submission_fields_valid", "Submission fields are present and well formed.")
 
+        configured_broker_address = self.config.broker_address
+        if configured_broker_address and command.broker_address != configured_broker_address:
+            self.logger.info(
+                "submission broker address invalid message_id=%s expected=%s actual=%s",
+                message_id,
+                configured_broker_address,
+                command.broker_address,
+            )
+            await self._reply(
+                reply,
+                message_id,
+                "signature_invalid",
+                "Submission reporter signature is invalid: broker_address does not match this broker.",
+            )
+            self.store.mark_message_processed(message_id, "signature_invalid")
+            return
+        try:
+            verify_submission_signature(command)
+        except CommandError as exc:
+            self.logger.info(
+                "submission signature invalid message_id=%s reporter=%s reason=%s",
+                message_id,
+                command.reporter_address,
+                exc,
+            )
+            await self._reply(reply, message_id, "signature_invalid", f"Submission reporter signature is invalid: {exc}")
+            self.store.mark_message_processed(message_id, "signature_invalid")
+            return
+        await self._reply(reply, message_id, "signature_valid", "Submission reporter signature is valid.")
+
         try:
             validate_submission_target(command)
         except CommandError as exc:
@@ -277,9 +314,10 @@ class BrokerBot:
         if self.ipfs is None:
             raise RuntimeError("IPFS client is not configured.")
         now = int(time.time())
+        broker_address = self.config.broker_address or command.broker_address
         built = build_unsigned_encrypted_bug_bundle(
             command,
-            broker_address=self.config.broker_address,
+            broker_address=broker_address,
             chain_id=self.config.chain_id,
             bug_index_address=self.config.bug_index_address,
             created_at=now,

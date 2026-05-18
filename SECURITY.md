@@ -10,22 +10,23 @@ The intended future claim is:
 
 > A bug-index record attributed to a reporter can only be created by that reporter directly, or by a broker-relayed transaction that includes a valid reporter signature over the canonical submission commitment.
 
-This broker-relay claim is not implemented yet.
+This broker-relay claim is not implemented yet at the smart-contract level.
 
 ## Current Implemented Guarantees
 
 - Direct onchain submissions through `CheapBugsBugIndex.submitReport` are attributed to `msg.sender`.
-- The current broker XMTP payload includes `reporter_address`, but it is not yet signed as an application-level submission envelope.
+- The current broker XMTP payload includes `reporter_address`, `broker_address`, and an EIP-191 `eip191_canonical_submission_v1` signature over the canonical JSON command hash.
+- The broker verifies the reporter signature before target validation, credential validation, or IPFS pinning. Invalid or missing signatures stop the submission flow.
 - The browser sends broker submissions as XMTP DMs to the configured broker wallet.
 - The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, blocked reporters, and insufficient BUGZ balance.
 - The broker sends staged plain text XMTP status messages after successful validation stages.
-- The broker now encrypts accepted plaintext XMTP submission details into an interim unsigned `cheapbugs.bug_bundle.v1` object before pinning to IPFS through local Kubo.
+- The broker now encrypts accepted plaintext XMTP submission details into an interim `cheapbugs.bug_bundle.v1` object before pinning to IPFS through local Kubo, and the pinned bundle carries the verified reporter signature over the canonical XMTP command.
 - The interim broker-built bundle keeps the details key outside IPFS and stores that key in broker SQLite for later reveal work.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
 ## Planned Reporter-Signed Broker Relay
 
-Before the broker may pin, attest, or register a user-attributed bug report onchain, the browser and contracts need a signed relay path.
+Before the broker may attest or register a user-attributed bug report onchain, the browser and contracts need a contract-verifiable signed relay path.
 
 Required properties:
 
@@ -40,7 +41,7 @@ Required properties:
 - The contract accepts the details key only after the 7-day judgment period and only when it matches the stored key commitment.
 - If contract wallets are supported, the relay path must support EIP-1271 signature validation.
 
-Until this exists, the broker must not create bug-index records that claim to be from a user address.
+Until this exists, the broker must not create bug-index records that claim to be from a user address. The current EIP-191 canonical command signature is useful broker-side authorization and audit material, but it is not the final onchain relay signature.
 
 ## Trust Boundaries
 
@@ -104,9 +105,9 @@ Until this exists, the broker must not create bug-index records that claim to be
 
 ## Known Gaps
 
-- Reporter-signed broker relay is not implemented.
-- The current XMTP JSON payload has no application-level EIP-712 signature.
-- The broker IPFS pinning path is interim: it encrypts and pins broker-built unsigned bundles, but does not yet verify submitter-built signed bundles.
+- Contract-verifiable reporter-signed broker relay is not implemented.
+- The current XMTP JSON payload uses an EIP-191 command signature, not the planned EIP-712 BugBundle relay signature.
+- The broker IPFS pinning path is interim: it encrypts and pins broker-built bundles carrying verified command signatures, but does not yet verify submitter-built encrypted signed bundles.
 - The broker has not yet been wired to EAS submission or bug-index relay for accepted XMTP submissions.
 - Live XMTP broker smoke tests are manual.
 - Reviewer trust is frontend-enforced through an allowlist and should move to an onchain or resolver-backed trust model.

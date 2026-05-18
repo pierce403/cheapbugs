@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import tempfile
 import unittest
@@ -9,7 +10,14 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
-from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
+from cheapbugs_broker.commands import (
+    SUBMISSION_SIGNATURE_SCHEME,
+    CommandError,
+    build_submission_signature_message,
+    parse_command,
+    validate_submission_target,
+    verify_submission_signature,
+)
 from cheapbugs_broker.config import BrokerConfig
 from cheapbugs_broker.ipfs import IpfsAddResult
 from cheapbugs_broker.models import SignalReactionEvent, SubmissionCommand
@@ -20,6 +28,7 @@ from cheapbugs_broker.store import BrokerStore
 
 
 WALLET = "0x1111111111111111111111111111111111111111"
+BROKER = "0x2222222222222222222222222222222222222222"
 
 
 class CommandParsingTest(unittest.TestCase):
@@ -36,6 +45,8 @@ class CommandParsingTest(unittest.TestCase):
         self.assertEqual(command.target_kind, "repo")
         self.assertEqual(command.target_ref, "pierce403/cheapbugs")
         self.assertEqual(command.tags, ("parser", "memory"))
+        self.assertIsNotNone(command.signature)
+        self.assertEqual(command.signature.signer, WALLET)
 
     def test_parse_minimal_json_submission_defaults_broker_fields(self) -> None:
         command = parse_command(json.dumps(minimal_submission_payload()))
@@ -70,6 +81,41 @@ Private details go here.""",
 
         with self.assertRaisesRegex(CommandError, "details"):
             parse_command(json.dumps(payload))
+
+    def test_reject_signature_payload_hash_mismatch(self) -> None:
+        payload = valid_submission_payload()
+        signature = dict(payload["signature"])
+        signature["payload_sha256"] = "0x" + "9" * 64
+        payload["signature"] = signature
+
+        with self.assertRaisesRegex(CommandError, "payload hash"):
+            parse_command(json.dumps(payload))
+
+    def test_verify_real_eip191_submission_signature(self) -> None:
+        try:
+            from eth_account import Account
+            from eth_account.messages import encode_defunct
+        except ImportError:
+            self.skipTest("eth_account is only installed in the broker runtime environment")
+
+        account = Account.from_key("0x" + "1" * 64)
+        payload = valid_submission_payload(reporter_address=str(account.address).lower())
+        unsigned_payload = {key: value for key, value in payload.items() if key != "signature"}
+        payload_sha256 = canonical_sha256(unsigned_payload)
+        message = build_submission_signature_message(unsigned_payload, payload_sha256)
+        signed = account.sign_message(encode_defunct(text=message))
+        payload["signature"] = {
+            "scheme": SUBMISSION_SIGNATURE_SCHEME,
+            "signer": str(account.address).lower(),
+            "payload_sha256": payload_sha256,
+            "message": message,
+            "value": "0x" + signed.signature.hex().removeprefix("0x"),
+        }
+
+        command = parse_command(json.dumps(payload))
+
+        self.assertIsInstance(command, SubmissionCommand)
+        verify_submission_signature(command)
 
     def test_reject_invalid_submission_guidance(self) -> None:
         with self.assertRaisesRegex(CommandError, "bug_type"):
@@ -229,15 +275,16 @@ class BrokerServiceTest(unittest.TestCase):
                 return None
 
             with self.assertLogs("cheapbugs_broker.service", level="INFO") as logs:
-                asyncio.run(
-                    bot.handle_xmtp_text(
-                        json.dumps(valid_submission_payload()),
-                        sender_address=WALLET,
-                        conversation_id="conversation",
-                        message_id="logged-message",
-                        reply=reply,
+                with patch("cheapbugs_broker.service.verify_submission_signature", return_value=None):
+                    asyncio.run(
+                        bot.handle_xmtp_text(
+                            json.dumps(valid_submission_payload()),
+                            sender_address=WALLET,
+                            conversation_id="conversation",
+                            message_id="logged-message",
+                            reply=reply,
+                        )
                     )
-                )
 
         output = "\n".join(logs.output)
         self.assertIn("xmtp message received", output)
@@ -264,23 +311,58 @@ class BrokerServiceTest(unittest.TestCase):
             async def reply(message: str) -> None:
                 replies.append(message)
 
-            asyncio.run(
-                bot.handle_xmtp_text(
-                    json.dumps(valid_submission_payload()),
-                    sender_address=WALLET,
-                    conversation_id="conversation",
-                    message_id="message",
-                    reply=reply,
+            with patch("cheapbugs_broker.service.verify_submission_signature", return_value=None):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="message",
+                        reply=reply,
+                    )
                 )
-            )
 
             self.assertIn("Submission JSON is valid", replies[0])
             self.assertEqual(replies[1], "Submission fields are present and well formed.")
-            self.assertIn("Submission target is valid", replies[2])
-            self.assertIn("Submission credentials are valid", replies[3])
-            self.assertIn("Encrypted BugBundle pinned to IPFS", replies[4])
-            self.assertIn("Submission relayed", replies[5])
+            self.assertEqual(replies[2], "Submission reporter signature is valid.")
+            self.assertIn("Submission target is valid", replies[3])
+            self.assertIn("Submission credentials are valid", replies[4])
+            self.assertIn("Encrypted BugBundle pinned to IPFS", replies[5])
+            self.assertIn("Submission relayed", replies[6])
             self.assertIn("BugBundle: ipfs://bafyfakebugbundle", signal.last_message)
+
+    def test_submission_stops_when_signature_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=2 * 10**18),
+                ipfs=FakeIpfs(),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch(
+                "cheapbugs_broker.service.verify_submission_signature",
+                side_effect=CommandError("signature does not recover"),
+            ):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="message",
+                        reply=reply,
+                    )
+                )
+
+            self.assertIn("Submission reporter signature is invalid", replies[-1])
+            self.assertFalse(any("Encrypted BugBundle pinned" in reply for reply in replies))
 
     def test_submission_stops_when_credentials_fail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -298,15 +380,16 @@ class BrokerServiceTest(unittest.TestCase):
             async def reply(message: str) -> None:
                 replies.append(message)
 
-            asyncio.run(
-                bot.handle_xmtp_text(
-                    json.dumps(valid_submission_payload()),
-                    sender_address=WALLET,
-                    conversation_id="conversation",
-                    message_id="message",
-                    reply=reply,
+            with patch("cheapbugs_broker.service.verify_submission_signature", return_value=None):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="message",
+                        reply=reply,
+                    )
                 )
-            )
 
             self.assertIn("Submission credentials are invalid", replies[-1])
             self.assertFalse(any("Submission relayed" in reply for reply in replies))
@@ -317,30 +400,32 @@ class BrokerServiceTest(unittest.TestCase):
             store.init()
             replies: list[str] = []
             config = test_config(Path(tmp) / "broker.sqlite", signal_enabled=False)
+            ipfs = FakeIpfs()
             bot = BrokerBot(
                 config=config,
                 store=store,
                 signal=None,
                 token=FakeToken(balance=2 * 10**18),
-                ipfs=FakeIpfs(),
+                ipfs=ipfs,
             )
 
             async def reply(message: str) -> None:
                 replies.append(message)
 
-            asyncio.run(
-                bot.handle_xmtp_text(
-                    json.dumps(valid_submission_payload()),
-                    sender_address=WALLET,
-                    conversation_id="conversation",
-                    message_id="message",
-                    reply=reply,
+            with patch("cheapbugs_broker.service.verify_submission_signature", return_value=None):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="message",
+                        reply=reply,
+                    )
                 )
-            )
 
-            self.assertIn("Submission credentials are valid", replies[3])
-            self.assertIn("Encrypted BugBundle pinned to IPFS", replies[4])
-            self.assertIn("Signal is not configured", replies[5])
+            self.assertIn("Submission credentials are valid", replies[4])
+            self.assertIn("Encrypted BugBundle pinned to IPFS", replies[5])
+            self.assertIn("Signal is not configured", replies[6])
             self.assertTrue(store.message_seen("message"))
             with store.session() as conn:
                 row = conn.execute("SELECT * FROM submissions WHERE xmtp_message_id = ?", ("message",)).fetchone()
@@ -349,6 +434,11 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertEqual(row["bundle_uri"], "ipfs://bafyfakebugbundle")
             self.assertTrue(str(row["details_key_b64"]))
             self.assertTrue(str(row["details_key_commitment"]).startswith("0x"))
+            self.assertIsNotNone(ipfs.last_payload)
+            assert isinstance(ipfs.last_payload, dict)
+            self.assertEqual(ipfs.last_payload["broker_status"]["reporter_signature"], "verified")
+            self.assertEqual(ipfs.last_payload["signature"]["scheme"], SUBMISSION_SIGNATURE_SCHEME)
+            self.assertEqual(ipfs.last_payload["signature"]["signer"], WALLET)
             records = store.mature_unpaid_submissions(now=10_000)
             self.assertEqual(records, [])
 
@@ -388,6 +478,7 @@ def valid_submission_payload(**overrides: object) -> dict[str, object]:
         "type": "submission",
         "version": 1,
         "reporter_address": WALLET,
+        "broker_address": BROKER,
         "signal_recipient": "+15551234567",
         "bug_type": "0day",
         "title": "Parser overflow",
@@ -404,6 +495,7 @@ def valid_submission_payload(**overrides: object) -> dict[str, object]:
         "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
     }
     payload.update(overrides)
+    payload["signature"] = submission_signature(payload)
     return payload
 
 
@@ -413,6 +505,7 @@ def minimal_submission_payload(**overrides: object) -> dict[str, object]:
         "type": "submission",
         "version": 1,
         "reporter_address": WALLET,
+        "broker_address": BROKER,
         "bug_type": "web",
         "title": "Parser overflow",
         "public_summary": "Public safe summary for reviewers.",
@@ -422,7 +515,33 @@ def minimal_submission_payload(**overrides: object) -> dict[str, object]:
         "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
     }
     payload.update(overrides)
+    payload["signature"] = submission_signature(payload)
     return payload
+
+
+def canonicalize(value: object) -> object:
+    if isinstance(value, list):
+        return [canonicalize(item) for item in value]
+    if isinstance(value, dict):
+        return {key: canonicalize(value[key]) for key in sorted(value) if value[key] is not None}
+    return value
+
+
+def canonical_sha256(value: object) -> str:
+    canonical = json.dumps(canonicalize(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return f"0x{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+
+def submission_signature(payload: dict[str, object]) -> dict[str, str]:
+    unsigned_payload = {key: value for key, value in payload.items() if key != "signature"}
+    payload_sha256 = canonical_sha256(unsigned_payload)
+    return {
+        "scheme": SUBMISSION_SIGNATURE_SCHEME,
+        "signer": str(unsigned_payload["reporter_address"]).lower(),
+        "payload_sha256": payload_sha256,
+        "message": build_submission_signature_message(unsigned_payload, payload_sha256),
+        "value": "0x" + "1" * 130,
+    }
 
 
 def test_config(path: Path, signal_enabled: bool = True) -> BrokerConfig:
