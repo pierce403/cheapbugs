@@ -8,7 +8,7 @@ Frontend values:
 
 - `VITE_BUG_INDEX_ADDRESS`
 - `VITE_BUGZ_TOKEN_ADDRESS` only if token-aware frontend features should override the live Base BUGZ default
-- `VITE_BUGZ_TREASURY_ADDRESS` only when the token manager should show optional treasury stats
+- `VITE_BUGZ_TREASURY_ADDRESS` only when overriding the committed Base treasury vault used for token-manager treasury stats
 - `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` when the patrons leaderboard should use the Etherscan V2 holder API for Base. Generate it from the Etherscan API Dashboard at `https://etherscan.io/myapikey`; Etherscan documents `tokenholderlist` as a paid holder endpoint.
 - `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` when the patrons leaderboard should fall back to reconstructing holder balances from Transfer logs
 - `VITE_BUGZ_HOLDERS_URL` when overriding the default BaseScan holder-distribution link
@@ -67,10 +67,16 @@ The Node launcher records a detailed deploy log for every successful real deploy
 The script prints the deployed index address as:
 
 ```bash
-VITE_BUG_INDEX_ADDRESS=0x...
+VITE_BUG_INDEX_ADDRESS=0x515FDbc9876aC26870794E26605c7DD04c18679b
 ```
 
-Copy that value into `.env.local`.
+The current Base deployment is:
+
+- `CheapBugsBugIndex`: `0x515FDbc9876aC26870794E26605c7DD04c18679b`
+- `CheapBugsBondVault`: `0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3`
+- `CheapBugsTreasuryVault`: `0x4A080668d9848928dc6D48921cbDc4273fe27A9d`
+
+Those values are committed as the default frontend contract addresses. Override them in `.env.local` only for alternate deployments.
 
 ## 4. Register EAS Schemas On Base
 

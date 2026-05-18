@@ -10,7 +10,7 @@ BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`. The static
 
 The frontend now reserves first-class routes for `index`, `submit`, `review`, `token`, and `patrons`. The token screen is live by default for BUGZ; the patrons screen uses a daily-cached holder API when configured and otherwise falls back to Transfer-log scans from the BUGZ deployment block.
 
-For contract development, the repo now also includes a Foundry workspace with a deploy script and scenario tests for bug submission and reviewer vote flows.
+For contract development, the repo now also includes a Foundry workspace with a deploy script and scenario tests for bug submission and reviewer vote flows. The current verified Base deployment is `CheapBugsBugIndex` at `0x515FDbc9876aC26870794E26605c7DD04c18679b`, `CheapBugsBondVault` at `0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3`, and `CheapBugsTreasuryVault` at `0x4A080668d9848928dc6D48921cbDc4273fe27A9d`.
 
 ## What Is In Scope
 
@@ -92,8 +92,8 @@ cp .env.example .env.local
 
 3. Fill the required values in `.env.local`:
 
-- `VITE_BUG_INDEX_ADDRESS` after deploying the contract
-- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY`, `VITE_BUGZ_MARKET_URL`, `VITE_BUGZ_HOLDERS_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard, daily-cached patrons board, and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is only for optional treasury display rows.
+- `VITE_BUG_INDEX_ADDRESS` only when overriding the committed Base bug index default
+- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY`, `VITE_BUGZ_MARKET_URL`, `VITE_BUGZ_HOLDERS_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard, daily-cached patrons board, and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` overrides the committed Base treasury vault used for treasury display rows.
 - optional `VITE_THIRDWEB_CLIENT_ID` override for Thirdweb wallet login. A public default client id is committed for static deploys.
 - optional `VITE_BROKER_XMTP_ADDRESS` override when submissions should go to a non-default XMTP broker wallet
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema

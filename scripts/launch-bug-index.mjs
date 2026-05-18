@@ -611,6 +611,28 @@ const receiptLog = (receipt) => ({
   status: receipt.status
 });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const readContractWithRetry = async (label, options) => {
+  let lastError;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await publicClient.readContract(options);
+    } catch (error) {
+      lastError = error;
+      const text = error instanceof Error ? error.message : String(error);
+      const retryable = /over rate limit|rate limit|timeout|temporarily unavailable|network error|fetch failed/i.test(text);
+      if (!retryable || attempt === 4) {
+        break;
+      }
+      const delayMs = 1_500 * (attempt + 1);
+      console.warn(`${label} read failed, retrying in ${delayMs}ms: ${text.split("\n")[0]}`);
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
+};
+
 const deploy = async (label, abi, bytecode, args) => {
   console.log(`Deploying ${label}...`);
   const txHash = await walletClient.deployContract({ abi, bytecode, args });
@@ -646,7 +668,7 @@ const write = async (label, address, abi, functionName, args) => {
 };
 
 const assertContractRead = async (label, address, abi, functionName, args, expected) => {
-  const actual = await publicClient.readContract({ address, abi, functionName, args });
+  const actual = await readContractWithRetry(label, { address, abi, functionName, args });
   if (typeof actual === "string" && typeof expected === "string") {
     if (actual.toLowerCase() !== expected.toLowerCase()) {
       throw new Error(`${label} check failed: expected ${expected}, got ${actual}.`);

@@ -10,6 +10,8 @@ const optionalNumber = (value: string | undefined, fallback = 0): number => {
 };
 
 const defaultBugzTokenAddress = "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07";
+const defaultBugIndexAddress = "0x515FDbc9876aC26870794E26605c7DD04c18679b";
+const defaultBugzTreasuryAddress = "0x4A080668d9848928dc6D48921cbDc4273fe27A9d";
 const defaultBugzTokenDeploymentBlock = 46093316;
 const defaultBugzMarketUrl = `https://www.clanker.world/clanker/${defaultBugzTokenAddress}`;
 const defaultBugzHoldersUrl = `https://basescan.org/token/${defaultBugzTokenAddress}#balances`;
@@ -46,9 +48,10 @@ export const env = {
     (import.meta.env.VITE_REVIEW_VERDICT_SCHEMA_UID as `0x${string}` | undefined) || "",
   payoutRecordSchemaUid:
     (import.meta.env.VITE_PAYOUT_RECORD_SCHEMA_UID as `0x${string}` | undefined) || "",
-  bugIndexAddress: (import.meta.env.VITE_BUG_INDEX_ADDRESS as `0x${string}` | undefined) || "",
+  bugIndexAddress: (import.meta.env.VITE_BUG_INDEX_ADDRESS as `0x${string}` | undefined) || defaultBugIndexAddress,
   bugzTokenAddress: configuredBugzTokenAddress,
-  bugzTreasuryAddress: (import.meta.env.VITE_BUGZ_TREASURY_ADDRESS as `0x${string}` | undefined) || "",
+  bugzTreasuryAddress:
+    (import.meta.env.VITE_BUGZ_TREASURY_ADDRESS as `0x${string}` | undefined) || defaultBugzTreasuryAddress,
   bugzTokenDeploymentBlock: optionalNumber(
     import.meta.env.VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK,
     usesDefaultBugzToken ? defaultBugzTokenDeploymentBlock : 0

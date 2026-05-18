@@ -241,7 +241,7 @@
       "foundryArtifactPath": "out/CheapBugsBugIndex.sol/CheapBugsBugIndex.json",
       "ignoredLauncherArtifactPath": "artifacts/CheapBugsBugIndex.json",
       "committedGeneratedArtifact": {
-        "path": "deployments/base-8453/generated/latest/CheapBugsBugIndex.json",
+        "path": "deployments/base-8453/generated/0x515fdbc9876ac26870794e26605c7dd04c18679b/CheapBugsBugIndex.json",
         "sha256": "cbe94149b5a1e716a2a5ee293f4cabbdd3251738e370e4510640fef13b62cfd4",
         "bytes": 240103
       },
@@ -346,7 +346,7 @@
       "foundryArtifactPath": "out/CheapBugsBondVault.sol/CheapBugsBondVault.json",
       "ignoredLauncherArtifactPath": "artifacts/CheapBugsBondVault.json",
       "committedGeneratedArtifact": {
-        "path": "deployments/base-8453/generated/latest/CheapBugsBondVault.json",
+        "path": "deployments/base-8453/generated/0x515fdbc9876ac26870794e26605c7dd04c18679b/CheapBugsBondVault.json",
         "sha256": "c6246394805febd0ff957eca3a612a5ce61a255f6784d7a7db8e6776f719fb6f",
         "bytes": 99496
       },
@@ -423,7 +423,7 @@
       "foundryArtifactPath": "out/CheapBugsTreasuryVault.sol/CheapBugsTreasuryVault.json",
       "ignoredLauncherArtifactPath": "artifacts/CheapBugsTreasuryVault.json",
       "committedGeneratedArtifact": {
-        "path": "deployments/base-8453/generated/latest/CheapBugsTreasuryVault.json",
+        "path": "deployments/base-8453/generated/0x515fdbc9876ac26870794e26605c7dd04c18679b/CheapBugsTreasuryVault.json",
         "sha256": "e573d2e9bc80bb189d7bd1b88a6b42f2634297b07685cbf5f2a00a80fea3a4a6",
         "bytes": 86656
       },
