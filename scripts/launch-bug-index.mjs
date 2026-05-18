@@ -10,10 +10,52 @@ import { base } from "viem/chains";
 const projectRoot = process.cwd();
 const artifactDir = path.join(projectRoot, "artifacts");
 const frontendAbiPath = path.join(projectRoot, "src", "contracts", "bugIndexAbi.ts");
+const defaultContractOwner = "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3";
+
+const shellEnvKeys = new Set(Object.keys(process.env));
+const loadEnvFile = (filePath, { overridePreviousFile = false } = {}) => {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  for (const rawLine of fs.readFileSync(filePath, "utf8").split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const normalized = line.startsWith("export ") ? line.slice("export ".length).trim() : line;
+    const equalsIndex = normalized.indexOf("=");
+    if (equalsIndex <= 0) {
+      continue;
+    }
+
+    const key = normalized.slice(0, equalsIndex).trim();
+    let value = normalized.slice(equalsIndex + 1).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(key) || shellEnvKeys.has(key)) {
+      continue;
+    }
+    if (!overridePreviousFile && process.env[key] !== undefined) {
+      continue;
+    }
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+};
+
+loadEnvFile(path.join(projectRoot, ".env"));
+loadEnvFile(path.join(projectRoot, ".env.local"), { overridePreviousFile: true });
 
 const rpcUrl = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const dryRun = process.argv.includes("--dry-run") || process.env.BUG_INDEX_DRY_RUN === "1";
-const deployerKey = process.env.BUG_INDEX_DEPLOYER_PRIVATE_KEY;
+const deployerKeySource = process.env.BUG_INDEX_DEPLOYER_PRIVATE_KEY ? "BUG_INDEX_DEPLOYER_PRIVATE_KEY" : "BROKER_KEY";
+const deployerKey = process.env.BUG_INDEX_DEPLOYER_PRIVATE_KEY || process.env.BROKER_KEY;
 const verifyContracts = !dryRun && process.env.BUG_INDEX_VERIFY_CONTRACTS !== "0";
 const etherscanApiKey = process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY;
 const etherscanApiVersion = process.env.ETHERSCAN_API_VERSION;
@@ -51,10 +93,6 @@ const parseCsvAddresses = (value, label) =>
       }
       return entry;
     });
-
-const initialBrokers = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_BROKERS, "BUG_INDEX_INITIAL_BROKERS");
-const initialAdmins = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_ADMINS, "BUG_INDEX_INITIAL_ADMINS");
-const initialSlashers = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_SLASHERS, "BUG_INDEX_INITIAL_SLASHERS");
 
 try {
   execFileSync("forge", ["build"], { cwd: projectRoot, stdio: "inherit" });
@@ -116,7 +154,7 @@ if (dryRun) {
 }
 
 if (!deployerKey) {
-  console.error("Missing BUG_INDEX_DEPLOYER_PRIVATE_KEY.");
+  console.error("Missing BUG_INDEX_DEPLOYER_PRIVATE_KEY or BROKER_KEY.");
   process.exit(1);
 }
 
@@ -127,11 +165,19 @@ if (verifyContracts && !etherscanApiKey) {
 }
 
 const account = privateKeyToAccount(deployerKey.startsWith("0x") ? deployerKey : `0x${deployerKey}`);
-const owner = process.env.BUG_INDEX_OWNER || account.address;
+const owner = process.env.BUG_INDEX_OWNER || defaultContractOwner;
 if (!isAddress(owner)) {
   console.error(`BUG_INDEX_OWNER is not a valid address: ${owner}`);
   process.exit(1);
 }
+const hasExplicitInitialBrokers = (process.env.BUG_INDEX_INITIAL_BROKERS || "").trim() !== "";
+const initialBrokers = hasExplicitInitialBrokers
+  ? parseCsvAddresses(process.env.BUG_INDEX_INITIAL_BROKERS, "BUG_INDEX_INITIAL_BROKERS")
+  : deployerKeySource === "BROKER_KEY"
+    ? [account.address]
+    : [];
+const initialAdmins = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_ADMINS, "BUG_INDEX_INITIAL_ADMINS");
+const initialSlashers = parseCsvAddresses(process.env.BUG_INDEX_INITIAL_SLASHERS, "BUG_INDEX_INITIAL_SLASHERS");
 
 const publicClient = createPublicClient({
   chain: base,
@@ -302,6 +348,7 @@ const verifyDeploymentState = async (treasuryVaultAddress, bondVaultAddress, ind
 console.log("Deploying CheapBugs contracts to Base...");
 console.log(`RPC: ${rpcUrl}`);
 console.log(`Deployer: ${account.address}`);
+console.log(`Deployer key source: ${deployerKeySource}`);
 console.log(`Final owner: ${owner}`);
 console.log(`Initial brokers: ${initialBrokers.length ? initialBrokers.join(", ") : "(none)"}`);
 console.log(`Initial admins: ${initialAdmins.length ? initialAdmins.join(", ") : "(none)"}`);

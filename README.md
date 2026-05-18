@@ -116,6 +116,8 @@ npm run launch:bug-index
 
 Real deployments verify `CheapBugsTreasuryVault`, `CheapBugsBondVault`, and `CheapBugsBugIndex` on Etherscan/BaseScan by default after the script checks deployed wiring. Set `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY`; use `BUG_INDEX_VERIFY_CONTRACTS=0` only when intentionally skipping verification.
 
+The launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set, otherwise they deploy from `BROKER_KEY`, seed that broker as the initial broker when no broker list is provided, and transfer ownership to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
+
 6. Start the app:
 
 ```bash

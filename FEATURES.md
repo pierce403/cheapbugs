@@ -132,6 +132,7 @@ cheapbugs/
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
   - Direct browser-to-index submission is disabled; `src/contracts/bugIndex.ts` keeps read helpers and exposes no direct write helper.
   - Launcher scripts refresh frontend ABI files after compilation, deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together, check the deployed wiring, and verify all three contracts on Etherscan/BaseScan by default for real deployments.
+  - Launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set; otherwise they deploy from `BROKER_KEY`, seed that broker as the initial broker when no broker list is provided, and transfer ownership to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
 - **Test Criteria**:
   - [x] `npm run contracts:build` compiles Solidity contracts.
   - [x] `npm run contracts:test` covers broker publication, reporter signatures, nonce replay, deadline expiry, reveal timing, details-key commitment checks, admin status, bonded voting, ordered payouts, zero-payout invalid bugs, treasury broker removal, role abuse, and treasury transfer integration.
@@ -139,6 +140,7 @@ cheapbugs/
   - [x] `npm run launch:bug-index:dry-run` validates the Node launcher and frontend ABI refresh.
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
   - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
+  - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
 
 ### Removed Direct Submission Path
 

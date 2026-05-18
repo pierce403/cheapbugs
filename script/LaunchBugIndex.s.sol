@@ -9,16 +9,27 @@ import { CheapBugsBugIndex, ICheapBugsBondVault, ICheapBugsTreasuryVault } from 
 import { CheapBugsTreasuryVault } from "../contracts/CheapBugsTreasuryVault.sol";
 
 contract LaunchBugIndex is Script {
+    address private constant DEFAULT_CONTRACT_OWNER = 0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3;
+
     function run()
         external
         returns (CheapBugsBugIndex index, CheapBugsBondVault bondVault, CheapBugsTreasuryVault treasuryVault)
     {
-        uint256 deployerPrivateKey = vm.envUint("BUG_INDEX_DEPLOYER_PRIVATE_KEY");
+        string memory deployerKeyValue = vm.envOr("BUG_INDEX_DEPLOYER_PRIVATE_KEY", string(""));
+        bool usingBrokerKey = bytes(deployerKeyValue).length == 0;
+        uint256 deployerPrivateKey = usingBrokerKey ? vm.envUint("BROKER_KEY") : vm.envUint("BUG_INDEX_DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
-        address owner = vm.envOr("BUG_INDEX_OWNER", deployer);
+        address owner = vm.envOr("BUG_INDEX_OWNER", DEFAULT_CONTRACT_OWNER);
         string memory brokersCsv = vm.envOr("BUG_INDEX_INITIAL_BROKERS", string(""));
-        address[] memory initialBrokers =
-            bytes(brokersCsv).length == 0 ? new address[](0) : vm.envAddress("BUG_INDEX_INITIAL_BROKERS", ",");
+        address[] memory initialBrokers;
+        if (bytes(brokersCsv).length == 0) {
+            initialBrokers = new address[](usingBrokerKey ? 1 : 0);
+            if (usingBrokerKey) {
+                initialBrokers[0] = deployer;
+            }
+        } else {
+            initialBrokers = vm.envAddress("BUG_INDEX_INITIAL_BROKERS", ",");
+        }
         string memory adminsCsv = vm.envOr("BUG_INDEX_INITIAL_ADMINS", string(""));
         address[] memory initialAdmins =
             bytes(adminsCsv).length == 0 ? new address[](0) : vm.envAddress("BUG_INDEX_INITIAL_ADMINS", ",");
@@ -58,6 +69,8 @@ contract LaunchBugIndex is Script {
         console2.logAddress(address(treasuryVault));
         console2.log("Owner:");
         console2.logAddress(owner);
+        console2.log("Deployer key source:");
+        console2.log(usingBrokerKey ? "BROKER_KEY" : "BUG_INDEX_DEPLOYER_PRIVATE_KEY");
         console2.log("Initial broker count:");
         console2.logUint(initialBrokers.length);
         console2.log("Initial admin count:");

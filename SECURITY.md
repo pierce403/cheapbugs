@@ -22,6 +22,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - `CheapBugsTreasuryVault` records detail-key purchases and pays rewards only when called by the configured index for a treasury-authorized broker.
 - The vaults hardcode the live Base BUGZ token address `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`; this repo no longer deploys a BUGZ token contract.
 - Real deployment launchers now check deployed vault/index wiring and verify all three contracts on Etherscan/BaseScan by default.
+- Launchers may deploy from `BROKER_KEY` when a separate deployer key is not set, but ownership transfers to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
 - The current broker XMTP payload includes `reporter_address`, `broker_address`, an encrypted `cheapbugs.bug_bundle.v1`, a reporter EIP-712 `publish_authorization`, and an out-of-bundle details key.
 - The browser generates the details key, encrypts details with AES-256-GCM, signs the `PublishBug` EIP-712 authorization over the bundle hash and commitments, and sends the bundle plus details key to the broker over XMTP.
 - The broker verifies the BugBundle and publish authorization before target validation, credential validation, or IPFS pinning. Invalid signatures, wrong reporter/broker/chain/index bindings, key-commitment mismatches, ciphertext-hash mismatches, AAD mismatches, and decryption failures stop the submission flow.

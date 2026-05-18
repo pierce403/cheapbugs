@@ -1,8 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+load_env_file() {
+  local file_path="$1"
+  [[ -f "$file_path" ]] || return 0
+
+  local line normalized key value
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+
+    normalized="$line"
+    if [[ "$normalized" == export[[:space:]]* ]]; then
+      normalized="${normalized#export }"
+    fi
+    [[ "$normalized" == *=* ]] || continue
+
+    key="${normalized%%=*}"
+    value="${normalized#*=}"
+    key="${key%"${key##*[![:space:]]}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    [[ -n "${!key+x}" ]] && continue
+
+    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    export "$key=$value"
+  done < "$file_path"
+}
+
+load_env_file ".env"
+load_env_file ".env.local"
+
 RPC_URL="${BASE_RPC_URL:-https://mainnet.base.org}"
 VERIFY_CONTRACTS="${BUG_INDEX_VERIFY_CONTRACTS:-1}"
+DEFAULT_CONTRACT_OWNER="0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3"
+export BUG_INDEX_OWNER="${BUG_INDEX_OWNER:-$DEFAULT_CONTRACT_OWNER}"
 BROADCAST_REQUESTED=0
 VERIFY_REQUESTED_BY_ARGS=0
 

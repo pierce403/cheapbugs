@@ -22,8 +22,8 @@ Frontend values:
 Launcher values:
 
 - `BASE_RPC_URL`
-- `BUG_INDEX_DEPLOYER_PRIVATE_KEY`
-- `BUG_INDEX_OWNER`
+- `BUG_INDEX_DEPLOYER_PRIVATE_KEY`, or omit it to deploy from `BROKER_KEY`
+- `BUG_INDEX_OWNER`, defaulting to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3`
 - `BUG_INDEX_INITIAL_BROKERS`
 - `BUG_INDEX_INITIAL_ADMINS`
 - `BUG_INDEX_INITIAL_SLASHERS`
@@ -55,6 +55,8 @@ npm run launch:bug-index:forge
 The Forge launcher uses [script/LaunchBugIndex.s.sol](script/LaunchBugIndex.s.sol) through [scripts/launch-bug-index-forge.sh](scripts/launch-bug-index-forge.sh) and reads the same `BUG_INDEX_*` environment values.
 
 The script deploys and wires `CheapBugsTreasuryVault`, `CheapBugsBondVault`, and `CheapBugsBugIndex`. Vaults hardcode the live Base BUGZ token address.
+
+If `BUG_INDEX_DEPLOYER_PRIVATE_KEY` is unset, the launchers use `BROKER_KEY` as the deployer. In that fallback mode, the broker wallet is also added as the initial index/treasury broker when `BUG_INDEX_INITIAL_BROKERS` is empty. Ownership is then transferred to `BUG_INDEX_OWNER`.
 
 Real deployments verify all three contracts on Etherscan/BaseScan by default after post-deploy wiring checks pass. The script fails before broadcasting if `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY` is missing, unless `BUG_INDEX_VERIFY_CONTRACTS=0` is set.
 
