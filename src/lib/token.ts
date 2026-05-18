@@ -1,6 +1,7 @@
 import { chainConfig } from "../config/chains";
 import {
   clearBugzPatronCache,
+  getCachedBugzTokenMetadata,
   getBugzPatronBalances,
   getBugzTokenBalance,
   getBugzTokenMetadata,
@@ -18,6 +19,8 @@ type DashboardRead<T> = {
   errorMessage: string | null;
 };
 
+export type HeaderBugzBalance = Pick<TokenDashboard, "connectedBalance" | "decimals" | "symbol" | "errorMessage">;
+
 const shortenError = (message: string): string => (message.length > 220 ? `${message.slice(0, 217)}...` : message);
 
 const holderApiFields = () => ({
@@ -28,6 +31,11 @@ const holderApiFields = () => ({
 });
 
 const retryDelay = (ms: number): Promise<void> => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+
+const isRateLimitError = (error: unknown): boolean => {
+  const raw = error instanceof Error ? error.message : String(error);
+  return /\b429\b|too many requests|rate.?limit/i.test(raw);
+};
 
 const tokenReadErrorMessage = (label: string, error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error);
@@ -63,8 +71,10 @@ const readDashboardValue = async <T>(label: string, read: () => Promise<T | null
         errorMessage: tokenReadErrorMessage(label, error),
         error
       });
-      if (attempt < 2) {
+      if (attempt < 2 && !isRateLimitError(error)) {
         await retryDelay(450);
+      } else {
+        break;
       }
     }
   }
@@ -75,7 +85,32 @@ const readDashboardValue = async <T>(label: string, read: () => Promise<T | null
   };
 };
 
-export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null): Promise<TokenDashboard> => {
+export const loadBugzHeaderBalance = async (connectedAddress: `0x${string}`): Promise<HeaderBugzBalance> => {
+  if (!isBugzTokenConfigured()) {
+    return {
+      connectedBalance: null,
+      decimals: 18,
+      symbol: "BUGZ",
+      errorMessage: null
+    };
+  }
+
+  const metadata = getCachedBugzTokenMetadata();
+  const balanceRead = await readDashboardValue("BUGZ balance read", () => getBugzTokenBalance(connectedAddress));
+
+  return {
+    connectedBalance: balanceRead.value,
+    decimals: metadata?.decimals ?? 18,
+    symbol: metadata?.symbol ?? "BUGZ",
+    errorMessage: balanceRead.errorMessage
+  };
+};
+
+export const loadTokenDashboard = async (
+  connectedAddress: `0x${string}` | null,
+  options: { includeTreasury?: boolean } = {}
+): Promise<TokenDashboard> => {
+  const includeTreasury = options.includeTreasury ?? true;
   const patronScanStatus = !chainConfig.bugzTokenAddress
     ? "waiting for BUGZ deployment"
     : chainConfig.etherscanApiKey
@@ -109,7 +144,7 @@ export const loadTokenDashboard = async (connectedAddress: `0x${string}` | null)
     connectedAddress
       ? readDashboardValue("BUGZ balance read", () => getBugzTokenBalance(connectedAddress))
       : Promise.resolve({ value: null, errorMessage: null }),
-    chainConfig.bugzTreasuryAddress
+    includeTreasury && chainConfig.bugzTreasuryAddress
       ? readDashboardValue("BUGZ treasury read", getBugzTreasurySnapshot)
       : Promise.resolve({ value: null, errorMessage: null })
   ]);

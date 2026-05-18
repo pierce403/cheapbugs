@@ -4,6 +4,7 @@ import { chainConfig } from "../config/chains";
 import { QueryCache } from "../lib/cache";
 import { ZERO_ADDRESS } from "../lib/constants";
 import { appLog } from "../lib/logger";
+import { RpcReadCache } from "../lib/rpcReadCache";
 import { normalizeAddress } from "../lib/utils";
 
 import { bugzTokenAbi } from "./bugzTokenAbi";
@@ -37,11 +38,6 @@ export type HolderBalanceSnapshot = {
   latestBlock?: number;
 };
 
-type MemoryRecord<T> = {
-  value: T;
-  expiresAt: number;
-};
-
 type SerializedHolderBalance = {
   address: `0x${string}`;
   balance: string;
@@ -55,7 +51,7 @@ const TTL_MS = 30_000;
 const HOLDER_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const HOLDER_SCAN_BLOCK_STEP = 10_000;
 const HOLDER_API_OFFSET = 100;
-const cache = new Map<string, MemoryRecord<unknown>>();
+const readCache = new RpcReadCache();
 const holderLocalCache = new QueryCache("cheapbugs.patrons.v1");
 const readProvider = createBaseReadProvider();
 const transferInterface = new Interface(bugzTokenAbi);
@@ -67,26 +63,8 @@ if (!transferEvent) {
 
 const transferTopic = transferEvent.topicHash;
 
-const getCached = <T>(key: string): T | null => {
-  const hit = cache.get(key);
-  if (!hit || hit.expiresAt <= Date.now()) {
-    cache.delete(key);
-    return null;
-  }
-
-  return hit.value as T;
-};
-
-const setCached = <T>(key: string, value: T, ttlMs: number): T => {
-  cache.set(key, {
-    value,
-    expiresAt: Date.now() + ttlMs
-  });
-  return value;
-};
-
 export const clearBugzTokenCache = (): void => {
-  cache.clear();
+  readCache.clear();
 };
 
 const bugzTokenAddress = (): `0x${string}` => {
@@ -115,28 +93,25 @@ export const getBugzTokenMetadata = async (): Promise<TokenMetadata | null> => {
   }
 
   const key = `metadata:${bugzTokenAddress()}`;
-  const cached = getCached<TokenMetadata>(key);
-  if (cached) {
-    return cached;
-  }
-
-  const contract = readContract();
-  const [name, symbol, decimals, totalSupply] = await Promise.all([
-    contract.name() as Promise<string>,
-    contract.symbol() as Promise<string>,
-    contract.decimals() as Promise<bigint>,
-    contract.totalSupply() as Promise<bigint>
-  ]);
-
-  return setCached(
+  return readCache.getOrLoad(
     key,
-    {
-      name,
-      symbol,
-      decimals: Number(decimals),
-      totalSupply
-    },
-    TTL_MS
+    TTL_MS,
+    async () => {
+      const contract = readContract();
+      const [name, symbol, decimals, totalSupply] = await Promise.all([
+        contract.name() as Promise<string>,
+        contract.symbol() as Promise<string>,
+        contract.decimals() as Promise<bigint>,
+        contract.totalSupply() as Promise<bigint>
+      ]);
+
+      return {
+        name,
+        symbol,
+        decimals: Number(decimals),
+        totalSupply
+      };
+    }
   );
 };
 
@@ -146,13 +121,7 @@ export const getBugzTokenBalance = async (address: `0x${string}`): Promise<bigin
   }
 
   const key = `balance:${bugzTokenAddress()}:${address}`;
-  const cached = getCached<bigint>(key);
-  if (cached !== null) {
-    return cached;
-  }
-
-  const balance = (await readContract().balanceOf(address)) as bigint;
-  return setCached(key, balance, TTL_MS);
+  return readCache.getOrLoad(key, TTL_MS, async () => (await readContract().balanceOf(address)) as bigint);
 };
 
 export const getBugzTreasurySnapshot = async (): Promise<TreasurySnapshot | null> => {
@@ -162,25 +131,26 @@ export const getBugzTreasurySnapshot = async (): Promise<TreasurySnapshot | null
 
   const treasuryAddress = chainConfig.bugzTreasuryAddress;
   const key = `treasury:${bugzTokenAddress()}:${treasuryAddress}`;
-  const cached = getCached<TreasurySnapshot>(key);
-  if (cached) {
-    return cached;
-  }
+  return readCache.getOrLoad(key, TTL_MS, async () => {
+    const [tokenBalance, nativeBalance] = await Promise.all([
+      readContract().balanceOf(treasuryAddress) as Promise<bigint>,
+      readProvider.getBalance(treasuryAddress)
+    ]);
 
-  const [tokenBalance, nativeBalance] = await Promise.all([
-    readContract().balanceOf(treasuryAddress) as Promise<bigint>,
-    readProvider.getBalance(treasuryAddress)
-  ]);
-
-  return setCached(
-    key,
-    {
+    return {
       address: treasuryAddress,
       tokenBalance,
       nativeBalance
-    },
-    TTL_MS
-  );
+    };
+  });
+};
+
+export const getCachedBugzTokenMetadata = (): TokenMetadata | null => {
+  if (!isBugzTokenConfigured()) {
+    return null;
+  }
+
+  return readCache.get<TokenMetadata>(`metadata:${bugzTokenAddress()}`);
 };
 
 const holderCacheKey = (): string => {
@@ -413,7 +383,7 @@ export const clearBugzPatronCache = (): void => {
   }
 
   const key = holderCacheKey();
-  cache.delete(key);
+  readCache.delete(key);
   holderLocalCache.clear(key);
 };
 
@@ -425,7 +395,7 @@ export const getBugzPatronBalances = async (
   }
 
   const key = holderCacheKey();
-  const cachedMemory = options.forceRefresh ? null : getCached<HolderBalanceSnapshot>(key);
+  const cachedMemory = options.forceRefresh ? null : readCache.get<HolderBalanceSnapshot>(key);
   if (cachedMemory) {
     return cachedMemory;
   }
@@ -439,7 +409,7 @@ export const getBugzPatronBalances = async (
         updatedAt: snapshot.updatedAt,
         count: snapshot.holders.length
       });
-      return setCached(key, snapshot, Math.max(snapshot.nextRefreshAt - Date.now(), TTL_MS));
+      return readCache.set(key, snapshot, Math.max(snapshot.nextRefreshAt - Date.now(), TTL_MS));
     }
   }
 
@@ -449,5 +419,5 @@ export const getBugzPatronBalances = async (
 
   const fresh = await loadFreshHolderSnapshot();
   holderLocalCache.set(key, serializeHolderSnapshot(fresh), HOLDER_CACHE_TTL_MS);
-  return setCached(key, fresh, HOLDER_CACHE_TTL_MS);
+  return readCache.set(key, fresh, HOLDER_CACHE_TTL_MS);
 };

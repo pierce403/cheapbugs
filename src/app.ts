@@ -10,14 +10,13 @@ import { renderSubmitView } from "./views/submit";
 import { renderTokenView } from "./views/token";
 import { ENS_REGISTER_URL, ensProfileUrl } from "./lib/ens";
 import { appLog } from "./lib/logger";
-import { loadTokenDashboard } from "./lib/token";
+import { loadBugzHeaderBalance, type HeaderBugzBalance } from "./lib/token";
 import { escapeHtml, formatTokenAmount, shortHash } from "./lib/utils";
 import { buildInfo, formatBuildTime } from "./buildInfo";
 import { chainConfig } from "./config/chains";
 import { env } from "./config/env";
 import type { AppNotice } from "./types/domain";
 import type { SessionState } from "./types/app";
-import type { TokenDashboard } from "./types/token";
 import type { AppViewContext, ViewResult } from "./views/types";
 
 const noticeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -84,7 +83,7 @@ const renderIdentityBlock = (session: SessionState): string => {
 type BugzHeaderState =
   | { status: "idle"; address: null }
   | { status: "loading"; address: `0x${string}`; requestId: number }
-  | { status: "ready"; address: `0x${string}`; dashboard: TokenDashboard }
+  | { status: "ready"; address: `0x${string}`; balance: HeaderBugzBalance }
   | { status: "error"; address: `0x${string}`; errorMessage: string };
 
 const renderBugzStatus = (session: SessionState, tokenHref: string, state: BugzHeaderState): string => {
@@ -100,12 +99,12 @@ const renderBugzStatus = (session: SessionState, tokenHref: string, state: BugzH
     return `<div class="bugz-chip" title="${escapeHtml(state.errorMessage)}">bugz: <a href="${tokenHref}" data-nav>unavailable</a></div>`;
   }
 
-  const dashboard = state.dashboard;
+  const balanceState = state.balance;
   const balance =
-    dashboard.connectedBalance !== null
-      ? `${formatTokenAmount(dashboard.connectedBalance, dashboard.decimals)} ${dashboard.symbol}`
+    balanceState.connectedBalance !== null
+      ? `${formatTokenAmount(balanceState.connectedBalance, balanceState.decimals)} ${balanceState.symbol}`
       : "unavailable";
-  return `<div class="bugz-chip" title="${escapeHtml(dashboard.errorMessage ?? "")}">bugz: <a href="${tokenHref}" data-nav>${escapeHtml(balance)}</a></div>`;
+  return `<div class="bugz-chip" title="${escapeHtml(balanceState.errorMessage ?? "")}">bugz: <a href="${tokenHref}" data-nav>${escapeHtml(balance)}</a></div>`;
 };
 
 const bugzHeaderErrorDetails = (
@@ -122,8 +121,8 @@ const bugzHeaderErrorDetails = (
   guidance: "Check that VITE_CHAIN_RPC_URL points to Base mainnet and VITE_BUGZ_TOKEN_ADDRESS is the live BUGZ token."
 });
 
-const logBugzHeaderDashboardFailure = (address: `0x${string}`, dashboard: TokenDashboard): void => {
-  if (!dashboard.errorMessage && dashboard.connectedBalance !== null) {
+const logBugzHeaderDashboardFailure = (address: `0x${string}`, balance: HeaderBugzBalance): void => {
+  if (!balance.errorMessage && balance.connectedBalance !== null) {
     return;
   }
 
@@ -131,7 +130,7 @@ const logBugzHeaderDashboardFailure = (address: `0x${string}`, dashboard: TokenD
     "token: header BUGZ status load failed",
     bugzHeaderErrorDetails(
       address,
-      dashboard.errorMessage ?? "BUGZ balance read returned no value for the connected wallet."
+      balance.errorMessage ?? "BUGZ balance read returned no value for the connected wallet."
     )
   );
 };
@@ -141,9 +140,9 @@ const loadBugzHeaderDashboard = async (
   onResult: (state: BugzHeaderState) => void
 ): Promise<void> => {
   try {
-    const dashboard = await loadTokenDashboard(address);
-    logBugzHeaderDashboardFailure(address, dashboard);
-    onResult({ status: "ready", address, dashboard });
+    const balance = await loadBugzHeaderBalance(address);
+    logBugzHeaderDashboardFailure(address, balance);
+    onResult({ status: "ready", address, balance });
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "BUGZ dashboard read failed before a dashboard could be built.";

@@ -8,6 +8,7 @@ import {
   normalizeAddress,
   parseTags
 } from "../lib/utils";
+import { RpcReadCache } from "../lib/rpcReadCache";
 
 import { bugIndexAbi } from "./bugIndexAbi";
 import { createBaseReadProvider } from "./rpcProvider";
@@ -37,6 +38,9 @@ const bugIndexAddress = (): `0x${string}` => {
 export const isBugIndexConfigured = (): boolean => Boolean(chainConfig.bugIndexAddress);
 
 const readProvider = createBaseReadProvider();
+const readCache = new RpcReadCache();
+const LATEST_REPORTS_TTL_MS = 15_000;
+const REPORT_TTL_MS = 60_000;
 
 const readContract = () => new Contract(bugIndexAddress(), bugIndexAbi, readProvider);
 
@@ -59,13 +63,15 @@ export const getBugReport = async (reportHash: `0x${string}`): Promise<Submissio
     return null;
   }
 
-  const contract = readContract();
+  const key = `report:${bugIndexAddress()}:${reportHash}`;
 
   try {
-    const record = (await contract.getReport(reportHash)) as ContractSubmission;
-    return fromContractSubmission(record);
+    return await readCache.getOrLoad(key, REPORT_TTL_MS, async () => {
+      const record = (await readContract().getReport(reportHash)) as ContractSubmission;
+      return fromContractSubmission(record);
+    });
   } catch {
-    return null;
+    return readCache.getStale<SubmissionPublic>(key);
   }
 };
 
@@ -74,10 +80,17 @@ export const getLatestBugReports = async (limit: number): Promise<SubmissionPubl
     return [];
   }
 
-  const contract = readContract();
-  const hashes = (await contract.latestReportHashes(BigInt(limit))) as `0x${string}`[];
-  const reports = await Promise.all(hashes.map((hash) => getBugReport(hash)));
-  return reports.filter((entry): entry is SubmissionPublic => entry !== null);
+  const key = `latest:${bugIndexAddress()}:${limit}`;
+
+  try {
+    return await readCache.getOrLoad(key, LATEST_REPORTS_TTL_MS, async () => {
+      const hashes = (await readContract().latestReportHashes(BigInt(limit))) as `0x${string}`[];
+      const reports = await Promise.all(hashes.map((hash) => getBugReport(hash)));
+      return reports.filter((entry): entry is SubmissionPublic => entry !== null);
+    });
+  } catch {
+    return readCache.getStale<SubmissionPublic[]>(key) ?? [];
+  }
 };
 
 export const getBugIndexAddress = (): `0x${string}` => bugIndexAddress();

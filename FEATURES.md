@@ -60,11 +60,13 @@ cheapbugs/
   - The first screen is the usable app, not a landing page.
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
   - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete and logs a high-visibility console error if the read resolves unavailable.
+  - Header BUGZ status only reads the connected wallet BUGZ balance; it must not load token metadata, treasury BUGZ, or treasury native ETH on ordinary route changes.
+  - Browser contract adapters dedupe in-flight Base RPC reads, cache successful reads briefly, and apply a short cooldown after rate-limit errors.
   - Header build metadata shows the bundle commit hash and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
-  - [x] `npm run test:e2e` covers the development banner, GitHub brand icon, build metadata, and header BUGZ status states.
+  - [x] `npm run test:e2e` covers the development banner, GitHub brand icon, build metadata, header BUGZ status states, and that ordinary routes do not trigger treasury dashboard reads.
 
 ### Wallet Auth And Local XMTP Identity
 
@@ -133,6 +135,7 @@ cheapbugs/
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
   - Direct browser-to-index submission is disabled; `src/contracts/bugIndex.ts` keeps read helpers and exposes no direct write helper.
   - The frontend defaults to the verified Base contract suite, so new broker-published bugs can be read into index/recent-report views without requiring `VITE_BUG_INDEX_ADDRESS` in local env.
+  - Recent-report reads use short in-memory caching and in-flight request reuse so route changes do not repeatedly call `latestReportHashes`/`getReport`.
   - Launcher scripts refresh frontend ABI files after compilation, deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together, check the deployed wiring, and verify all three contracts on Etherscan/BaseScan by default for real deployments.
   - The Node launcher writes tracked deployment manifests and generated contract artifacts under `deployments/base-8453/`, including compiler/tool versions, optimizer and `via_ir` settings, source/package hashes, constructor arguments, transaction logs for broadcasts, verification command inputs, and generated ABI/bytecode artifacts.
   - Launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set; otherwise they deploy from `BROKER_KEY`, seed that broker as the initial broker when no broker list is provided, and transfer ownership to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.

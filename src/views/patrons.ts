@@ -6,7 +6,10 @@ import { escapeHtml, formatTokenAmount, shortHash } from "../lib/utils";
 import type { AppViewContext, ViewResult } from "./types";
 
 export const renderPatronsView = async (context: AppViewContext): Promise<ViewResult> => {
-  const [dashboard, leaderboard] = await Promise.all([loadTokenDashboard(context.session.address), loadPatronLeaderboard(50)]);
+  const [dashboard, leaderboard] = await Promise.all([
+    loadTokenDashboard(context.session.address, { includeTreasury: false }),
+    loadPatronLeaderboard(50)
+  ]);
 
   const warnings = [
     !dashboard.isConfigured

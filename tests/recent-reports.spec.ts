@@ -124,4 +124,11 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
 
   expect(counts.latest).toBeGreaterThan(0);
   expect(counts.getReport).toBeGreaterThan(0);
+
+  const countsAfterFirstRender = { ...counts };
+  await page.getByRole("link", { name: "submit" }).click();
+  await expect(page).toHaveURL(/\/submit$/);
+  await page.getByRole("link", { name: "index" }).click();
+  await expect(reportRow).toContainText("Fresh broker-published bug from chain.");
+  expect(counts).toEqual(countsAfterFirstRender);
 });
