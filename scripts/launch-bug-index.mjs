@@ -17,7 +17,11 @@ const rpcUrl = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const dryRun = process.argv.includes("--dry-run") || process.env.BUG_INDEX_DRY_RUN === "1";
 const deployerKey = process.env.BUG_INDEX_DEPLOYER_PRIVATE_KEY;
 
-const initialReviewers = (process.env.BUG_INDEX_INITIAL_REVIEWERS || "")
+const initialBrokers = (process.env.BUG_INDEX_INITIAL_BROKERS || "")
+  .split(",")
+  .map((entry) => entry.trim())
+  .filter(Boolean);
+const initialAdmins = (process.env.BUG_INDEX_INITIAL_ADMINS || "")
   .split(",")
   .map((entry) => entry.trim())
   .filter(Boolean);
@@ -73,6 +77,13 @@ if (!deployerKey) {
 
 const account = privateKeyToAccount(deployerKey.startsWith("0x") ? deployerKey : `0x${deployerKey}`);
 const owner = process.env.BUG_INDEX_OWNER || account.address;
+const bondVaultAddress = process.env.BUG_INDEX_BOND_VAULT_ADDRESS;
+const treasuryVaultAddress = process.env.BUG_INDEX_TREASURY_VAULT_ADDRESS;
+
+if (!bondVaultAddress || !treasuryVaultAddress) {
+  console.error("Missing BUG_INDEX_BOND_VAULT_ADDRESS or BUG_INDEX_TREASURY_VAULT_ADDRESS.");
+  process.exit(1);
+}
 
 const publicClient = createPublicClient({
   chain: base,
@@ -89,12 +100,15 @@ console.log("Deploying CheapBugsBugIndex to Base...");
 console.log(`RPC: ${rpcUrl}`);
 console.log(`Deployer: ${account.address}`);
 console.log(`Owner: ${owner}`);
-console.log(`Initial reviewers: ${initialReviewers.length ? initialReviewers.join(", ") : "(none)"}`);
+console.log(`Bond vault: ${bondVaultAddress}`);
+console.log(`Treasury vault: ${treasuryVaultAddress}`);
+console.log(`Initial brokers: ${initialBrokers.length ? initialBrokers.join(", ") : "(none)"}`);
+console.log(`Initial admins: ${initialAdmins.length ? initialAdmins.join(", ") : "(none)"}`);
 
 const txHash = await walletClient.deployContract({
   abi,
   bytecode,
-  args: [owner, initialReviewers]
+  args: [owner, bondVaultAddress, treasuryVaultAddress, initialBrokers, initialAdmins]
 });
 
 console.log(`Deployment tx: ${txHash}`);

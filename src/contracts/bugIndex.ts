@@ -2,14 +2,11 @@ import { Contract } from "ethers";
 
 import { chainConfig } from "../config/chains";
 import type { SubmissionPublic } from "../types/submission";
-import { authController } from "../services";
 import {
-  disclosureModeToIndex,
   indexToDisclosureMode,
   indexToTargetKind,
   normalizeAddress,
-  parseTags,
-  targetKindToIndex
+  parseTags
 } from "../lib/utils";
 
 import { bugIndexAbi } from "./bugIndexAbi";
@@ -43,11 +40,6 @@ const readProvider = createBaseReadProvider();
 
 const readContract = () => new Contract(bugIndexAddress(), bugIndexAbi, readProvider);
 
-const writeContract = async (): Promise<Contract> => {
-  const signer = await authController.getSigner();
-  return new Contract(bugIndexAddress(), bugIndexAbi, signer);
-};
-
 const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => ({
   reportId: entry.reportId,
   reportHash: entry.reportHash,
@@ -63,26 +55,9 @@ const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => 
 });
 
 export const submitBugReportOnChain = async (
-  submission: SubmissionPublic
-): Promise<{ txHash: `0x${string}` }> => {
-  const contract = await writeContract();
-  const tx = await contract.submitReport({
-    reportHash: submission.reportHash,
-    reportId: submission.reportId,
-    createdAt: BigInt(Math.floor(new Date(submission.createdAt).getTime() / 1000)),
-    disclosureMode: disclosureModeToIndex(submission.disclosureMode),
-    publicSummary: submission.publicSummary,
-    encryptedPayloadCid: submission.encryptedPayloadCid,
-    targetKind: targetKindToIndex(submission.targetKind),
-    targetRefHash: submission.targetRefHash,
-    tags: submission.tags.join(","),
-    contentHash: submission.contentHash
-  });
-
-  const receipt = await tx.wait();
-  return {
-    txHash: (receipt?.hash ?? tx.hash) as `0x${string}`
-  };
+  _submission: SubmissionPublic
+): Promise<never> => {
+  throw new Error("Direct onchain report submission is disabled. Send submissions to a broker for signed publishing.");
 };
 
 export const getBugReport = async (reportHash: `0x${string}`): Promise<SubmissionPublic | null> => {

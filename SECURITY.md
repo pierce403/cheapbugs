@@ -6,15 +6,20 @@ This document records security claims, trust boundaries, and known gaps for Chea
 
 CheapBugs must prevent the broker from forging bug submissions from other users at the smart-contract level.
 
-The intended future claim is:
+The current contract-side claim is:
 
-> A bug-index record attributed to a reporter can only be created by that reporter directly, or by a broker-relayed transaction that includes a valid reporter signature over the canonical submission commitment.
+> A bug-index record attributed to a reporter can only be created by an owner-authorized broker that includes a valid reporter EIP-712 signature over the canonical publish commitment.
 
-This broker-relay claim is not implemented yet at the smart-contract level.
+The browser and Python broker still need to be wired to produce and verify that EIP-712 publish envelope before live broker publishing is enabled.
 
 ## Current Implemented Guarantees
 
-- Direct onchain submissions through `CheapBugsBugIndex.submitReport` are attributed to `msg.sender`.
+- Direct onchain submissions to `CheapBugsBugIndex` are disabled; only owner-authorized brokers can call `publishBug`.
+- `CheapBugsBugIndex.publishBug` requires a reporter EIP-712 signature that binds the reporter, broker, index domain, chain id, report fields, BugBundle CID/hash, encrypted details hash, details-key commitment, reveal time, nonce, and deadline.
+- `CheapBugsBugIndex` rejects expired signatures, replayed reporter nonces, duplicate report hashes, wrong broker signatures, and reveal windows shorter than 7 days from onchain publication.
+- `CheapBugsBugIndex` accepts details-key reveals only after the 7-day window and only when `sha256(raw 32-byte key)` matches the stored commitment.
+- `BondVault` keeps pending withdrawals slashable during the 7-day withdrawal delay, and new bonds cancel pending withdrawals.
+- `TreasuryVault` records detail-key purchases and pays rewards only when called by the configured index for a treasury-authorized broker.
 - The current broker XMTP payload includes `reporter_address`, `broker_address`, a signed encrypted `cheapbugs.bug_bundle.v1`, and an out-of-bundle details key.
 - The browser generates the details key, encrypts details with AES-256-GCM, signs the canonical BugBundle core with EIP-191 scheme `eip191_bugbundle_core_v1`, and sends the signed bundle plus details key to the broker over XMTP.
 - The broker verifies the BugBundle before target validation, credential validation, or IPFS pinning. Invalid signatures, wrong reporter/broker/chain/index bindings, key-commitment mismatches, ciphertext-hash mismatches, AAD mismatches, and decryption failures stop the submission flow.
@@ -25,24 +30,24 @@ This broker-relay claim is not implemented yet at the smart-contract level.
 - The signed bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
-## Planned Reporter-Signed Broker Relay
+## Reporter-Signed Broker Relay
 
-Before the broker may attest or register a user-attributed bug report onchain, the browser and contracts need a contract-verifiable signed relay path. The current EIP-191 BugBundle signature is broker-verifiable, but not yet enforced by `CheapBugsBugIndex`.
+The contract-verifiable relay path now exists in `CheapBugsBugIndex.publishBug`. The current EIP-191 BugBundle signature is still broker-verifiable only and is not sufficient for onchain publication.
 
-Required properties:
+Current and required properties:
 
 - The browser builds a canonical `cheapbugs.bug_bundle.v1` commitment from the unsigned bundle core.
 - The browser generates a random details key, encrypts private details into the bundle, and keeps the details key outside the IPFS-bound bundle.
-- The reporter signs an EIP-712 typed message that binds schema, version, reporter, broker wallet, Base chain id, bug-index contract address, bundle/core hash, encrypted details hash, details-key commitment, reveal time, created time, and a nonce or deadline.
+- The reporter signs an EIP-712 typed message that binds reporter, broker wallet, Base chain id, bug-index contract address, report fields, bundle CID/hash, encrypted details hash, details-key commitment, reveal time, created time, nonce, and deadline.
 - The XMTP message carries the signed BugBundle plus the out-of-bundle details key.
 - The broker verifies the envelope, confirms the supplied details key matches the bundle commitment, decrypts details for objective well-formedness checks, and pins the signed bundle payload without modification before doing EAS or registry writes.
-- `CheapBugsBugIndex` verifies the reporter signature for broker-relayed submissions and stores the recovered reporter, not a broker-supplied reporter field.
-- The contract rejects invalid signatures, wrong broker/domain, wrong chain or contract, expired signatures, duplicate report hashes, and replayed nonces if nonce tracking is added.
+- `CheapBugsBugIndex` verifies the reporter signature for broker-relayed submissions and stores the signed reporter.
+- The contract rejects invalid signatures, wrong broker/domain, wrong chain or contract through the EIP-712 domain/broker binding, expired signatures, duplicate report hashes, and replayed nonces.
 - The contract stores the bundle CID/commitments and details-key commitment when the broker registers the report.
 - The contract accepts the details key only after the 7-day judgment period and only when it matches the stored key commitment.
 - If contract wallets are supported, the relay path must support EIP-1271 signature validation.
 
-Until this exists, the broker must not create bug-index records that claim to be from a user address. The current EIP-191 BugBundle signature is useful broker-side authorization and audit material, but it is not the final onchain relay signature.
+Until browser and broker EIP-712 wiring exists, the broker must not create live bug-index records from the current EIP-191-only XMTP payload. The EIP-191 BugBundle signature remains useful broker-side authorization and audit material, but it is not the final onchain relay signature.
 
 ## Trust Boundaries
 
@@ -64,14 +69,14 @@ Until this exists, the broker must not create bug-index records that claim to be
 - The broker is trusted to receive private submissions, hold unrevealed details keys, pin encrypted BugBundles to IPFS, optionally create EAS attestations, and relay accepted reports.
 - The broker is not trusted to choose the reporter address for onchain attribution.
 - Broker compromise can expose submissions it has received, unrevealed details keys it holds, Signal relay data, SQLite state, and the `BROKER_KEY` available to the process.
-- `BROKER_KEY` is the single broker wallet key. It controls the broker XMTP identity and signs BUGZ payout transfers.
+- `BROKER_KEY` is the single broker wallet key. It controls the broker XMTP identity and currently signs legacy direct BUGZ payout transfers in the Python bot; the new contract path should route rewards through the index and `TreasuryVault`.
 - Base RPC and BUGZ token defaults are public configuration, not secrets.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
 - Broker SQLite now stores unrevealed details keys for IPFS-pinned BugBundles. Treat `.broker/broker.sqlite` as private disclosure material.
 - Broker logs are written to `BROKER_LOG_PATH` and stdout. New submissions intentionally log the full raw XMTP JSON payload, including the out-of-bundle details key, for development visibility. Treat `broker.log` and debug logs as private disclosure material and do not share them outside trusted project operators.
 - Broker debug mode can include third-party XMTP/Rust diagnostics. Inspect debug logs before sharing them outside the project.
 - Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
-- The broker wallet must be deliberately funded and capped before live payouts. Rewards are ERC20 transfers, not mints.
+- The broker wallet must be deliberately funded and capped before using the legacy direct payout path. The contract reward path pays from `TreasuryVault`, not from broker wallet funds.
 
 ### IPFS And Pinata
 
@@ -91,11 +96,25 @@ Until this exists, the broker must not create bug-index records that claim to be
 
 ### CheapBugsBugIndex
 
-- The current direct submission path sets `reporter = msg.sender`.
-- A future broker-relay path must verify reporter signatures inside the contract before assigning user attribution.
+- Direct submission is disabled.
+- Broker-published records must include a valid reporter EIP-712 signature before the contract assigns reporter attribution.
 - Public onchain fields must remain safe for permanent disclosure.
 - Private details must be represented onchain only by CIDs, hashes, commitments, or other non-plaintext references until the 7-day judgment period has ended.
-- After the judgment period, the index may store the details key so browsers can fetch the encrypted IPFS bundle and decrypt details locally.
+- After the judgment period, the index may store the raw 32-byte details key so browsers can fetch the encrypted IPFS bundle and decrypt details locally.
+- Admin status flags are trusted guidance for payout completion; only brokers can complete payout in report order.
+
+### BondVault
+
+- Active and pending-withdrawal bonds are both slashable.
+- Only active bond contributes to `getLevel` and bonded bug vote weight.
+- Vote weights are snapshotted in the index at vote time, so later withdrawals or slashes do not alter already-cast vote totals.
+- The owner controls slashers, so slasher compromise can transfer bonded BUGZ to the treasury.
+
+### TreasuryVault
+
+- Detail-key purchases are onchain payment records for broker verification; the broker still decides whether and when to deliver a key offchain.
+- Rewards can only be paid by the configured index and only for brokers also authorized by the treasury.
+- A bad treasury/index configuration can block payouts or pay from an unintended treasury. Deployment should verify both directions before live use.
 
 ### BUGZ Credentials And Reputation
 
@@ -105,10 +124,11 @@ Until this exists, the broker must not create bug-index records that claim to be
 
 ## Known Gaps
 
-- Contract-verifiable reporter-signed broker relay is not implemented.
-- The current XMTP JSON payload uses an EIP-191 BugBundle signature, not the planned EIP-712 contract relay signature.
+- Browser and Python broker code do not yet create the EIP-712 `PublishBug` signature required by `CheapBugsBugIndex.publishBug`.
+- The current XMTP JSON payload uses an EIP-191 BugBundle signature, not the EIP-712 contract relay signature.
 - The broker IPFS pinning path verifies submitter-built encrypted signed bundles, but dedicated negative tests still need to be expanded for mismatched details keys and undecryptable details.
 - The broker has not yet been wired to EAS submission or bug-index relay for accepted XMTP submissions.
+- EIP-1271 contract-wallet reporter signatures are not implemented.
 - Live XMTP broker smoke tests are manual.
 - Reviewer trust is frontend-enforced through an allowlist and should move to an onchain or resolver-backed trust model.
 - Browser bundle integrity depends on the static hosting and deployment pipeline.
