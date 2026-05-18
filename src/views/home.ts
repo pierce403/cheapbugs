@@ -82,6 +82,8 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
               ? `<p class="helper-copy">bug index: ${escapeHtml(chainConfig.bugIndexAddress)}</p>`
               : `<p class="warning-copy">bug index contract address is not configured yet. Public onchain browsing will stay empty until deployment.</p>`
           }
+          <p class="helper-copy">bond vault: ${escapeHtml(chainConfig.bugBondVaultAddress)}</p>
+          <p class="helper-copy">treasury vault: ${escapeHtml(chainConfig.bugTreasuryVaultAddress)}</p>
         </div>
         <img class="intro-art" src="/cheapbugs.png" alt="CheapBugs bug artwork" />
       </section>

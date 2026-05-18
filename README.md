@@ -92,8 +92,8 @@ cp .env.example .env.local
 
 3. Fill the required values in `.env.local`:
 
-- `VITE_BUG_INDEX_ADDRESS` only when overriding the committed Base bug index default
-- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY`, `VITE_BUGZ_MARKET_URL`, `VITE_BUGZ_HOLDERS_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard, daily-cached patrons board, and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` overrides the committed Base treasury vault used for treasury display rows.
+- `VITE_BUG_INDEX_ADDRESS`, `VITE_BUG_BOND_VAULT_ADDRESS`, and `VITE_BUG_TREASURY_VAULT_ADDRESS` only when overriding the committed Base contract suite defaults
+- optional `VITE_BUGZ_TOKEN_ADDRESS`, `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY`, `VITE_BUGZ_MARKET_URL`, `VITE_BUGZ_HOLDERS_URL`, and `VITE_BUGZ_V4_*` overrides for the token dashboard, daily-cached patrons board, and static trade pool. `VITE_BUGZ_TREASURY_ADDRESS` is a legacy alias for the committed Base treasury vault used for treasury display rows.
 - optional `VITE_THIRDWEB_CLIENT_ID` override for Thirdweb wallet login. A public default client id is committed for static deploys.
 - optional `VITE_BROKER_XMTP_ADDRESS` override when submissions should go to a non-default XMTP broker wallet
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` after registering the EAS schema

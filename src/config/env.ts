@@ -11,6 +11,7 @@ const optionalNumber = (value: string | undefined, fallback = 0): number => {
 
 const defaultBugzTokenAddress = "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07";
 const defaultBugIndexAddress = "0x515FDbc9876aC26870794E26605c7DD04c18679b";
+const defaultBugBondVaultAddress = "0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3";
 const defaultBugzTreasuryAddress = "0x4A080668d9848928dc6D48921cbDc4273fe27A9d";
 const defaultBugzTokenDeploymentBlock = 46093316;
 const defaultBugzMarketUrl = `https://www.clanker.world/clanker/${defaultBugzTokenAddress}`;
@@ -26,6 +27,10 @@ const configuredBugzTokenAddress =
 const usesDefaultBugzToken = configuredBugzTokenAddress.toLowerCase() === defaultBugzTokenAddress.toLowerCase();
 const configuredBrokerXmtpAddress =
   (import.meta.env.VITE_BROKER_XMTP_ADDRESS as `0x${string}` | undefined) || defaultBrokerXmtpAddress;
+const configuredBugTreasuryVaultAddress =
+  (import.meta.env.VITE_BUG_TREASURY_VAULT_ADDRESS as `0x${string}` | undefined) ||
+  (import.meta.env.VITE_BUGZ_TREASURY_ADDRESS as `0x${string}` | undefined) ||
+  defaultBugzTreasuryAddress;
 
 export const env = {
   appName: import.meta.env.VITE_APP_NAME || "CheapBugs",
@@ -49,9 +54,11 @@ export const env = {
   payoutRecordSchemaUid:
     (import.meta.env.VITE_PAYOUT_RECORD_SCHEMA_UID as `0x${string}` | undefined) || "",
   bugIndexAddress: (import.meta.env.VITE_BUG_INDEX_ADDRESS as `0x${string}` | undefined) || defaultBugIndexAddress,
+  bugBondVaultAddress:
+    (import.meta.env.VITE_BUG_BOND_VAULT_ADDRESS as `0x${string}` | undefined) || defaultBugBondVaultAddress,
+  bugTreasuryVaultAddress: configuredBugTreasuryVaultAddress,
   bugzTokenAddress: configuredBugzTokenAddress,
-  bugzTreasuryAddress:
-    (import.meta.env.VITE_BUGZ_TREASURY_ADDRESS as `0x${string}` | undefined) || defaultBugzTreasuryAddress,
+  bugzTreasuryAddress: configuredBugTreasuryVaultAddress,
   bugzTokenDeploymentBlock: optionalNumber(
     import.meta.env.VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK,
     usesDefaultBugzToken ? defaultBugzTokenDeploymentBlock : 0

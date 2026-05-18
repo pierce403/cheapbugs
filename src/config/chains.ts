@@ -30,6 +30,8 @@ export const chainConfig = {
   easGraphqlUrl: env.easGraphqlUrl,
   easScanUrl: env.easScanUrl,
   bugIndexAddress: env.bugIndexAddress,
+  bugBondVaultAddress: env.bugBondVaultAddress,
+  bugTreasuryVaultAddress: env.bugTreasuryVaultAddress,
   bugzTokenAddress: env.bugzTokenAddress,
   bugzTreasuryAddress: env.bugzTreasuryAddress,
   bugzTokenDeploymentBlock: env.bugzTokenDeploymentBlock,

@@ -98,6 +98,8 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
             <tr><th>summary</th><td>${newlineToBreaks(bundle.publicSubmission.publicSummary)}</td></tr>
             <tr><th>tags</th><td>${escapeHtml(textOrDash(bundle.publicSubmission.tags.join(", ")))}</td></tr>
             <tr><th>bug index</th><td>${escapeHtml(chainConfig.bugIndexAddress || "unset")}</td></tr>
+            <tr><th>bond vault</th><td>${escapeHtml(chainConfig.bugBondVaultAddress)}</td></tr>
+            <tr><th>treasury vault</th><td>${escapeHtml(chainConfig.bugTreasuryVaultAddress)}</td></tr>
           </tbody>
         </table>
       </section>

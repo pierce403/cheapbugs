@@ -144,6 +144,7 @@ cheapbugs/
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
   - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
+  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index and rendering newly indexed bugs in `[ recent reports ]`.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 
 ### Removed Direct Submission Path

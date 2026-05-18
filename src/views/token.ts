@@ -41,9 +41,9 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
 
   const treasuryRows = dashboard.treasuryAddress
     ? `
-            <tr><th>treasury</th><td>${escapeHtml(textOrDash(dashboard.treasuryAddress))}</td></tr>
-            <tr><th>treasury bugz</th><td>${tokenAmount(dashboard.treasuryTokenBalance, dashboard.decimals, dashboard.symbol)}</td></tr>
-            <tr><th>treasury ${escapeHtml(chainConfig.nativeSymbol)}</th><td>${
+            <tr><th>treasury vault</th><td>${escapeHtml(textOrDash(dashboard.treasuryAddress))}</td></tr>
+            <tr><th>treasury vault bugz</th><td>${tokenAmount(dashboard.treasuryTokenBalance, dashboard.decimals, dashboard.symbol)}</td></tr>
+            <tr><th>treasury vault ${escapeHtml(chainConfig.nativeSymbol)}</th><td>${
               dashboard.treasuryNativeBalance !== null
                 ? `${escapeHtml(formatTokenAmount(dashboard.treasuryNativeBalance, 18))} ${escapeHtml(
                     chainConfig.nativeSymbol

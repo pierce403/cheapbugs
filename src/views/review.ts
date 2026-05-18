@@ -34,6 +34,8 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
         <section class="panel">
           <div class="panel-title">[ bug index ]</div>
           <p>${escapeHtml(chainConfig.bugIndexAddress || "unset")}</p>
+          <p class="helper-copy">bond vault: ${escapeHtml(chainConfig.bugBondVaultAddress)}</p>
+          <p class="helper-copy">treasury vault: ${escapeHtml(chainConfig.bugTreasuryVaultAddress)}</p>
         </section>
 
         <section class="panel">
@@ -90,6 +92,8 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
         <div class="panel-title">[ reviewer queue ]</div>
         <p class="lede">Connected reviewer: ${escapeHtml(authController.getSession().address ?? "-")}</p>
         <p class="helper-copy">bug index: ${escapeHtml(chainConfig.bugIndexAddress || "unset")}</p>
+        <p class="helper-copy">bond vault: ${escapeHtml(chainConfig.bugBondVaultAddress)}</p>
+        <p class="helper-copy">treasury vault: ${escapeHtml(chainConfig.bugTreasuryVaultAddress)}</p>
         <table class="data-table">
           <thead>
             <tr>
