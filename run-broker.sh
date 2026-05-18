@@ -5,7 +5,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
 ENV_FILE="${BROKER_ENV_FILE:-.env}"
-VENV_DIR="${BROKER_VENV_DIR:-.venv-broker}"
 COMMAND="${1:-run}"
 DEBUG_COMMAND=0
 
@@ -42,6 +41,45 @@ set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
+
+select_broker_python() {
+  local candidate
+  if [[ -n "${BROKER_PYTHON:-}" ]]; then
+    if ! command -v "$BROKER_PYTHON" >/dev/null 2>&1; then
+      echo "BROKER_PYTHON command was not found on PATH: $BROKER_PYTHON" >&2
+      exit 2
+    fi
+    command -v "$BROKER_PYTHON"
+    return
+  fi
+
+  for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      command -v "$candidate"
+      return
+    fi
+  done
+
+  echo "No Python 3 interpreter found. Install Python 3.10 through 3.13 for the broker." >&2
+  exit 2
+}
+
+BROKER_PYTHON_BIN="$(select_broker_python)"
+if ! "$BROKER_PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "Broker Python must be 3.10 or newer: $BROKER_PYTHON_BIN" >&2
+  exit 2
+fi
+BROKER_PYTHON_VERSION="$("$BROKER_PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+VENV_DIR="${BROKER_VENV_DIR:-.venv-broker}"
+if [[ -z "${BROKER_VENV_DIR:-}" && -x "$VENV_DIR/bin/python" ]]; then
+  existing_venv_version="$("$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+  if [[ -n "$existing_venv_version" && "$existing_venv_version" != "$BROKER_PYTHON_VERSION" ]]; then
+    fallback_venv=".venv-broker-py${BROKER_PYTHON_VERSION//./}"
+    echo "Existing $VENV_DIR uses Python $existing_venv_version; using $fallback_venv with $BROKER_PYTHON_BIN." >&2
+    echo "Set BROKER_VENV_DIR to override the broker virtualenv location." >&2
+    VENV_DIR="$fallback_venv"
+  fi
+fi
 
 is_truthy() {
   case "${1,,}" in
@@ -171,7 +209,7 @@ if [[ "$COMMAND" != "init-db" ]]; then
 fi
 
 if [[ ! -x "$VENV_DIR/bin/python" ]]; then
-  python3 -m venv "$VENV_DIR"
+  "$BROKER_PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 
 # shellcheck disable=SC1091

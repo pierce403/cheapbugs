@@ -120,7 +120,7 @@ cheapbugs/
   - The broker owns review-key generation and retention for this flow.
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid provided target references, and invalid reporter credentials.
   - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, target valid, credentials valid.
-  - Broker status messages intentionally avoid XMTP reply-content encoding while `xmtp==0.1.5` can crash in the UniFFI reply-content path.
+  - Broker status messages intentionally avoid XMTP reply-content encoding so the submission flow does not depend on nonessential reply-content codec behavior.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:
   - [x] Python unit tests cover strict JSON parsing, required fields, target validation, staged status messages, and credential failure.
@@ -153,11 +153,13 @@ cheapbugs/
 - **Description**: Optional Python runtime receives XMTP DMs, validates commands, optionally relays accepted submissions to a private Signal group, stores broker state in SQLite, tracks Signal reactions, and pays BUGZ rewards when Signal is configured.
 - **Properties**:
   - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`.
-  - `run-broker.sh` loads `.env`, validates mandatory `BROKER_KEY`, prepares `.venv-broker`, initializes the SQLite store, and runs the broker.
+  - `run-broker.sh` loads `.env`, validates mandatory `BROKER_KEY`, prepares a `.venv-broker*` virtualenv, initializes the SQLite store, and runs the broker.
+  - `run-broker.sh` prefers Python 3.10 through 3.13 over generic `python3` so `xmtp-bindings` can use published wheels when available; `BROKER_PYTHON` and `BROKER_VENV_DIR` override this.
   - Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base BUGZ token and can be overridden for local testing.
   - Broker runtime logs are timestamped to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`; logs record message metadata and broker actions without dumping private detail bodies.
   - `./run-broker.sh debug` enables Python DEBUG logging, Python fault-handler output, Rust XMTP backtraces, `RUST_LOG=debug`, and a default `broker-debug.log`.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
+  - The broker dependency is pinned to `xmtp==0.1.6`, which pulls `xmtp-bindings>=0.1.6`.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; disable it only when the broker wallet is intentionally funded for live payouts.
   - SQLite tracks processed XMTP message IDs, relayed submissions, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.

@@ -5,7 +5,7 @@ test-results
 node_modules
 .env*
 !.env.example
-.venv-broker
+.venv-broker*
 .broker
 *.tsbuildinfo
 vite.config.js
