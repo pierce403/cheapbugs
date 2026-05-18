@@ -103,6 +103,39 @@ def patch_xmtp_native_compat(native_bindings: Any) -> bool:
     return connector_patched or factory_patched
 
 
+def patch_xmtp_agent_stream_stop(agent_cls: Any) -> bool:
+    """Avoid recursive self-cancellation in xmtp_agent stream shutdown."""
+
+    original = getattr(agent_cls, "_stop_streams", None)
+    if original is None or getattr(original, "_cheapbugs_patched", False):
+        return False
+
+    async def stop_streams_without_self_cancel(self: Any) -> None:
+        if self._conversation_stream_handle is not None:
+            await self._conversation_stream_handle.close()
+            self._conversation_stream_handle = None
+        if self._message_stream_handle is not None:
+            await self._message_stream_handle.close()
+            self._message_stream_handle = None
+
+        current_task = asyncio.current_task()
+        tasks = [
+            task
+            for task in (self._conversation_stream, self._message_stream)
+            if task is not None and task is not current_task
+        ]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._conversation_stream = None
+        self._message_stream = None
+
+    stop_streams_without_self_cancel._cheapbugs_patched = True  # type: ignore[attr-defined]
+    setattr(agent_cls, "_stop_streams", stop_streams_without_self_cancel)
+    return True
+
+
 def plain_text_status_sender(ctx):
     """Return a broker status sender that avoids XMTP reply-content encoding."""
 
@@ -123,6 +156,8 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
 
     if patch_xmtp_native_compat(NativeBindings):
         logger.info("installed xmtp native compatibility shim")
+    if patch_xmtp_agent_stream_stop(Agent):
+        logger.info("installed xmtp agent stream-stop compatibility shim")
 
     options = ClientOptions(
         env=config.xmtp_env,
@@ -133,6 +168,27 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
     os.environ["XMTP_WALLET_KEY"] = config.broker_key
     logger.info("creating xmtp agent env=%s db_path=%s", config.xmtp_env, config.xmtp_db_path or "default")
     agent = await Agent.create_from_env(options)
+
+    async def on_agent_error(error, context, next_handler) -> None:
+        context_name = context.__class__.__name__
+        if isinstance(error, BaseException):
+            logger.error(
+                "xmtp agent recovered error context=%s",
+                context_name,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+        else:
+            logger.error("xmtp agent recovered error context=%s error=%r", context_name, error)
+        await next_handler()
+
+    agent.errors.use(on_agent_error)
+
+    @agent.on("unhandled_error")
+    async def on_unhandled_error(error) -> None:
+        if isinstance(error, BaseException):
+            logger.error("xmtp agent unhandled error", exc_info=(type(error), error, error.__traceback__))
+        else:
+            logger.error("xmtp agent unhandled error: %r", error)
 
     @agent.on("text")
     async def on_text(ctx) -> None:

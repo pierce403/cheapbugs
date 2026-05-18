@@ -161,6 +161,7 @@ cheapbugs/
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
   - The broker dependency is pinned to `xmtp==0.1.6`, which pulls `xmtp-bindings>=0.1.6`.
   - The broker runner temporarily shims `xmtp==0.1.6` wrapper calls to the updated bindings signatures, avoiding a local XMTP DB wipe for that package mismatch.
+  - The broker runner patches XMTP agent stream shutdown so a stream error cannot recursively cancel the currently running stream task and hide the original error.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; disable it only when the broker wallet is intentionally funded for live payouts.
   - SQLite tracks processed XMTP message IDs, relayed submissions, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.

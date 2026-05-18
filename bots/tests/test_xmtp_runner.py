@@ -4,6 +4,7 @@ import asyncio
 import unittest
 
 from cheapbugs_broker.xmtp_runner import (
+    patch_xmtp_agent_stream_stop,
     patch_xmtp_backend_connector,
     patch_xmtp_client_factory,
     plain_text_status_sender,
@@ -95,6 +96,27 @@ class BackendConnectorCompatTest(unittest.TestCase):
         self.assertEqual(bindings.client_calls[0][2].encryption_key, b"key")
         self.assertEqual(bindings.client_calls[0][3:], ("inbox", "identifier", 0, None, "disabled", None, None))
 
+    def test_patch_stream_stop_does_not_cancel_current_stream_task(self) -> None:
+        async def run_test() -> None:
+            agent = FakeAgent()
+            current_task = asyncio.current_task()
+            other_task = asyncio.create_task(asyncio.sleep(60))
+            agent._message_stream = current_task
+            agent._conversation_stream = other_task
+            agent._message_stream_handle = FakeStreamHandle()
+            agent._conversation_stream_handle = FakeStreamHandle()
+
+            self.assertTrue(patch_xmtp_agent_stream_stop(FakeAgent))
+            await agent._stop_streams()
+
+            self.assertFalse(current_task.cancelled())
+            self.assertTrue(other_task.cancelled())
+            self.assertIsNone(agent._message_stream)
+            self.assertIsNone(agent._conversation_stream)
+            self.assertEqual(agent.closed_handles, 2)
+
+        asyncio.run(run_test())
+
 
 class FakeBindings:
     def __init__(self) -> None:
@@ -162,3 +184,28 @@ class FakeBindings:
             )
         )
         return "xmtp-client"
+
+
+class FakeStreamHandle:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class FakeAgent:
+    def __init__(self) -> None:
+        self._conversation_stream = None
+        self._message_stream = None
+        self._conversation_stream_handle = None
+        self._message_stream_handle = None
+        self.closed_handles = 0
+
+    async def _stop_streams(self) -> None:
+        raise AssertionError("unpatched stream stop called")
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name.endswith("_stream_handle") and isinstance(getattr(self, name, None), FakeStreamHandle) and value is None:
+            self.closed_handles += 1
+        super().__setattr__(name, value)
