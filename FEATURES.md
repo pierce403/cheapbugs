@@ -261,7 +261,8 @@ cheapbugs/
   - The broker dependencies are pinned to `xmtp==0.1.5` and `xmtp-bindings==0.1.5`.
   - Verify the actual broker virtualenv with `.venv-broker/bin/python -m pip show xmtp xmtp-bindings xmtp-agent` before assuming the runtime matches the requested pin.
   - The broker runner keeps guarded native compatibility shims for accidental `xmtp-bindings` drift that changes wrapper-call signatures or renamed bindings symbols, avoiding a local XMTP DB wipe for package mismatch debugging.
-  - The broker persists and reuses its XMTP installation DB, archives inbox-mismatched DB files before retrying startup, and uses signed XMTP revocation requests to prune stale installations. If the installation count is already at `BROKER_XMTP_INSTALLATION_LIMIT` before registration, the broker revokes stale installations first so a new local DB can recover instead of failing at the network limit.
+  - The broker persists and reuses its XMTP installation DB, archives inbox-mismatched DB files before retrying startup, and archives/retries when the local installation ID is no longer present in the network inbox state. If the installation count is already at `BROKER_XMTP_INSTALLATION_LIMIT` before registration, the broker revokes stale installations first so a new local DB can recover instead of failing at the network limit.
+  - `BROKER_XMTP_ARCHIVE_INACTIVE_DB` defaults to enabled. Disable it only for manual debugging of a local XMTP DB whose installation is absent from the network inbox state.
   - `BROKER_XMTP_AUTO_REVOKE_OLD_INSTALLATIONS` defaults to enabled. Disable it only for intentional multi-installation broker operations.
   - The broker runner patches XMTP agent stream shutdown so a stream error cannot recursively cancel the currently running stream task and hide the original error.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
@@ -271,7 +272,7 @@ cheapbugs/
   - Live payouts spend from the broker wallet and should run only from an intentionally funded wallet.
 - **Test Criteria**:
   - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, SQLite maturity, reaction parsing, and reward math.
-  - [x] Broker tests cover XMTP installation pruning and maxed-installation recovery.
+  - [x] Broker tests cover XMTP installation pruning, inactive local installation detection, and maxed-installation recovery.
   - [x] `python3 -m compileall bots scripts/broker-bot.py` checks Python syntax.
   - [x] `bash -n run-broker.sh` checks the root launcher syntax.
   - [ ] Add website-to-XMTP JSON command tests for publisher, seller, and bouncer flows.

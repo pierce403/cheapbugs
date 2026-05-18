@@ -8,6 +8,7 @@ from unittest.mock import patch
 from cheapbugs_broker.xmtp_runner import (
     _ensure_xmtp_registered,
     _installation_ids_for_revocation,
+    _snapshot_includes_current_installation,
     _sign_signature_request,
     patch_xmtp_agent_stream_stop,
     patch_xmtp_backend_connector,
@@ -177,6 +178,23 @@ class InstallationRecoveryTest(unittest.TestCase):
         self.assertEqual(client.register_calls, 0)
         self.assertEqual(client.ffi.revoked_installations, [[b"old-1", b"old-2"]])
         self.assertEqual([installation.id for installation in client.installations], [b"current"])
+
+    def test_registered_client_reports_inactive_local_installation(self) -> None:
+        client = FakeXmtpClient(
+            installations=[
+                FakeInstallation(b"network-active", 3),
+            ],
+            installation_id=b"local-stale",
+            registered=True,
+        )
+
+        with patch.dict("os.environ", {"BROKER_XMTP_AUTO_REVOKE_OLD_INSTALLATIONS": "1"}, clear=False):
+            snapshot = asyncio.run(_ensure_xmtp_registered(client, FakeSigner(), quiet_logger()))
+
+        self.assertIsNotNone(snapshot)
+        self.assertFalse(_snapshot_includes_current_installation(snapshot))
+        self.assertEqual(client.register_calls, 0)
+        self.assertEqual(client.ffi.revoked_installations, [])
 
     def test_unregistered_client_recovers_maxed_installations_before_registering(self) -> None:
         old_installations = [FakeInstallation(f"old-{index}".encode(), index) for index in range(10)]

@@ -242,6 +242,23 @@ def _installation_ids_for_revocation(
     return ids
 
 
+def _snapshot_installation_ids(snapshot: XmtpInstallationSnapshot) -> tuple[str, ...]:
+    return tuple(
+        installation_hex
+        for installation_hex in (
+            _installation_hex(getattr(installation, "id", None))
+            for installation in snapshot.installations
+        )
+        if installation_hex is not None
+    )
+
+
+def _snapshot_includes_current_installation(snapshot: XmtpInstallationSnapshot) -> bool:
+    if snapshot.installation_id is None:
+        return False
+    return snapshot.installation_id in _snapshot_installation_ids(snapshot)
+
+
 async def _installation_snapshot(client: Any) -> XmtpInstallationSnapshot:
     inbox_id = client.inbox_id
     installation_id = client.installation_id
@@ -357,13 +374,22 @@ async def _recover_installation_capacity(
 async def _prune_old_installations(client: Any, signer: Any, logger: logging.Logger) -> XmtpInstallationSnapshot:
     snapshot = await _installation_snapshot(client)
     logger.info(
-        "xmtp installation state inbox_id=%s installation_id=%s total_installations=%s most_recent=%s is_most_recent=%s",
+        "xmtp installation state inbox_id=%s installation_id=%s total_installations=%s most_recent=%s "
+        "is_most_recent=%s is_active=%s",
         client.inbox_id,
         snapshot.installation_id,
         snapshot.total_installations,
         snapshot.most_recent_installation_id,
         snapshot.is_most_recent,
+        _snapshot_includes_current_installation(snapshot),
     )
+    if not _snapshot_includes_current_installation(snapshot):
+        logger.warning(
+            "local XMTP installation is missing from network inbox state; current=%s network_installations=%s",
+            snapshot.installation_id,
+            ",".join(_snapshot_installation_ids(snapshot)) or "none",
+        )
+        return snapshot
     if snapshot.total_installations <= 1:
         return snapshot
 
@@ -395,7 +421,11 @@ async def _create_xmtp_client_with_recovery(client_cls: Any, signer: Any, option
     raise RuntimeError("XMTP client creation failed.")
 
 
-async def _ensure_xmtp_registered(client: Any, signer: Any, logger: logging.Logger) -> None:
+async def _ensure_xmtp_registered(
+    client: Any,
+    signer: Any,
+    logger: logging.Logger,
+) -> XmtpInstallationSnapshot | None:
     auto_revoke = _env_bool("BROKER_XMTP_AUTO_REVOKE_OLD_INSTALLATIONS", True)
     installation_limit = _env_int("BROKER_XMTP_INSTALLATION_LIMIT", DEFAULT_XMTP_INSTALLATION_LIMIT)
 
@@ -420,20 +450,28 @@ async def _ensure_xmtp_registered(client: Any, signer: Any, logger: logging.Logg
             snapshot = await _prune_old_installations(client, signer, logger)
         except Exception:
             logger.warning("could not inspect XMTP installations after registration; continuing", exc_info=True)
-            return
-        if snapshot.total_installations > 1:
+            return None
+        if snapshot.total_installations > 1 and _snapshot_includes_current_installation(snapshot):
             logger.warning("XMTP still reports multiple installations after pruning count=%s", snapshot.total_installations)
+        return snapshot
     else:
         try:
             snapshot = await _installation_snapshot(client)
         except Exception:
             logger.warning("could not inspect XMTP installations after registration; continuing", exc_info=True)
-            return
+            return None
         if snapshot.total_installations > 1:
             logger.warning(
                 "XMTP has multiple installations count=%s; set BROKER_XMTP_AUTO_REVOKE_OLD_INSTALLATIONS=1 to prune",
                 snapshot.total_installations,
             )
+        if not _snapshot_includes_current_installation(snapshot):
+            logger.warning(
+                "local XMTP installation is missing from network inbox state; current=%s network_installations=%s",
+                snapshot.installation_id,
+                ",".join(_snapshot_installation_ids(snapshot)) or "none",
+            )
+        return snapshot
 
 
 async def create_xmtp_agent_with_recovery(options: Any, logger: logging.Logger) -> Any:
@@ -462,9 +500,25 @@ async def create_xmtp_agent_with_recovery(options: Any, logger: logging.Logger) 
     if resolved_options.db_path is None:
         logger.warning("XMTP db_path is unset; broker installations will not persist across restarts")
 
-    client = await _create_xmtp_client_with_recovery(Client, signer, resolved_options, logger)
-    await _ensure_xmtp_registered(client, signer, logger)
-    return Agent(client)
+    for attempt in range(2):
+        client = await _create_xmtp_client_with_recovery(Client, signer, resolved_options, logger)
+        snapshot = await _ensure_xmtp_registered(client, signer, logger)
+        if snapshot is not None and not _snapshot_includes_current_installation(snapshot):
+            db_path = resolved_options.db_path if isinstance(resolved_options.db_path, str) else None
+            if (
+                attempt == 0
+                and _env_bool("BROKER_XMTP_ARCHIVE_INACTIVE_DB", True)
+                and _archive_xmtp_db(db_path, logger)
+            ):
+                logger.warning(
+                    "retrying XMTP client creation with a fresh database because the local installation is inactive"
+                )
+                continue
+            logger.warning(
+                "continuing with inactive XMTP installation; incoming messages may not arrive until the DB is refreshed"
+            )
+        return Agent(client)
+    raise RuntimeError("XMTP client creation failed after inactive-installation recovery.")
 
 
 def plain_text_status_sender(ctx):
