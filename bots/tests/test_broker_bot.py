@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
 from cheapbugs_broker.config import BrokerConfig
+from cheapbugs_broker.ipfs import IpfsAddResult
 from cheapbugs_broker.models import SignalReactionEvent, SubmissionCommand
 from cheapbugs_broker.rewards import reward_tokens, tokens_to_wei
 from cheapbugs_broker.service import BrokerBot
@@ -69,6 +70,12 @@ Private details go here.""",
 
         with self.assertRaisesRegex(CommandError, "details"):
             parse_command(json.dumps(payload))
+
+    def test_reject_invalid_submission_guidance(self) -> None:
+        with self.assertRaisesRegex(CommandError, "bug_type"):
+            parse_command(json.dumps(valid_submission_payload(bug_type="malware")))
+        with self.assertRaisesRegex(CommandError, "target_interest"):
+            parse_command(json.dumps(valid_submission_payload(target_interest="spicy")))
 
     def test_validate_submission_target(self) -> None:
         command = parse_command(json.dumps(valid_submission_payload(target={"kind": "contract", "reference": WALLET})))
@@ -160,6 +167,9 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.broker_key, "0xbroker")
         self.assertEqual(config.base_rpc_url, "https://mainnet.base.org")
         self.assertEqual(config.bugz_token_address, "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07")
+        self.assertEqual(config.ipfs_api_url, "http://127.0.0.1:5001")
+        self.assertEqual(config.ipfs_gateway_url, "https://ipfs.io/ipfs")
+        self.assertFalse(config.ipfs_prime_gateway)
 
 
 class StoreTest(unittest.TestCase):
@@ -212,6 +222,7 @@ class BrokerServiceTest(unittest.TestCase):
                 store=store,
                 signal=None,
                 token=FakeToken(balance=2 * 10**18),
+                ipfs=FakeIpfs(),
             )
 
             async def reply(_message: str) -> None:
@@ -241,11 +252,13 @@ class BrokerServiceTest(unittest.TestCase):
             store = BrokerStore(Path(tmp) / "broker.sqlite")
             store.init()
             replies: list[str] = []
+            signal = FakeSignal()
             bot = BrokerBot(
                 config=test_config(Path(tmp) / "broker.sqlite"),
                 store=store,
-                signal=FakeSignal(),
+                signal=signal,
                 token=FakeToken(balance=2 * 10**18),
+                ipfs=FakeIpfs(),
             )
 
             async def reply(message: str) -> None:
@@ -265,7 +278,9 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertEqual(replies[1], "Submission fields are present and well formed.")
             self.assertIn("Submission target is valid", replies[2])
             self.assertIn("Submission credentials are valid", replies[3])
-            self.assertIn("Submission relayed", replies[4])
+            self.assertIn("Encrypted BugBundle pinned to IPFS", replies[4])
+            self.assertIn("Submission relayed", replies[5])
+            self.assertIn("BugBundle: ipfs://bafyfakebugbundle", signal.last_message)
 
     def test_submission_stops_when_credentials_fail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -277,6 +292,7 @@ class BrokerServiceTest(unittest.TestCase):
                 store=store,
                 signal=FakeSignal(),
                 token=FakeToken(balance=0),
+                ipfs=FakeIpfs(),
             )
 
             async def reply(message: str) -> None:
@@ -306,6 +322,7 @@ class BrokerServiceTest(unittest.TestCase):
                 store=store,
                 signal=None,
                 token=FakeToken(balance=2 * 10**18),
+                ipfs=FakeIpfs(),
             )
 
             async def reply(message: str) -> None:
@@ -322,8 +339,16 @@ class BrokerServiceTest(unittest.TestCase):
             )
 
             self.assertIn("Submission credentials are valid", replies[3])
-            self.assertIn("Signal is not configured", replies[4])
+            self.assertIn("Encrypted BugBundle pinned to IPFS", replies[4])
+            self.assertIn("Signal is not configured", replies[5])
             self.assertTrue(store.message_seen("message"))
+            with store.session() as conn:
+                row = conn.execute("SELECT * FROM submissions WHERE xmtp_message_id = ?", ("message",)).fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row["bundle_cid"], "bafyfakebugbundle")
+            self.assertEqual(row["bundle_uri"], "ipfs://bafyfakebugbundle")
+            self.assertTrue(str(row["details_key_b64"]))
+            self.assertTrue(str(row["details_key_commitment"]).startswith("0x"))
             records = store.mature_unpaid_submissions(now=10_000)
             self.assertEqual(records, [])
 
@@ -337,6 +362,7 @@ class BrokerServiceTest(unittest.TestCase):
                 store=store,
                 signal=None,
                 token=FakeToken(balance=2 * 10**18),
+                ipfs=FakeIpfs(),
             )
 
             async def reply(message: str) -> None:
@@ -411,6 +437,12 @@ def test_config(path: Path, signal_enabled: bool = True) -> BrokerConfig:
         signal_group_id="group" if signal_enabled else "",
         base_rpc_url="http://localhost:8545",
         bugz_token_address=WALLET,
+        chain_id=8453,
+        bug_index_address=WALLET,
+        ipfs_api_url="http://127.0.0.1:5001",
+        ipfs_gateway_url="https://ipfs.io/ipfs",
+        ipfs_prime_gateway=False,
+        ipfs_timeout_seconds=10,
         access_min_balance_tokens=Decimal("1"),
         submission_min_balance_tokens=Decimal("1"),
         reputation_blocklist=frozenset(),
@@ -450,6 +482,32 @@ class FakeSignal:
 
     def add_group_member(self, recipient: str) -> None:
         self.last_member = recipient
+
+
+class FakeIpfs:
+    def __init__(self):
+        self.last_payload: object | None = None
+        self.last_name = ""
+        self.primed_cid = ""
+
+    def add_json(self, payload: object, name: str) -> IpfsAddResult:
+        self.last_payload = payload
+        self.last_name = name
+        raw = json.dumps(payload)
+        if "Private details go here." in raw:
+            raise AssertionError("BugBundle payload must not contain plaintext private details.")
+        return IpfsAddResult(
+            cid="bafyfakebugbundle",
+            uri="ipfs://bafyfakebugbundle",
+            name=name,
+            size=len(raw),
+            sha256="0x" + "2" * 64,
+            gateway_url="https://ipfs.io/ipfs/bafyfakebugbundle",
+        )
+
+    def prime_gateway(self, cid: str) -> bool:
+        self.primed_cid = cid
+        return False
 
 
 if __name__ == "__main__":

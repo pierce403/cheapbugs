@@ -19,6 +19,8 @@ This broker-relay claim is not implemented yet.
 - The browser sends broker submissions as XMTP DMs to the configured broker wallet.
 - The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, blocked reporters, and insufficient BUGZ balance.
 - The broker sends staged plain text XMTP status messages after successful validation stages.
+- The broker now encrypts accepted plaintext XMTP submission details into an interim unsigned `cheapbugs.bug_bundle.v1` object before pinning to IPFS through local Kubo.
+- The interim broker-built bundle keeps the details key outside IPFS and stores that key in broker SQLite for later reveal work.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
 ## Planned Reporter-Signed Broker Relay
@@ -57,12 +59,13 @@ Until this exists, the broker must not create bug-index records that claim to be
 
 ### Broker
 
-- The broker is trusted to receive private submissions, hold unrevealed details keys, pin signed encrypted BugBundles to IPFS, optionally create EAS attestations, and relay accepted reports.
+- The broker is trusted to receive private submissions, hold unrevealed details keys, pin encrypted BugBundles to IPFS, optionally create EAS attestations, and relay accepted reports.
 - The broker is not trusted to choose the reporter address for onchain attribution.
 - Broker compromise can expose submissions it has received, unrevealed details keys it holds, Signal relay data, SQLite state, and the `BROKER_KEY` available to the process.
 - `BROKER_KEY` is the single broker wallet key. It controls the broker XMTP identity and signs BUGZ payout transfers.
 - Base RPC and BUGZ token defaults are public configuration, not secrets.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
+- Broker SQLite now stores unrevealed details keys for IPFS-pinned BugBundles. Treat `.broker/broker.sqlite` as private disclosure material.
 - Broker logs are written to `BROKER_LOG_PATH` and stdout. New submissions intentionally log the full raw XMTP JSON payload, including private report detail bodies, for development visibility. Treat `broker.log` and debug logs as private disclosure material and do not share them outside trusted project operators.
 - Broker debug mode can include third-party XMTP/Rust diagnostics. Inspect debug logs before sharing them outside the project.
 - Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
@@ -72,7 +75,9 @@ Until this exists, the broker must not create bug-index records that claim to be
 
 - Private report material must not be uploaded in plaintext by the browser.
 - In the planned broker flow, IPFS stores a single signed BugBundle JSON object whose `details` section is encrypted ciphertext.
+- In the current interim broker flow, IPFS stores a single unsigned broker-encrypted BugBundle JSON object whose `details` section is encrypted ciphertext.
 - Details keys must not be included in IPFS bundles. They are held by the broker during the judgment period and later published through the bug index after the reveal window opens.
+- Public gateway priming is best-effort and does not guarantee persistence. It can also reveal a CID to a third-party gateway before the onchain index references it, so it is disabled by default.
 - IPFS CIDs and gateway responses are untrusted input. Rendering code must sanitize and validate fetched content.
 - Pinata credentials must stay out of browser code.
 
@@ -101,7 +106,8 @@ Until this exists, the broker must not create bug-index records that claim to be
 
 - Reporter-signed broker relay is not implemented.
 - The current XMTP JSON payload has no application-level EIP-712 signature.
-- The broker has not yet been wired to IPFS pinning, EAS submission, or bug-index relay for accepted XMTP submissions.
+- The broker IPFS pinning path is interim: it encrypts and pins broker-built unsigned bundles, but does not yet verify submitter-built signed bundles.
+- The broker has not yet been wired to EAS submission or bug-index relay for accepted XMTP submissions.
 - Live XMTP broker smoke tests are manual.
 - Reviewer trust is frontend-enforced through an allowlist and should move to an onchain or resolver-backed trust model.
 - Browser bundle integrity depends on the static hosting and deployment pipeline.

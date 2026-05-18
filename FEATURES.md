@@ -42,8 +42,8 @@ cheapbugs/
 - The hosted app is static assets from `dist/`; do not add SSR or an app-owned backend database.
 - Public-safe report metadata is stored on Base in `CheapBugsBugIndex`.
 - Sensitive dossier content must be encrypted in the browser before IPFS upload on the legacy path.
-- XMTP broker submissions are private XMTP DMs to the broker and are not encrypted into IPFS by the static app path.
-- The planned broker publishing path uses a submitter-signed `BugBundle` JSON file on IPFS, with encrypted details in the bundle and the reveal key kept out of IPFS until the onchain reveal window opens.
+- XMTP broker submissions are private XMTP DMs to the broker; the broker now encrypts accepted submission details into an interim unsigned `BugBundle` and pins it through a local Kubo IPFS node.
+- The planned final broker publishing path uses a submitter-signed `BugBundle` JSON file on IPFS, with encrypted details in the bundle and the reveal key kept out of IPFS until the onchain reveal window opens.
 - Reviewer verdicts are EAS attestations on Base and are read through EAS GraphQL.
 - The Python broker is an optional off-static runtime with SQLite state; it does not change the frontend deployment model.
 
@@ -134,18 +134,25 @@ cheapbugs/
 
 ### BugBundle IPFS Reveal Model
 
-- **Stability**: planned, not implemented
+- **Stability**: in-progress
 - **Description**: A submitted bug will become one versioned `BugBundle` JSON object pinned to IPFS, with public metadata, broker-triage guidance, encrypted details, and the reporter signature in one immutable blob.
 - **Properties**:
-  - The bundle schema is planned as `cheapbugs.bug_bundle.v1`.
+  - The bundle schema is `cheapbugs.bug_bundle.v1`.
   - The bundle includes public fields such as reporter, broker, chain id, reveal timing, title, public summary, `bug_type`, `severity`, and `target_interest`.
   - The bundle includes the encrypted `details` ciphertext and encryption metadata, but never the details key.
+  - Current implementation is an interim broker-encrypted unsigned bundle built from the existing plaintext XMTP submission. It prevents plaintext IPFS pinning but does not provide the final anti-forgery signature claim.
   - The submitter generates the random details key, encrypts the details, signs the bundle commitment, and sends the signed bundle plus the out-of-bundle details key to the broker over XMTP.
-  - The broker verifies the signature, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, then pins the signed bundle bytes to IPFS without modification.
+  - Planned final behavior: the broker verifies the signature, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, then pins the signed bundle bytes to IPFS without modification.
+  - Broker pinning uses a locally running Kubo HTTP API. `BROKER_IPFS_API_URL` defaults to `http://127.0.0.1:5001`.
+  - On broker startup, the `run` command checks Kubo `/api/v0/version` and verifies `/api/v0/add` accepts write requests using a tiny unpinned probe.
+  - `BROKER_IPFS_GATEWAY_URL` defaults to the frontend's current `https://ipfs.io/ipfs` gateway. `BROKER_IPFS_PRIME_GATEWAY=1` performs a best-effort gateway fetch after pinning, but gateway caching is not durable and can fail when the local node is not publicly reachable through the IPFS swarm.
+  - The broker stores the out-of-bundle details key and bundle metadata in SQLite for later reveal work.
   - The bug index stores the bundle CID, bundle/content commitments, reveal time, and details-key commitment.
   - After the 7-day judgment period, the details key is added to the bug index. Browsers can then fetch the bundle from IPFS, read the key from the index, decrypt details locally, and render the bug as ordinary readable content.
 - **Test Criteria**:
-  - [ ] Browser tests cover bundle construction, details encryption, key commitment generation, and signature prompt state.
+  - [x] Broker tests cover encrypted interim BugBundle pinning without plaintext details in the pinned JSON.
+  - [x] Broker tests cover Kubo API startup/add request wiring without requiring a live Kubo daemon.
+  - [ ] Browser tests cover submitter-side bundle construction, details encryption, key commitment generation, and signature prompt state.
   - [ ] Broker tests prove the broker rejects altered bundles, bad signatures, mismatched details keys, and unintelligible decrypted details.
   - [ ] Contract tests prove keys cannot be revealed before the judgment window and revealed keys must match the stored commitment.
   - [ ] Read-path tests cover automatic post-reveal IPFS fetch and browser decryption.
@@ -183,6 +190,7 @@ cheapbugs/
   - `run-broker.sh` prefers Python 3.10 through 3.13 over generic `python3` so `xmtp-bindings` can use published wheels when available; `BROKER_PYTHON` and `BROKER_VENV_DIR` override this.
   - Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base BUGZ token and can be overridden for local testing.
   - Broker runtime logs are timestamped to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`; new submissions log a clear `NEW SUBMISSION from <reporter>` line and the full raw XMTP JSON payload, including private detail bodies.
+  - The `run` command requires a writable local Kubo IPFS API and fails startup if the Kubo version or add probe fails.
   - `./run-broker.sh debug` enables Python DEBUG logging, Python fault-handler output, Rust XMTP backtraces, `RUST_LOG=debug`, and a default `broker-debug.log`.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
   - The broker dependency is pinned to `xmtp==0.1.6`, which pulls `xmtp-bindings>=0.1.6`.
@@ -190,7 +198,7 @@ cheapbugs/
   - The broker runner patches XMTP agent stream shutdown so a stream error cannot recursively cancel the currently running stream task and hide the original error.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; disable it only when the broker wallet is intentionally funded for live payouts.
-  - SQLite tracks processed XMTP message IDs, relayed submissions, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
+  - SQLite tracks processed XMTP message IDs, relayed submissions, BugBundle CIDs and details keys, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
   - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ`.
   - Live payouts spend from the broker wallet and should run only from an intentionally funded wallet.
 - **Test Criteria**:

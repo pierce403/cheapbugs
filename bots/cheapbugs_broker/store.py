@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable
 from uuid import uuid4
 
-from .models import SignalReactionEvent, SubmissionCommand, SubmissionRecord
+from .models import PinnedBugBundle, SignalReactionEvent, SubmissionCommand, SubmissionRecord
 
 
 SCHEMA = """
@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS submissions (
   support_score INTEGER NOT NULL DEFAULT 0,
   payout_amount_wei TEXT,
   payout_tx_hash TEXT,
+  bundle_cid TEXT,
+  bundle_uri TEXT,
+  bundle_gateway_url TEXT,
+  bundle_sha256 TEXT,
+  details_key_b64 TEXT,
+  details_key_commitment TEXT,
+  encrypted_details_hash TEXT,
+  bundle_pinned_at INTEGER,
   error TEXT,
   updated_at INTEGER NOT NULL
 );
@@ -114,6 +122,7 @@ class BrokerStore:
         signal_message_timestamp: int,
         review_window_seconds: int,
         status: str = "relayed",
+        bug_bundle: PinnedBugBundle | None = None,
         now: int | None = None,
     ) -> SubmissionRecord:
         created_at = now or int(time.time())
@@ -124,9 +133,12 @@ class BrokerStore:
                 INSERT INTO submissions (
                   id, reporter_address, reporter_signal, bug_type, title, summary, severity, target_interest, body,
                   xmtp_conversation_id, xmtp_message_id, signal_group_id,
-                  signal_message_timestamp, status, created_at, matures_at, updated_at
+                  signal_message_timestamp, status, created_at, matures_at,
+                  bundle_cid, bundle_uri, bundle_gateway_url, bundle_sha256,
+                  details_key_b64, details_key_commitment, encrypted_details_hash, bundle_pinned_at,
+                  updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -145,6 +157,14 @@ class BrokerStore:
                     status,
                     created_at,
                     created_at + review_window_seconds,
+                    bug_bundle.cid if bug_bundle else None,
+                    bug_bundle.uri if bug_bundle else None,
+                    bug_bundle.gateway_url if bug_bundle else None,
+                    bug_bundle.sha256 if bug_bundle else None,
+                    bug_bundle.details_key_b64 if bug_bundle else None,
+                    bug_bundle.details_key_commitment if bug_bundle else None,
+                    bug_bundle.encrypted_details_hash if bug_bundle else None,
+                    bug_bundle.pinned_at if bug_bundle else None,
                     created_at,
                 ),
             )
@@ -260,6 +280,7 @@ class BrokerStore:
                 (support_score, error, now, record_id),
             )
 
+
 def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
     return SubmissionRecord(
         id=str(row["id"]),
@@ -281,6 +302,14 @@ def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
         support_score=int(row["support_score"]),
         payout_amount_wei=str(row["payout_amount_wei"]) if row["payout_amount_wei"] is not None else None,
         payout_tx_hash=str(row["payout_tx_hash"]) if row["payout_tx_hash"] is not None else None,
+        bundle_cid=str(row["bundle_cid"]) if row["bundle_cid"] is not None else None,
+        bundle_uri=str(row["bundle_uri"]) if row["bundle_uri"] is not None else None,
+        bundle_gateway_url=str(row["bundle_gateway_url"]) if row["bundle_gateway_url"] is not None else None,
+        bundle_sha256=str(row["bundle_sha256"]) if row["bundle_sha256"] is not None else None,
+        details_key_b64=str(row["details_key_b64"]) if row["details_key_b64"] is not None else None,
+        details_key_commitment=str(row["details_key_commitment"]) if row["details_key_commitment"] is not None else None,
+        encrypted_details_hash=str(row["encrypted_details_hash"]) if row["encrypted_details_hash"] is not None else None,
+        bundle_pinned_at=int(row["bundle_pinned_at"]) if row["bundle_pinned_at"] is not None else None,
         error=str(row["error"]) if row["error"] is not None else None,
     )
 
@@ -291,3 +320,19 @@ def _ensure_submission_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE submissions ADD COLUMN bug_type TEXT NOT NULL DEFAULT '0day'")
     if "target_interest" not in columns:
         conn.execute("ALTER TABLE submissions ADD COLUMN target_interest TEXT NOT NULL DEFAULT 'medium'")
+    if "bundle_cid" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN bundle_cid TEXT")
+    if "bundle_uri" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN bundle_uri TEXT")
+    if "bundle_gateway_url" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN bundle_gateway_url TEXT")
+    if "bundle_sha256" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN bundle_sha256 TEXT")
+    if "details_key_b64" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN details_key_b64 TEXT")
+    if "details_key_commitment" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN details_key_commitment TEXT")
+    if "encrypted_details_hash" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN encrypted_details_hash TEXT")
+    if "bundle_pinned_at" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN bundle_pinned_at INTEGER")

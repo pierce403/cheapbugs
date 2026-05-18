@@ -6,6 +6,18 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class PinnedBugBundle:
+    cid: str
+    uri: str
+    gateway_url: str
+    sha256: str
+    details_key_b64: str
+    details_key_commitment: str
+    encrypted_details_hash: str
+    pinned_at: int
+
+
+@dataclass(frozen=True)
 class SubmissionCommand:
     reporter_address: str
     signal_recipient: str
@@ -55,6 +67,14 @@ class SubmissionRecord:
     support_score: int
     payout_amount_wei: str | None
     payout_tx_hash: str | None
+    bundle_cid: str | None
+    bundle_uri: str | None
+    bundle_gateway_url: str | None
+    bundle_sha256: str | None
+    details_key_b64: str | None
+    details_key_commitment: str | None
+    encrypted_details_hash: str | None
+    bundle_pinned_at: int | None
     error: str | None
 
 

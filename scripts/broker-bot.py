@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "bots"))
 
 from cheapbugs_broker.config import BrokerConfig
+from cheapbugs_broker.ipfs import KuboIpfsClient
 from cheapbugs_broker.logging_setup import configure_logging
 from cheapbugs_broker.service import BrokerBot
 from cheapbugs_broker.signal_cli import SignalCli
@@ -20,7 +21,7 @@ from cheapbugs_broker.token import BugzTokenClient
 from cheapbugs_broker.xmtp_runner import run_xmtp_broker
 
 
-def build_bot(config: BrokerConfig) -> BrokerBot:
+def build_bot(config: BrokerConfig, *, ipfs: KuboIpfsClient | None = None) -> BrokerBot:
     store = BrokerStore(config.database_path)
     store.init()
     signal = (
@@ -34,7 +35,7 @@ def build_bot(config: BrokerConfig) -> BrokerBot:
         broker_key=config.broker_key,
         dry_run=config.dry_run,
     )
-    return BrokerBot(config=config, store=store, signal=signal, token=token)
+    return BrokerBot(config=config, store=store, signal=signal, token=token, ipfs=ipfs)
 
 
 def main() -> int:
@@ -60,7 +61,33 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    bot = build_bot(config)
+    ipfs = None
+    if args.command == "run":
+        ipfs = KuboIpfsClient(
+            config.ipfs_api_url,
+            gateway_url=config.ipfs_gateway_url,
+            prime_gateway=config.ipfs_prime_gateway,
+            timeout_seconds=config.ipfs_timeout_seconds,
+        )
+        try:
+            version = ipfs.verify_writable()
+        except Exception as exc:
+            logger.error("IPFS Kubo startup check failed: %s", exc)
+            print(
+                "IPFS Kubo startup check failed. Start a local Kubo node with its HTTP API enabled "
+                f"at {config.ipfs_api_url}, or set BROKER_IPFS_API_URL. Error: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        logger.info(
+            "IPFS Kubo startup check passed api_url=%s version=%s gateway_url=%s prime_gateway=%s",
+            config.ipfs_api_url,
+            version,
+            config.ipfs_gateway_url,
+            config.ipfs_prime_gateway,
+        )
+
+    bot = build_bot(config, ipfs=ipfs)
     logger.info(
         "broker command starting command=%s xmtp_env=%s db_path=%s signal_enabled=%s dry_run=%s",
         args.command,

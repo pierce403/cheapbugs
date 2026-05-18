@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
 
+from .bugbundle import build_unsigned_encrypted_bug_bundle
 from .commands import CommandError, SUBMISSION_SCHEMA, command_help, parse_command, validate_submission_target
 from .config import BrokerConfig
-from .models import AccessCommand, SubmissionCommand
+from .models import AccessCommand, PinnedBugBundle, SubmissionCommand
 from .rewards import reward_tokens, tokens_to_wei
 from .signal_cli import SignalCli, extract_reaction_events
 from .store import BrokerStore
@@ -27,12 +29,14 @@ class BrokerBot:
         store: BrokerStore,
         signal: SignalCli | None,
         token: BugzTokenClient,
+        ipfs=None,
         logger: logging.Logger | None = None,
     ):
         self.config = config
         self.store = store
         self.signal = signal
         self.token = token
+        self.ipfs = ipfs
         self.logger = logger or logging.getLogger(__name__)
 
     async def handle_xmtp_text(
@@ -190,11 +194,26 @@ class BrokerBot:
             return
         await self._reply(reply, message_id, "credentials_valid", f"Submission credentials are valid: {credential_summary}.")
 
+        try:
+            bug_bundle = self._pin_bug_bundle(command)
+        except Exception as exc:
+            self.logger.exception("submission ipfs pin failed message_id=%s reporter=%s", message_id, command.reporter_address)
+            await self._reply(reply, message_id, "ipfs_failed", f"BugBundle IPFS publish failed: {exc}")
+            self.store.mark_message_processed(message_id, "ipfs_failed")
+            return
+        await self._reply(
+            reply,
+            message_id,
+            "bugbundle_pinned",
+            f"Encrypted BugBundle pinned to IPFS: {bug_bundle.uri}.",
+        )
+
         if self.signal is None:
             self.logger.info(
-                "submission accepted without signal message_id=%s reporter=%s",
+                "submission accepted without signal message_id=%s reporter=%s bundle_cid=%s",
                 message_id,
                 command.reporter_address,
+                bug_bundle.cid,
             )
             record = self.store.create_submission(
                 command=command,
@@ -204,6 +223,7 @@ class BrokerBot:
                 signal_message_timestamp=0,
                 review_window_seconds=0,
                 status="accepted",
+                bug_bundle=bug_bundle,
             )
             self.store.mark_message_processed(message_id, "submission_signal_disabled")
             self.logger.info(
@@ -220,8 +240,13 @@ class BrokerBot:
             )
             return
 
-        signal_message = format_signal_submission(command)
-        self.logger.info("submission relay to signal message_id=%s reporter=%s", message_id, command.reporter_address)
+        signal_message = format_signal_submission(command, bug_bundle)
+        self.logger.info(
+            "submission relay to signal message_id=%s reporter=%s bundle_cid=%s",
+            message_id,
+            command.reporter_address,
+            bug_bundle.cid,
+        )
         sent = self.signal.send_group_message(signal_message)
         record = self.store.create_submission(
             command=command,
@@ -230,6 +255,7 @@ class BrokerBot:
             signal_group_id=self.config.signal_group_id,
             signal_message_timestamp=sent.sent_timestamp,
             review_window_seconds=self.config.review_window_seconds,
+            bug_bundle=bug_bundle,
         )
         self.store.mark_message_processed(message_id, "submission")
         self.logger.info(
@@ -243,8 +269,42 @@ class BrokerBot:
             message_id,
             "submission",
             "Submission relayed to the private Signal channel. "
-            f"Broker id: {record.id}. Reward window closes after "
+            f"BugBundle: {bug_bundle.uri}. Broker id: {record.id}. Reward window closes after "
             f"{self.config.review_window_seconds // 86400} days.",
+        )
+
+    def _pin_bug_bundle(self, command: SubmissionCommand) -> PinnedBugBundle:
+        if self.ipfs is None:
+            raise RuntimeError("IPFS client is not configured.")
+        now = int(time.time())
+        built = build_unsigned_encrypted_bug_bundle(
+            command,
+            broker_address=self.config.broker_address,
+            chain_id=self.config.chain_id,
+            bug_index_address=self.config.bug_index_address,
+            created_at=now,
+            reveal_after=now + self.config.review_window_seconds,
+        )
+        name = f"cheapbugs-{command.reporter_address}-{now}.bugbundle.json"
+        added = self.ipfs.add_json(built.payload, name)
+        self.ipfs.prime_gateway(added.cid)
+        self.logger.info(
+            "bugbundle pinned reporter=%s cid=%s uri=%s sha256=%s encrypted_details_hash=%s",
+            command.reporter_address,
+            added.cid,
+            added.uri,
+            added.sha256,
+            built.encrypted_details_hash,
+        )
+        return PinnedBugBundle(
+            cid=added.cid,
+            uri=added.uri,
+            gateway_url=added.gateway_url,
+            sha256=added.sha256,
+            details_key_b64=built.details_key_b64,
+            details_key_commitment=built.details_key_commitment,
+            encrypted_details_hash=built.encrypted_details_hash,
+            pinned_at=now,
         )
 
     async def _reply(self, reply: ReplyFn, message_id: str, stage: str, message: str) -> None:
@@ -338,7 +398,7 @@ class BrokerBot:
                 self.logger.exception("Settlement sweep failed.")
             await asyncio.sleep(max(self.config.poll_seconds, 60))
 
-def format_signal_submission(command: SubmissionCommand) -> str:
+def format_signal_submission(command: SubmissionCommand, bug_bundle: PinnedBugBundle | None = None) -> str:
     title = _compact(command.title, 140)
     summary = _compact(command.summary, 600)
     details = _compact(command.details or command.body, 4_000)
@@ -357,6 +417,8 @@ def format_signal_submission(command: SubmissionCommand) -> str:
         heading_lines.append(f"Signal: {command.signal_recipient}")
     if command.target_ref != "broker triage":
         heading_lines.append(f"Target: {command.target_kind} {command.target_ref}")
+    if bug_bundle is not None:
+        heading_lines.append(f"BugBundle: {bug_bundle.uri}")
     heading_lines.extend(
         [
             f"Disclosure: {command.disclosure_mode}",

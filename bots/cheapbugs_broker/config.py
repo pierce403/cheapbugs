@@ -10,6 +10,8 @@ from pathlib import Path
 
 DEFAULT_BASE_RPC_URL = "https://mainnet.base.org"
 DEFAULT_BUGZ_TOKEN_ADDRESS = "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07"
+DEFAULT_IPFS_API_URL = "http://127.0.0.1:5001"
+DEFAULT_IPFS_GATEWAY_URL = "https://ipfs.io/ipfs"
 
 
 def _env_first(*names: str, default: str = "") -> str:
@@ -65,6 +67,12 @@ class BrokerConfig:
     signal_group_id: str
     base_rpc_url: str
     bugz_token_address: str
+    chain_id: int
+    bug_index_address: str
+    ipfs_api_url: str
+    ipfs_gateway_url: str
+    ipfs_prime_gateway: bool
+    ipfs_timeout_seconds: int
     access_min_balance_tokens: Decimal
     submission_min_balance_tokens: Decimal
     reputation_blocklist: frozenset[str]
@@ -78,6 +86,15 @@ class BrokerConfig:
     @property
     def signal_enabled(self) -> bool:
         return bool(self.signal_cli_path)
+
+    @property
+    def broker_address(self) -> str:
+        try:
+            from eth_account import Account
+
+            return str(Account.from_key(self.broker_key).address).lower()
+        except Exception:
+            return ""
 
     @classmethod
     def from_env(cls) -> "BrokerConfig":
@@ -93,6 +110,12 @@ class BrokerConfig:
             signal_group_id=_env_first("BROKER_SIGNAL_GROUP_ID"),
             base_rpc_url=_env_first("BASE_RPC_URL", default=DEFAULT_BASE_RPC_URL),
             bugz_token_address=_env_first("BUGZ_TOKEN_ADDRESS", default=DEFAULT_BUGZ_TOKEN_ADDRESS),
+            chain_id=_env_int_any(("BROKER_CHAIN_ID", "CHAIN_ID"), 8453),
+            bug_index_address=_env_first("BROKER_BUG_INDEX_ADDRESS", "VITE_BUG_INDEX_ADDRESS"),
+            ipfs_api_url=_env_first("BROKER_IPFS_API_URL", default=DEFAULT_IPFS_API_URL),
+            ipfs_gateway_url=_env_first("BROKER_IPFS_GATEWAY_URL", default=DEFAULT_IPFS_GATEWAY_URL),
+            ipfs_prime_gateway=_env_bool_any(("BROKER_IPFS_PRIME_GATEWAY",), False),
+            ipfs_timeout_seconds=_env_int_any(("BROKER_IPFS_TIMEOUT_SECONDS",), 10),
             access_min_balance_tokens=_env_decimal_any(("BROKER_ACCESS_MIN_BUGZ",), "1"),
             submission_min_balance_tokens=_env_decimal_any(("BROKER_SUBMISSION_MIN_BUGZ",), "1"),
             reputation_blocklist=_env_address_set_any(("BROKER_REPUTATION_BLOCKLIST",)),
