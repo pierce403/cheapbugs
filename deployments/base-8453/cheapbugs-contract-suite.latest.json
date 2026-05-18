@@ -1,0 +1,583 @@
+{
+  "schema": "cheapbugs.contract-suite-deploy-log.v1",
+  "mode": "dry-run",
+  "status": "build-only",
+  "generatedAt": null,
+  "network": {
+    "chainName": "Base",
+    "chainId": 8453,
+    "rpcUrl": "https://mainnet.base.org/"
+  },
+  "launchPlan": {
+    "script": "scripts/launch-bug-index.mjs",
+    "argv": [
+      "--dry-run"
+    ],
+    "deployer": {
+      "address": "0xEA6995Fc3674E1E94736766F5EEeFB0506e4eF32",
+      "keySource": "BROKER_KEY",
+      "privateKeyRecorded": false
+    },
+    "finalOwner": "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3",
+    "initialBrokers": [
+      "0xEA6995Fc3674E1E94736766F5EEeFB0506e4eF32"
+    ],
+    "initialAdmins": [],
+    "initialSlashers": [],
+    "verification": {
+      "requested": false,
+      "verifier": "etherscan",
+      "apiKeyConfigured": false,
+      "apiKeyRecorded": false,
+      "etherscanApiVersion": null
+    }
+  },
+  "build": {
+    "toolVersions": {
+      "node": "v23.9.0",
+      "npm": "11.1.0",
+      "forge": "forge Version: 1.3.5-stable\nCommit SHA: 9979a41b5daa5da1572d973d7ac5a3dd2afc0221\nBuild Timestamp: 2025-09-09T04:48:08.305566906Z (1757393288)\nBuild Profile: maxperf",
+      "cast": "cast Version: 1.3.5-stable\nCommit SHA: 9979a41b5daa5da1572d973d7ac5a3dd2afc0221\nBuild Timestamp: 2025-09-09T04:48:08.305566906Z (1757393288)\nBuild Profile: maxperf",
+      "anvil": "anvil Version: 1.3.5-stable\nCommit SHA: 9979a41b5daa5da1572d973d7ac5a3dd2afc0221\nBuild Timestamp: 2025-09-09T04:48:08.305566906Z (1757393288)\nBuild Profile: maxperf"
+    },
+    "package": {
+      "name": "cheapbugs",
+      "version": "0.1.0",
+      "packageJson": {
+        "path": "package.json",
+        "sha256": "4cdd767fff6ac5245cc07045842d7c4ab1fe627cdab22b9812ada5a63dcda3cc",
+        "bytes": 1011
+      },
+      "packageLock": {
+        "path": "package-lock.json",
+        "sha256": "81f70ca6a4b1a7fe5a8003ee1bc5746d66322fd1c22652356934a3b38d7fc442",
+        "bytes": 415927
+      }
+    },
+    "git": {
+      "branch": "main",
+      "commit": "f31aa28c184694289ed97639c441ce073bc04162",
+      "statusShort": []
+    },
+    "foundry": {
+      "configFile": {
+        "path": "foundry.toml",
+        "sha256": "37631c0f15e987a7827c87344630dea0e50d610c1b9de16b778c83974efa8cc0",
+        "bytes": 216
+      },
+      "settings": {
+        "profile": "default",
+        "src": "contracts",
+        "test": "test",
+        "script": "script",
+        "out": "out",
+        "libs": [
+          "lib",
+          "node_modules"
+        ],
+        "cache_path": "cache/foundry",
+        "solc_version": "0.8.24",
+        "optimizer": true,
+        "optimizer_runs": 200,
+        "via_ir": true
+      }
+    },
+    "sourceFiles": [
+      {
+        "path": "contracts/CheapBugsBondVault.sol",
+        "sha256": "2092181b268ce648d9a5e88939381d581efaff788dc1b9a6f85e2367372e25f9",
+        "bytes": 16131
+      },
+      {
+        "path": "contracts/CheapBugsBugIndex.sol",
+        "sha256": "b86d93bba99a053515e7ef72c39d8baa56b4352ac2dcce4a001dea24fbdea5fd",
+        "bytes": 36404
+      },
+      {
+        "path": "contracts/CheapBugsTreasuryVault.sol",
+        "sha256": "2ab28077de7f905a82e47751f84e5b5c01f0ee62ef1d1afbd73bb3160fb9851f",
+        "bytes": 11807
+      },
+      {
+        "path": "foundry.toml",
+        "sha256": "37631c0f15e987a7827c87344630dea0e50d610c1b9de16b778c83974efa8cc0",
+        "bytes": 216
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/access/Ownable.sol",
+        "sha256": "38578bd71c0a909840e67202db527cc6b4e6b437e0f39f0c909da32c1e30cb81",
+        "bytes": 3102
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/interfaces/IERC1363.sol",
+        "sha256": "9c3a75a925a6dac9e88b03cddc58d42fe3131b0aaaad84408521f3f7af2f991b",
+        "bytes": 4454
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/interfaces/IERC165.sol",
+        "sha256": "dfb3f56fa928a7c6cae41a7ce2c86b9210fa18d33fa26389099d66a0fa790368",
+        "bytes": 193
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/interfaces/IERC20.sol",
+        "sha256": "0158e2d3e0e28bedd99eec13dcf1a8aa3a70a5b7e4bb2ad709609c95fcc740d1",
+        "bytes": 182
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/interfaces/IERC5267.sol",
+        "sha256": "f89772d2d4fafcbef8b73bb10ee9a3373edec2eedb2f1b302320915b351dc3d1",
+        "bytes": 740
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "sha256": "01b6f5c4fa45fd38822b286ecef6daf983d27306dd6362496fa71b3e4600b72c",
+        "bytes": 2781
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "sha256": "c2394cb2a327f234711da34884947f4aa0f6dd2791d1d6303a0c7acfaf81bca3",
+        "bytes": 13314
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/Bytes.sol",
+        "sha256": "3ce9120a27934c75a074cb785d3a88868069ef6529dbe4dc6b845af0836f3c70",
+        "bytes": 14737
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/Context.sol",
+        "sha256": "847fda5460fee70f56f4200f59b82ae622bb03c79c77e67af010e31b7e2cc5b6",
+        "bytes": 963
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/Panic.sol",
+        "sha256": "270fc8401c1a13fae6a7a4a2dd6e381b95d658896701e51f0d3e2688acab3dec",
+        "bytes": 1973
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+        "sha256": "94e409e8f6e3184236651a6cc2b1a6a3ea0f0a25eb85b71e524ad5791bb2fbc8",
+        "bytes": 4766
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/ShortStrings.sol",
+        "sha256": "1cfa08d3c551e9ec0b9cd249b09987f04e7e90f352e1a5e3b0d6a3bc426b3de7",
+        "bytes": 4310
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/StorageSlot.sol",
+        "sha256": "75704538dcb223239280c6726d9a31cf769a7816718517c997fc7d63bdb70778",
+        "bytes": 4182
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/Strings.sol",
+        "sha256": "e318709bbe73a7831d64c1351e8bdc43780b245f25191234e361e6ab9b98c67b",
+        "bytes": 21538
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
+        "sha256": "ba7c2d314fcd61c9783e0b3f0c664d004b76b408fda6a84edc8267d17c5012d6",
+        "bytes": 12152
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/cryptography/EIP712.sol",
+        "sha256": "2845caaaf70757b6cce612ae4ffbec2c382cb3d1cb9765c98fa649c0f5f1c794",
+        "bytes": 6695
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
+        "sha256": "538a0d7c4f0ec5a8562f58561890f7b49d14580674ecf58bc5f505b45c73df65",
+        "bytes": 8631
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/introspection/IERC165.sol",
+        "sha256": "9055c2994b37dea1a41b7b7926dcb510f05dbe2540b0aafc5fbee9558fffd0ca",
+        "bytes": 871
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/math/Math.sol",
+        "sha256": "bdfdbe133991c0c78042957ff5cd97167926fcaf6d15664f3835a076cb066457",
+        "bytes": 32664
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol",
+        "sha256": "5779bc848bde39f1ad7bc02b4f708a0040888e0083b1a33f119cd94639350134",
+        "bytes": 34940
+      },
+      {
+        "path": "node_modules/@openzeppelin/contracts/utils/math/SignedMath.sol",
+        "sha256": "1ed50b1056af886752f0fb48a0165d381e69bb4a4b18b893b066dc144a7e08d7",
+        "bytes": 2613
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "81f70ca6a4b1a7fe5a8003ee1bc5746d66322fd1c22652356934a3b38d7fc442",
+        "bytes": 415927
+      },
+      {
+        "path": "package.json",
+        "sha256": "4cdd767fff6ac5245cc07045842d7c4ab1fe627cdab22b9812ada5a63dcda3cc",
+        "bytes": 1011
+      },
+      {
+        "path": "remappings.txt",
+        "sha256": "37437f08af78a371d214306b3f8a31dd6f77dffcce1f39ef8313f20fff9ec79e",
+        "bytes": 73
+      },
+      {
+        "path": "script/LaunchBugIndex.s.sol",
+        "sha256": "eab4d5187cc1c3a42e1e0443d5f7e5edb16f90b586be6b8b7b730d8c1ac408d3",
+        "bytes": 3831
+      },
+      {
+        "path": "scripts/launch-bug-index.mjs",
+        "sha256": "5507bb2a7b9a3fc1804380b96e26b6f59689801e1a31e4b0d08f5a71c7004c1a",
+        "bytes": 29869
+      }
+    ]
+  },
+  "contracts": {
+    "index": {
+      "contractName": "CheapBugsBugIndex",
+      "sourceName": "contracts/CheapBugsBugIndex.sol",
+      "contractId": "contracts/CheapBugsBugIndex.sol:CheapBugsBugIndex",
+      "foundryArtifactPath": "out/CheapBugsBugIndex.sol/CheapBugsBugIndex.json",
+      "ignoredLauncherArtifactPath": "artifacts/CheapBugsBugIndex.json",
+      "committedGeneratedArtifact": {
+        "path": "deployments/base-8453/generated/latest/CheapBugsBugIndex.json",
+        "sha256": "cbe94149b5a1e716a2a5ee293f4cabbdd3251738e370e4510640fef13b62cfd4",
+        "bytes": 240103
+      },
+      "compiler": {
+        "version": "0.8.24+commit.e11b9ed9"
+      },
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "viaIR": true,
+      "evmVersion": "cancun",
+      "remappings": [
+        "@openzeppelin/=node_modules/@openzeppelin/",
+        "forge-std/=lib/forge-std/src/"
+      ],
+      "constructorInputs": [
+        {
+          "name": "initialOwner",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "initialBondVault",
+          "type": "address",
+          "internalType": "contract ICheapBugsBondVault"
+        },
+        {
+          "name": "initialTreasuryVault",
+          "type": "address",
+          "internalType": "contract ICheapBugsTreasuryVault"
+        },
+        {
+          "name": "initialBrokers",
+          "type": "address[]",
+          "internalType": "address[]"
+        },
+        {
+          "name": "initialAdmins",
+          "type": "address[]",
+          "internalType": "address[]"
+        }
+      ],
+      "abiItems": 77,
+      "methodIdentifiers": {
+        "JUDGMENT_PERIOD()": "62a84576",
+        "MAX_PAYOUT_MULTIPLIER()": "f6546372",
+        "adminAt(uint256)": "2a1ad03f",
+        "adminCount()": "2b7832b3",
+        "admins(address)": "429b62e5",
+        "bondVault()": "990826b3",
+        "bondVoteCount(bytes32)": "b542c1d9",
+        "bondVoteVoterAt(bytes32,uint256)": "30c44a72",
+        "brokerAt(uint256)": "8aa7f1f8",
+        "brokerCount()": "6e37b6ef",
+        "brokers(address)": "66874cc5",
+        "completePayout(bytes32,uint8,bytes32)": "d609ce9b",
+        "downVoteWeight(bytes32)": "3342ac62",
+        "eip712Domain()": "84b0196e",
+        "exists(bytes32)": "38a699a4",
+        "flagBug(bytes32,uint8)": "5ee344ed",
+        "getBondVote(bytes32,address)": "65f32608",
+        "getReport(bytes32)": "171c4f11",
+        "hasBondVote(bytes32,address)": "07d15f95",
+        "latestReportHashes(uint256)": "1f66c8b7",
+        "nextPayoutIndex()": "3fe071be",
+        "nextPayoutReportHash()": "03c5c8e9",
+        "owner()": "8da5cb5b",
+        "publishBug((bytes32,string,address,uint64,uint8,string,string,uint8,bytes32,string,bytes32,bytes32,bytes32,bytes32,uint64),uint256,uint64,bytes)": "6f9e591b",
+        "publishBugDigest((bytes32,string,address,uint64,uint8,string,string,uint8,bytes32,string,bytes32,bytes32,bytes32,bytes32,uint64),uint256,uint64,address)": "4fde529e",
+        "renounceOwnership()": "715018a6",
+        "reportCount()": "185c6f84",
+        "reportHashAt(uint256)": "bf928bac",
+        "revealDetailsKey(bytes32,bytes32)": "c08bc53b",
+        "setAdmin(address,bool)": "4b0bddd2",
+        "setBondVault(address)": "0c6d2ce7",
+        "setBroker(address,bool)": "eecb2f20",
+        "setTreasuryVault(address)": "d5f80c34",
+        "submitBondVote(bytes32,bool)": "7cef175f",
+        "transferOwnership(address)": "f2fde38b",
+        "treasuryVault()": "af8b1c6f",
+        "upVoteWeight(bytes32)": "b7838aa6",
+        "usedReporterNonces(address,uint256)": "aee25155"
+      },
+      "bytecode": {
+        "sha256": "b69181a7764c3dcaf5427c7965ba6970316b15ced4c780fa1726a4849bf5e558",
+        "bytes": 15678
+      },
+      "deployedBytecode": {
+        "sha256": "2051835bebbed2b19183117f4007b570edc6668ad2ad68a1915ac3ea69e4ed68",
+        "bytes": 13232
+      },
+      "rawMetadata": {
+        "sha256": "b548760e301471eb1a1db56dc6c31149da5de41c76fd9116f4b69990d49f535e",
+        "bytes": 40000
+      }
+    },
+    "bondVault": {
+      "contractName": "CheapBugsBondVault",
+      "sourceName": "contracts/CheapBugsBondVault.sol",
+      "contractId": "contracts/CheapBugsBondVault.sol:CheapBugsBondVault",
+      "foundryArtifactPath": "out/CheapBugsBondVault.sol/CheapBugsBondVault.json",
+      "ignoredLauncherArtifactPath": "artifacts/CheapBugsBondVault.json",
+      "committedGeneratedArtifact": {
+        "path": "deployments/base-8453/generated/latest/CheapBugsBondVault.json",
+        "sha256": "c6246394805febd0ff957eca3a612a5ce61a255f6784d7a7db8e6776f719fb6f",
+        "bytes": 99496
+      },
+      "compiler": {
+        "version": "0.8.24+commit.e11b9ed9"
+      },
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "viaIR": true,
+      "evmVersion": "cancun",
+      "remappings": [
+        "@openzeppelin/=node_modules/@openzeppelin/",
+        "forge-std/=lib/forge-std/src/"
+      ],
+      "constructorInputs": [
+        {
+          "name": "treasuryAddress",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "initialOwner",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "abiItems": 45,
+      "methodIdentifiers": {
+        "BUGZ_TOKEN_ADDRESS()": "6f8c10a9",
+        "MAX_SLASH_BPS()": "31440f55",
+        "WHOLE_BUGZ()": "a998c50d",
+        "WITHDRAWAL_DELAY()": "0ebb172a",
+        "accountOf(address)": "8086b8ba",
+        "activeBondOf(address)": "35867a34",
+        "bond(uint256)": "9940686e",
+        "bondOf(address)": "72d2b6c0",
+        "bondedAddressAt(uint256)": "88481e19",
+        "bondedAddressCount()": "b2bfaac4",
+        "bondedAddressList(uint256,uint256)": "9914107e",
+        "bugz()": "2438f458",
+        "getLevel(address)": "817c8966",
+        "owner()": "8da5cb5b",
+        "pendingWithdrawalOf(address)": "194ad7bb",
+        "renounceOwnership()": "715018a6",
+        "requestWithdrawal(uint256)": "9ee679e8",
+        "setSlasher(address,bool)": "52348080",
+        "setTreasury(address)": "f0f44260",
+        "slash(address,uint16)": "6e78eca4",
+        "slashers(address)": "b87fcbff",
+        "transferOwnership(address)": "f2fde38b",
+        "treasury()": "61d027b3",
+        "withdraw()": "3ccfd60b",
+        "withdrawAvailableAt(address)": "14c89eea"
+      },
+      "bytecode": {
+        "sha256": "640d646957db9a1ea624d5b45460105b4e9c6c1973cd07e6fcb2eb1247562559",
+        "bytes": 4564
+      },
+      "deployedBytecode": {
+        "sha256": "1538b4320c143c409464230b31683dd2bc2c23e4d1b66fb7fe4cf0de8afeab81",
+        "bytes": 4211
+      },
+      "rawMetadata": {
+        "sha256": "77a1af052ef6af8111c918369eac7a47549edc2ae94b48da0792f1214c132287",
+        "bytes": 21176
+      }
+    },
+    "treasuryVault": {
+      "contractName": "CheapBugsTreasuryVault",
+      "sourceName": "contracts/CheapBugsTreasuryVault.sol",
+      "contractId": "contracts/CheapBugsTreasuryVault.sol:CheapBugsTreasuryVault",
+      "foundryArtifactPath": "out/CheapBugsTreasuryVault.sol/CheapBugsTreasuryVault.json",
+      "ignoredLauncherArtifactPath": "artifacts/CheapBugsTreasuryVault.json",
+      "committedGeneratedArtifact": {
+        "path": "deployments/base-8453/generated/latest/CheapBugsTreasuryVault.json",
+        "sha256": "e573d2e9bc80bb189d7bd1b88a6b42f2634297b07685cbf5f2a00a80fea3a4a6",
+        "bytes": 86656
+      },
+      "compiler": {
+        "version": "0.8.24+commit.e11b9ed9"
+      },
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "viaIR": true,
+      "evmVersion": "cancun",
+      "remappings": [
+        "@openzeppelin/=node_modules/@openzeppelin/",
+        "forge-std/=lib/forge-std/src/"
+      ],
+      "constructorInputs": [
+        {
+          "name": "initialOwner",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "abiItems": 40,
+      "methodIdentifiers": {
+        "BUGZ_TOKEN_ADDRESS()": "6f8c10a9",
+        "DEFAULT_STANDARD_PAYOUT_DIVISOR()": "fe07199a",
+        "MAX_REWARD_MULTIPLIER()": "646f6eb4",
+        "brokerAt(uint256)": "8aa7f1f8",
+        "brokerCount()": "6e37b6ef",
+        "brokers(address)": "66874cc5",
+        "bugz()": "2438f458",
+        "calculateRewardAmount(uint8)": "471e5a7d",
+        "deposit(uint256)": "b6b55f25",
+        "detailKeyPayments(bytes32,address)": "f270fd22",
+        "detailKeyPurchaseAt(uint256)": "658a69a2",
+        "detailKeyPurchaseCount()": "fc0cc7bf",
+        "index()": "2986c0e5",
+        "owner()": "8da5cb5b",
+        "payRewardFromIndex(address,address,uint8)": "f00d0ebc",
+        "purchaseDetailKey(bytes32,uint256)": "48e0f554",
+        "renounceOwnership()": "715018a6",
+        "setBroker(address,bool)": "eecb2f20",
+        "setIndex(address)": "cd20a6bc",
+        "setStandardPayoutDivisor(uint256)": "2a8f6802",
+        "standardPayoutDivisor()": "833b8148",
+        "transferOwnership(address)": "f2fde38b"
+      },
+      "bytecode": {
+        "sha256": "7f4a7342c2f757e076e78b19007f211291af96a0795f84da72c2a924a708912c",
+        "bytes": 3929
+      },
+      "deployedBytecode": {
+        "sha256": "9af81aaf194fbba00450094f8f24979028426a2b133a38855ba7ada83514b1b2",
+        "bytes": 3677
+      },
+      "rawMetadata": {
+        "sha256": "38fb910891f869dfee4f8119cfa53b1799b2e2f3b92e39552b4231a99b081bd1",
+        "bytes": 18451
+      }
+    }
+  },
+  "constructorArguments": {
+    "treasuryVault": {
+      "contractName": "CheapBugsTreasuryVault",
+      "inputs": [
+        {
+          "name": "initialOwner",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "values": [
+        "0xEA6995Fc3674E1E94736766F5EEeFB0506e4eF32"
+      ],
+      "encoded": "0x000000000000000000000000ea6995fc3674e1e94736766f5eeefb0506e4ef32"
+    },
+    "bondVault": {
+      "contractName": "CheapBugsBondVault",
+      "inputs": [
+        {
+          "name": "treasuryAddress",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "initialOwner",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "values": [
+        null,
+        "0xEA6995Fc3674E1E94736766F5EEeFB0506e4eF32"
+      ],
+      "encoded": null
+    },
+    "index": {
+      "contractName": "CheapBugsBugIndex",
+      "inputs": [
+        {
+          "name": "initialOwner",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "initialBondVault",
+          "type": "address",
+          "internalType": "contract ICheapBugsBondVault"
+        },
+        {
+          "name": "initialTreasuryVault",
+          "type": "address",
+          "internalType": "contract ICheapBugsTreasuryVault"
+        },
+        {
+          "name": "initialBrokers",
+          "type": "address[]",
+          "internalType": "address[]"
+        },
+        {
+          "name": "initialAdmins",
+          "type": "address[]",
+          "internalType": "address[]"
+        }
+      ],
+      "values": [
+        "0xEA6995Fc3674E1E94736766F5EEeFB0506e4eF32",
+        null,
+        null,
+        [
+          "0xEA6995Fc3674E1E94736766F5EEeFB0506e4eF32"
+        ],
+        []
+      ],
+      "encoded": null
+    }
+  },
+  "deployedContracts": null,
+  "transactions": [],
+  "verificationResults": [],
+  "reproduction": {
+    "commands": [
+      "git checkout <recorded commit>",
+      "git submodule update --init --recursive",
+      "npm install",
+      "forge build",
+      "npm run launch:bug-index:dry-run"
+    ],
+    "notes": [
+      "Private keys, API keys, and full RPC URLs are intentionally omitted from this manifest.",
+      "Full generated contract artifacts are committed under the committedGeneratedArtifact paths."
+    ]
+  }
+}
