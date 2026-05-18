@@ -7,6 +7,7 @@ from cheapbugs_broker.xmtp_runner import (
     patch_xmtp_agent_stream_stop,
     patch_xmtp_backend_connector,
     patch_xmtp_client_factory,
+    patch_xmtp_subscribe_error_type,
     plain_text_status_sender,
 )
 
@@ -96,6 +97,15 @@ class BackendConnectorCompatTest(unittest.TestCase):
         self.assertEqual(bindings.client_calls[0][2].encryption_key, b"key")
         self.assertEqual(bindings.client_calls[0][3:], ("inbox", "identifier", 0, None, "disabled", None, None))
 
+    def test_patch_adds_missing_subscribe_error_alias(self) -> None:
+        bindings = FakeBindings()
+
+        self.assertFalse(hasattr(bindings, "FfiSubscribeError"))
+        self.assertTrue(patch_xmtp_subscribe_error_type(bindings))
+
+        self.assertTrue(isinstance(FakeBindings.FfiError("stream failed"), bindings.FfiSubscribeError))
+        self.assertTrue(isinstance(FakeBindings.InternalError("stream failed"), bindings.FfiSubscribeError))
+
     def test_patch_stream_stop_does_not_cancel_current_stream_task(self) -> None:
         async def run_test() -> None:
             agent = FakeAgent()
@@ -129,6 +139,12 @@ class FakeBindings:
     class FfiDeviceSyncMode:
         ENABLED = "enabled"
         DISABLED = "disabled"
+
+    class FfiError(Exception):
+        pass
+
+    class InternalError(Exception):
+        pass
 
     class DbOptions:
         def __init__(

@@ -97,10 +97,32 @@ def patch_xmtp_client_factory(native_bindings: Any) -> bool:
     return True
 
 
+def patch_xmtp_subscribe_error_type(native_bindings: Any) -> bool:
+    """Bridge the old stream error name to the current bindings error classes."""
+
+    if hasattr(native_bindings, "FfiSubscribeError"):
+        return False
+
+    error_types = tuple(
+        error_type
+        for error_type in (
+            getattr(native_bindings, "FfiError", None),
+            getattr(native_bindings, "InternalError", None),
+        )
+        if isinstance(error_type, type)
+    )
+    if not error_types:
+        return False
+
+    setattr(native_bindings, "FfiSubscribeError", error_types[0] if len(error_types) == 1 else error_types)
+    return True
+
+
 def patch_xmtp_native_compat(native_bindings: Any) -> bool:
+    subscribe_error_patched = patch_xmtp_subscribe_error_type(native_bindings)
     connector_patched = patch_xmtp_backend_connector(native_bindings)
     factory_patched = patch_xmtp_client_factory(native_bindings)
-    return connector_patched or factory_patched
+    return subscribe_error_patched or connector_patched or factory_patched
 
 
 def patch_xmtp_agent_stream_stop(agent_cls: Any) -> bool:
