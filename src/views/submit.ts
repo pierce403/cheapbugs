@@ -115,26 +115,29 @@ const initialXmtpStatus = (): XmtpStatus => {
 const xmtpErrorMessage = (error: unknown): string => {
   const message = error instanceof Error ? error.message : "Submission failed.";
   if (/request expired/i.test(message)) {
-    return "Wallet request expired before XMTP registration finished. Clear any stale wallet prompts, then submit again and approve the XMTP signature request.";
+    return "Wallet request expired before signing finished. Clear any stale wallet prompts, then submit again and approve the requested signature.";
   }
   if (/user rejected|user denied|rejected request/i.test(message)) {
-    return "Wallet signature was rejected before XMTP registration finished. Submit again and approve the XMTP signature request.";
+    return "Wallet signature was rejected. Submit again and approve the requested signature.";
   }
   return message;
 };
 
 const isSignatureWaitProgress = (message: string): boolean => /waiting for .*xmtp wallet signature/i.test(message);
 
-const isBrokerSignatureWaitProgress = (message: string): boolean => /waiting for broker submission signature/i.test(message);
+const isBrokerSignatureWaitProgress = (message: string): boolean =>
+  /waiting for (?:broker submission|bugbundle) signature/i.test(message);
 
 const isSignatureSettledProgress = (message: string): boolean =>
-  /xmtp wallet signature approved|using cached xmtp wallet signature|broker submission signature approved/i.test(message);
+  /xmtp wallet signature approved|using cached xmtp wallet signature|broker submission signature approved|bugbundle signature approved/i.test(
+    message
+  );
 
 const isIpfsConfirmationProgress = (message: string): boolean => /Encrypted BugBundle pinned to IPFS:\s*ipfs:\/\//i.test(message);
 
 const signatureWaitDetailForProgress = (message: string): string =>
   isBrokerSignatureWaitProgress(message)
-    ? "Approve the CheapBugs submission authorization in your wallet app or browser extension. This signs the report payload and does not send a transaction."
+    ? "Approve the CheapBugs BugBundle authorization in your wallet app or browser extension. This signs the encrypted report bundle and does not send a transaction."
     : signatureWaitDetail;
 
 const statusMarkup = (status = initialXmtpStatus()): string => `

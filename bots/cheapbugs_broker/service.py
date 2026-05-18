@@ -7,16 +7,16 @@ import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from decimal import Decimal
 
-from .bugbundle import build_unsigned_encrypted_bug_bundle
+from .bugbundle import BugBundleError, VerifiedBugBundle, verify_signed_bug_bundle
 from .commands import (
     CommandError,
     SUBMISSION_SCHEMA,
     command_help,
     parse_command,
     validate_submission_target,
-    verify_submission_signature,
 )
 from .config import BrokerConfig
 from .models import AccessCommand, PinnedBugBundle, SubmissionCommand
@@ -95,7 +95,7 @@ class BrokerBot:
             _json_blob_for_log(text),
         )
         self.logger.info(
-            "submission command parsed message_id=%s reporter=%s bug_type=%s severity=%s target_interest=%s title=%r target=%s:%s details_chars=%s",
+            "submission command parsed message_id=%s reporter=%s bug_type=%s severity=%s target_interest=%s title=%r target=%s:%s bugbundle=%s",
             message_id,
             command.reporter_address,
             command.bug_type,
@@ -104,7 +104,7 @@ class BrokerBot:
             command.title,
             command.target_kind,
             command.target_ref,
-            len(command.details or command.body),
+            "present" if command.bug_bundle else "missing",
         )
         await self._handle_submission(command, conversation_id, message_id, reply)
 
@@ -181,24 +181,42 @@ class BrokerBot:
             await self._reply(
                 reply,
                 message_id,
-                "signature_invalid",
-                "Submission reporter signature is invalid: broker_address does not match this broker.",
+                "bugbundle_invalid",
+                "BugBundle is invalid: broker_address does not match this broker.",
             )
-            self.store.mark_message_processed(message_id, "signature_invalid")
+            self.store.mark_message_processed(message_id, "bugbundle_invalid")
             return
         try:
-            verify_submission_signature(command)
-        except CommandError as exc:
+            verified_bundle = verify_signed_bug_bundle(
+                command,
+                chain_id=self.config.chain_id,
+                bug_index_address=self.config.bug_index_address,
+                configured_broker_address=configured_broker_address,
+            )
+        except BugBundleError as exc:
             self.logger.info(
-                "submission signature invalid message_id=%s reporter=%s reason=%s",
+                "submission bugbundle invalid message_id=%s reporter=%s reason=%s",
                 message_id,
                 command.reporter_address,
                 exc,
             )
-            await self._reply(reply, message_id, "signature_invalid", f"Submission reporter signature is invalid: {exc}")
-            self.store.mark_message_processed(message_id, "signature_invalid")
+            await self._reply(reply, message_id, "bugbundle_invalid", f"BugBundle is invalid: {exc}")
+            self.store.mark_message_processed(message_id, "bugbundle_invalid")
             return
-        await self._reply(reply, message_id, "signature_valid", "Submission reporter signature is valid.")
+        command = replace(
+            command,
+            details=verified_bundle.details,
+            repro_steps=verified_bundle.repro_steps,
+            evidence=verified_bundle.evidence,
+            contact_hints=verified_bundle.contact_hints,
+            body=verified_bundle.body,
+        )
+        await self._reply(
+            reply,
+            message_id,
+            "bugbundle_valid",
+            "BugBundle signature is valid and encrypted details decrypt cleanly.",
+        )
 
         try:
             validate_submission_target(command)
@@ -232,7 +250,7 @@ class BrokerBot:
         await self._reply(reply, message_id, "credentials_valid", f"Submission credentials are valid: {credential_summary}.")
 
         try:
-            bug_bundle = self._pin_bug_bundle(command)
+            bug_bundle = self._pin_bug_bundle(command, verified_bundle)
         except Exception as exc:
             self.logger.exception("submission ipfs pin failed message_id=%s reporter=%s", message_id, command.reporter_address)
             await self._reply(reply, message_id, "ipfs_failed", f"BugBundle IPFS publish failed: {exc}")
@@ -310,21 +328,12 @@ class BrokerBot:
             f"{self.config.review_window_seconds // 86400} days.",
         )
 
-    def _pin_bug_bundle(self, command: SubmissionCommand) -> PinnedBugBundle:
+    def _pin_bug_bundle(self, command: SubmissionCommand, verified: VerifiedBugBundle) -> PinnedBugBundle:
         if self.ipfs is None:
             raise RuntimeError("IPFS client is not configured.")
         now = int(time.time())
-        broker_address = self.config.broker_address or command.broker_address
-        built = build_unsigned_encrypted_bug_bundle(
-            command,
-            broker_address=broker_address,
-            chain_id=self.config.chain_id,
-            bug_index_address=self.config.bug_index_address,
-            created_at=now,
-            reveal_after=now + self.config.review_window_seconds,
-        )
         name = f"cheapbugs-{command.reporter_address}-{now}.bugbundle.json"
-        added = self.ipfs.add_json(built.payload, name)
+        added = self.ipfs.add_json(verified.payload, name)
         self.ipfs.prime_gateway(added.cid)
         self.logger.info(
             "bugbundle pinned reporter=%s cid=%s uri=%s sha256=%s encrypted_details_hash=%s",
@@ -332,16 +341,16 @@ class BrokerBot:
             added.cid,
             added.uri,
             added.sha256,
-            built.encrypted_details_hash,
+            verified.encrypted_details_hash,
         )
         return PinnedBugBundle(
             cid=added.cid,
             uri=added.uri,
             gateway_url=added.gateway_url,
             sha256=added.sha256,
-            details_key_b64=built.details_key_b64,
-            details_key_commitment=built.details_key_commitment,
-            encrypted_details_hash=built.encrypted_details_hash,
+            details_key_b64=verified.details_key_b64,
+            details_key_commitment=verified.details_key_commitment,
+            encrypted_details_hash=verified.encrypted_details_hash,
             pinned_at=now,
         )
 

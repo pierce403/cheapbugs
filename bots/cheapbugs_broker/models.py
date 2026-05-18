@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -36,16 +37,8 @@ class SubmissionCommand:
     repro_steps: str = ""
     evidence: str = ""
     contact_hints: str = ""
-    signature: "SubmissionSignature | None" = None
-
-
-@dataclass(frozen=True)
-class SubmissionSignature:
-    scheme: str
-    signer: str
-    payload_sha256: str
-    message: str
-    value: str
+    bug_bundle: dict[str, Any] | None = None
+    details_key_b64: str = ""
 
 
 @dataclass(frozen=True)

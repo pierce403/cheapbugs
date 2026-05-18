@@ -42,8 +42,8 @@ cheapbugs/
 - The hosted app is static assets from `dist/`; do not add SSR or an app-owned backend database.
 - Public-safe report metadata is stored on Base in `CheapBugsBugIndex`.
 - Sensitive dossier content must be encrypted in the browser before IPFS upload on the legacy path.
-- XMTP broker submissions are private XMTP DMs to the broker; the broker now encrypts accepted submission details into an interim unsigned `BugBundle` and pins it through a local Kubo IPFS node.
-- The planned final broker publishing path uses a submitter-signed `BugBundle` JSON file on IPFS, with encrypted details in the bundle and the reveal key kept out of IPFS until the onchain reveal window opens.
+- XMTP broker submissions are private XMTP DMs to the broker; the browser now builds and signs an encrypted `BugBundle`, sends the out-of-bundle reveal key to the broker, and the broker verifies then pins the bundle through a local Kubo IPFS node.
+- The remaining broker publishing path work is contract-side relay verification and post-window key reveal through the bug index.
 - Reviewer verdicts are EAS attestations on Base and are read through EAS GraphQL.
 - The Python broker is an optional off-static runtime with SQLite state; it does not change the frontend deployment model.
 
@@ -113,23 +113,23 @@ cheapbugs/
   - The frontend form collects bug type, severity, target interest, title, public summary, and private details. Repro steps, evidence, Signal recipient, contact hints, target kind/reference fields, tags, and review access keys are intentionally not user-facing.
   - Bug type is a malleable broker-triage hint with current values `0day`, `nday`, `web`, `net`, and `intel`.
   - Severity and target interest are malleable broker-triage hints with current slider values `low`, `medium`, `high`, and `critical`.
-  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, private details, broker-triage target defaults, client metadata, and a reporter signature.
-  - The frontend attaches an EIP-191 `eip191_canonical_submission_v1` signature over the canonical JSON command hash before sending the XMTP DM. This gives the broker a reporter-verifiable authorization for the current command, but broker-relayed onchain attribution must stay disabled until the contract-verifiable reporter-signed relay feature exists.
+  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, broker-triage target defaults, client metadata, a signed encrypted `bug_bundle`, and an out-of-bundle `details_key`.
+  - The frontend generates the random details key, encrypts details into the BugBundle with AES-256-GCM, and attaches an EIP-191 `eip191_bugbundle_core_v1` signature over the canonical BugBundle core before sending the XMTP DM. This gives the broker a reporter-verifiable signed bundle to pin, but broker-relayed onchain attribution must stay disabled until the contract-verifiable reporter-signed relay feature exists.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
   - The submit route shows a processing-submission modal while broker XMTP submission work is in progress, keeps it open across broker status replies, and only marks the submission complete after the broker confirms the BugBundle is pinned to IPFS.
-  - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve either XMTP registration or the broker submission authorization signature.
+  - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve either XMTP registration or the BugBundle authorization signature.
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
   - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.
-  - The planned BugBundle path has the submitter generate the details key and send it to the broker outside the signed IPFS bundle; do not expose a frontend review access key field on the broker path.
-  - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid or missing reporter signatures, invalid provided target references, and invalid reporter credentials.
-  - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, reporter signature valid, target valid, credentials valid.
+  - The broker verifies the signed BugBundle before pinning: schema, fields, reporter/broker/chain/index binding, signature recovery, key commitment, encrypted details hash, AAD, and successful details decryption.
+  - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid or missing BugBundle signatures, invalid provided target references, and invalid reporter credentials.
+  - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, BugBundle signature/details valid, target valid, credentials valid.
   - Broker status messages intentionally avoid XMTP reply-content encoding so the submission flow does not depend on nonessential reply-content codec behavior.
   - After sending the submission DM, the browser waits for broker plain text replies in the same XMTP conversation. `Encrypted BugBundle pinned to IPFS: ipfs://...` is treated as terminal success; target, credential, JSON, or IPFS failure replies are terminal errors.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:
-  - [x] Python unit tests cover strict JSON parsing, required fields, signature payload-hash validation, signature failure handling, target validation, staged status messages, and credential failure.
-  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, field ordering, broker-signature wait modal, and structured XMTP submit UI including the IPFS-confirmation modal state.
+  - [x] Python unit tests cover strict JSON parsing, required fields, BugBundle core-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, and credential failure.
+  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, field ordering, BugBundle-signature wait modal, and structured XMTP submit UI including the IPFS-confirmation modal state.
   - [ ] Add contract-verifiable reporter-signed relay envelopes before the broker can submit user-attributed records onchain.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
 
@@ -141,9 +141,8 @@ cheapbugs/
   - The bundle schema is `cheapbugs.bug_bundle.v1`.
   - The bundle includes public fields such as reporter, broker, chain id, reveal timing, title, public summary, `bug_type`, `severity`, and `target_interest`.
   - The bundle includes the encrypted `details` ciphertext and encryption metadata, but never the details key.
-  - Current implementation is an interim broker-encrypted bundle built from the existing plaintext XMTP submission and carrying a broker-verified EIP-191 command signature. It prevents plaintext IPFS pinning and records reporter authorization for the command, but it does not provide the final smart-contract anti-forgery signature claim.
-  - The submitter generates the random details key, encrypts the details, signs the bundle commitment, and sends the signed bundle plus the out-of-bundle details key to the broker over XMTP.
-  - Planned final behavior: the broker verifies the signature, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, then pins the signed bundle bytes to IPFS without modification.
+  - Current implementation has the submitter generate the random details key, encrypt the details, sign the bundle core, and send the signed bundle plus the out-of-bundle details key to the broker over XMTP.
+  - The broker verifies the signature, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, then pins the signed bundle payload to IPFS without adding broker status fields.
   - Broker pinning uses a locally running Kubo HTTP API. `BROKER_IPFS_API_URL` defaults to `http://127.0.0.1:5001`.
   - On broker startup, the `run` command checks Kubo `/api/v0/version` and verifies `/api/v0/add` accepts write requests using a tiny unpinned probe.
   - `BROKER_IPFS_GATEWAY_URL` defaults to the frontend's current `https://ipfs.io/ipfs` gateway. `BROKER_IPFS_PRIME_GATEWAY=1` performs a best-effort gateway fetch after pinning, but gateway caching is not durable and can fail when the local node is not publicly reachable through the IPFS swarm.
@@ -151,10 +150,12 @@ cheapbugs/
   - The bug index stores the bundle CID, bundle/content commitments, reveal time, and details-key commitment.
   - After the 7-day judgment period, the details key is added to the bug index. Browsers can then fetch the bundle from IPFS, read the key from the index, decrypt details locally, and render the bug as ordinary readable content.
 - **Test Criteria**:
-  - [x] Broker tests cover encrypted interim BugBundle pinning without plaintext details in the pinned JSON.
+  - [x] Broker tests cover signed encrypted BugBundle verification and pinning without plaintext details in the pinned JSON.
   - [x] Broker tests cover Kubo API startup/add request wiring without requiring a live Kubo daemon.
-  - [ ] Browser tests cover submitter-side bundle construction, details encryption, key commitment generation, and signature prompt state.
-  - [ ] Broker tests prove the broker rejects altered bundles, bad signatures, mismatched details keys, and unintelligible decrypted details.
+  - [x] Browser tests cover BugBundle signature prompt state.
+  - [x] Broker tests prove the broker rejects altered bundle core hashes and invalid BugBundle validation results.
+  - [ ] Browser tests cover submitter-side bundle construction, details encryption, and key commitment generation against deterministic vectors.
+  - [ ] Broker tests add dedicated cases for bad recovered signatures, mismatched details keys, and unintelligible decrypted details.
   - [ ] Contract tests prove keys cannot be revealed before the judgment window and revealed keys must match the stored commitment.
   - [ ] Read-path tests cover automatic post-reveal IPFS fetch and browser decryption.
 

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from typing import Any
 from urllib.parse import urlparse
 
-from .models import AccessCommand, IncomingCommand, SubmissionCommand, SubmissionSignature
+from .models import AccessCommand, IncomingCommand, SubmissionCommand
 
 
 ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
@@ -18,12 +17,10 @@ DOMAIN_RE = re.compile(
 PACKAGE_RE = re.compile(r"^(?:@[a-z0-9][a-z0-9._-]{0,63}/)?[a-z0-9][a-z0-9._-]{0,213}$")
 REPO_SHORTHAND_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
 TAG_RE = re.compile(r"^[a-z0-9][a-z0-9+.#_-]{0,31}$")
-HEX_32_RE = re.compile(r"^0x[a-fA-F0-9]{64}$")
-SIGNATURE_RE = re.compile(r"^0x[a-fA-F0-9]{130}$")
+B64URL_32_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
 SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1"
 SUBMISSION_VERSION = 1
-SUBMISSION_SIGNATURE_SCHEME = "eip191_canonical_submission_v1"
 BUG_TYPES = {"0day", "nday", "web", "net", "intel"}
 RATING_VALUES = {"low", "medium", "high", "critical"}
 TARGET_KINDS = {"repo", "package", "domain", "contract", "protocol", "other"}
@@ -38,17 +35,14 @@ SUBMISSION_ALLOWED_KEYS = {
     "bug_type",
     "title",
     "public_summary",
-    "details",
-    "repro_steps",
-    "evidence",
     "severity",
     "target_interest",
     "target",
     "disclosure_mode",
     "tags",
-    "contact_hints",
+    "bug_bundle",
+    "details_key",
     "client",
-    "signature",
 }
 SUBMISSION_REQUIRED_KEYS = {
     "schema",
@@ -59,13 +53,12 @@ SUBMISSION_REQUIRED_KEYS = {
     "bug_type",
     "title",
     "public_summary",
-    "details",
     "severity",
     "target_interest",
-    "signature",
+    "bug_bundle",
+    "details_key",
 }
 CLIENT_ALLOWED_KEYS = {"name", "sent_at"}
-SIGNATURE_ALLOWED_KEYS = {"scheme", "signer", "payload_sha256", "message", "value"}
 
 
 class CommandError(ValueError):
@@ -107,18 +100,6 @@ def _strict_string(data: dict[str, Any], name: str, *, min_length: int = 1, max_
     normalized = value.strip()
     if len(normalized) < min_length:
         raise CommandError(f"Field {name} is too short.")
-    if len(normalized) > max_length:
-        raise CommandError(f"Field {name} is too long.")
-    return normalized
-
-
-def _strict_string_present(data: dict[str, Any], name: str, *, max_length: int = 10_000) -> str:
-    if name not in data:
-        raise CommandError(f"Missing required field: {name}.")
-    value = data[name]
-    if not isinstance(value, str):
-        raise CommandError(f"Field {name} must be a string.")
-    normalized = value.strip()
     if len(normalized) > max_length:
         raise CommandError(f"Field {name} is too long.")
     return normalized
@@ -179,92 +160,18 @@ def _validate_optional_client(data: dict[str, Any]) -> None:
     _strict_string(client, "sent_at", max_length=80)
 
 
-def _canonicalize(value: Any) -> Any:
-    if isinstance(value, list):
-        return [_canonicalize(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _canonicalize(value[key]) for key in sorted(value) if value[key] is not None}
+def _strict_bug_bundle(data: dict[str, Any]) -> dict[str, Any]:
+    value = data.get("bug_bundle")
+    if not isinstance(value, dict):
+        raise CommandError("Field bug_bundle must be an object.")
     return value
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(_canonicalize(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-def _canonical_sha256(value: Any) -> str:
-    return f"0x{hashlib.sha256(_canonical_json(value).encode('utf-8')).hexdigest()}"
-
-
-def build_submission_signature_message(unsigned_payload: dict[str, Any], payload_sha256: str) -> str:
-    return "\n".join(
-        [
-            "CheapBugs broker submission authorization",
-            "",
-            "This signature authorizes the configured CheapBugs broker to validate and pin one encrypted BugBundle for this submission.",
-            "",
-            f"schema: {unsigned_payload.get('schema')}",
-            f"version: {unsigned_payload.get('version')}",
-            f"reporter: {normalize_address(str(unsigned_payload.get('reporter_address', '')))}",
-            f"broker: {normalize_address(str(unsigned_payload.get('broker_address', '')))}",
-            f"payload_sha256: {payload_sha256}",
-        ]
-    )
-
-
-def _strict_signature(data: dict[str, Any], unsigned_payload: dict[str, Any]) -> SubmissionSignature:
-    raw_signature = data.get("signature")
-    if not isinstance(raw_signature, dict):
-        raise CommandError("Field signature must be an object.")
-    unknown_keys = sorted(set(raw_signature.keys()) - SIGNATURE_ALLOWED_KEYS)
-    if unknown_keys:
-        raise CommandError(f"Unexpected signature field(s): {', '.join(unknown_keys)}.")
-
-    scheme = _strict_string(raw_signature, "scheme", max_length=80)
-    if scheme != SUBMISSION_SIGNATURE_SCHEME:
-        raise CommandError(f"Submission signature scheme must be {SUBMISSION_SIGNATURE_SCHEME}.")
-    signer = normalize_address(_strict_string(raw_signature, "signer", max_length=42))
-    payload_sha256 = _strict_string(raw_signature, "payload_sha256", max_length=66).lower()
-    if not HEX_32_RE.match(payload_sha256):
-        raise CommandError("Submission signature payload_sha256 must be a 32-byte hex value.")
-    expected_payload_sha256 = _canonical_sha256(unsigned_payload)
-    if payload_sha256 != expected_payload_sha256:
-        raise CommandError("Submission signature payload hash does not match the command JSON.")
-
-    message = _strict_string(raw_signature, "message", min_length=20, max_length=2_000)
-    expected_message = build_submission_signature_message(unsigned_payload, payload_sha256)
-    if message != expected_message:
-        raise CommandError("Submission signature message does not match the command JSON.")
-    value = _strict_string(raw_signature, "value", max_length=132)
-    if not SIGNATURE_RE.match(value):
-        raise CommandError("Submission signature value must be a 65-byte hex signature.")
-    return SubmissionSignature(
-        scheme=scheme,
-        signer=signer,
-        payload_sha256=payload_sha256,
-        message=message,
-        value=value,
-    )
-
-
-def verify_submission_signature(command: SubmissionCommand) -> None:
-    signature = command.signature
-    if signature is None:
-        raise CommandError("Submission reporter signature is missing.")
-    if signature.signer != command.reporter_address:
-        raise CommandError("Submission signature signer must match reporter_address.")
-
-    try:
-        from eth_account import Account
-        from eth_account.messages import encode_defunct
-    except ImportError as exc:  # pragma: no cover - covered in broker runtime environment
-        raise CommandError("Submission reporter signature cannot be verified because eth_account is not installed.") from exc
-
-    try:
-        recovered = str(Account.recover_message(encode_defunct(text=signature.message), signature=signature.value)).lower()
-    except Exception as exc:
-        raise CommandError("Submission reporter signature could not be recovered.") from exc
-    if recovered != command.reporter_address:
-        raise CommandError("Submission reporter signature does not recover to reporter_address.")
+def _strict_details_key(data: dict[str, Any]) -> str:
+    value = _strict_string(data, "details_key", max_length=80)
+    if not B64URL_32_RE.match(value):
+        raise CommandError("Field details_key must be a base64url-encoded 32-byte key without padding.")
+    return value
 
 
 def _parse_json_command(text: str, fallback_sender_address: str | None) -> IncomingCommand | None:
@@ -301,8 +208,8 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
     if unknown_keys:
         raise CommandError(f"Unexpected submission field(s): {', '.join(unknown_keys)}.")
     _validate_optional_client(data)
-    unsigned_payload = {key: value for key, value in data.items() if key != "signature"}
-    signature = _strict_signature(data, unsigned_payload)
+    bug_bundle = _strict_bug_bundle(data)
+    details_key_b64 = _strict_details_key(data)
 
     schema = _strict_string(data, "schema", max_length=80)
     if schema != SUBMISSION_SCHEMA:
@@ -325,8 +232,6 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
 
     reporter_address = normalize_address(_strict_string(data, "reporter_address", max_length=42))
     broker_address = normalize_address(_strict_string(data, "broker_address", max_length=42))
-    if signature.signer != reporter_address:
-        raise CommandError("Submission signature signer must match reporter_address.")
     signal_recipient = (
         _strict_string(data, "signal_recipient", min_length=3, max_length=128)
         if "signal_recipient" in data
@@ -334,22 +239,10 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
     )
     title = _strict_string(data, "title", min_length=3, max_length=120)
     summary = _strict_string(data, "public_summary", min_length=10, max_length=2_000)
-    details = _strict_string(data, "details", min_length=10, max_length=12_000)
     bug_type = _strict_choice(data, "bug_type", BUG_TYPES)
     severity = _strict_choice(data, "severity", RATING_VALUES)
     target_interest = _strict_choice(data, "target_interest", RATING_VALUES)
-    repro_steps = _strict_string_present(data, "repro_steps", max_length=8_000) if "repro_steps" in data else ""
-    evidence = _strict_string_present(data, "evidence", max_length=8_000) if "evidence" in data else ""
-    contact_hints = _strict_string_present(data, "contact_hints", max_length=1_000) if "contact_hints" in data else ""
     tags = _strict_tags(data)
-
-    body_parts = [details]
-    if repro_steps:
-        body_parts.append(f"Repro steps:\n{repro_steps}")
-    if evidence:
-        body_parts.append(f"Evidence:\n{evidence}")
-    if contact_hints:
-        body_parts.append(f"Contact hints:\n{contact_hints}")
 
     return SubmissionCommand(
         reporter_address=reporter_address,
@@ -359,17 +252,14 @@ def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
         summary=summary,
         severity=severity,
         target_interest=target_interest,
-        body="\n\n".join(body_parts),
+        body="",
         broker_address=broker_address,
         target_kind=target_kind,
         target_ref=target_ref,
         disclosure_mode=disclosure_mode,
         tags=tags,
-        details=details,
-        repro_steps=repro_steps,
-        evidence=evidence,
-        contact_hints=contact_hints,
-        signature=signature,
+        bug_bundle=bug_bundle,
+        details_key_b64=details_key_b64,
     )
 
 
@@ -460,11 +350,11 @@ def command_help() -> str:
         '  "bug_type": "0day",\n'
         '  "title": "Short report title",\n'
         '  "public_summary": "Public-safe summary",\n'
-        '  "details": "Private details",\n'
         '  "severity": "high",\n'
         '  "target_interest": "medium",\n'
-        '  "signature": {"scheme": "eip191_canonical_submission_v1", "...": "..."}\n'
+        '  "bug_bundle": {"schema": "cheapbugs.bug_bundle.v1", "...": "..."},\n'
+        '  "details_key": "base64url 32-byte key"\n'
         "}\n\n"
-        "The broker fills omitted workflow metadata during triage. "
+        "The broker verifies the signed encrypted BugBundle before pinning it. "
         "Signal access requests may still use !access with wallet and signal fields."
     )

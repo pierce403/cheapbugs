@@ -15,18 +15,19 @@ This broker-relay claim is not implemented yet at the smart-contract level.
 ## Current Implemented Guarantees
 
 - Direct onchain submissions through `CheapBugsBugIndex.submitReport` are attributed to `msg.sender`.
-- The current broker XMTP payload includes `reporter_address`, `broker_address`, and an EIP-191 `eip191_canonical_submission_v1` signature over the canonical JSON command hash.
-- The broker verifies the reporter signature before target validation, credential validation, or IPFS pinning. Invalid or missing signatures stop the submission flow.
+- The current broker XMTP payload includes `reporter_address`, `broker_address`, a signed encrypted `cheapbugs.bug_bundle.v1`, and an out-of-bundle details key.
+- The browser generates the details key, encrypts details with AES-256-GCM, signs the canonical BugBundle core with EIP-191 scheme `eip191_bugbundle_core_v1`, and sends the signed bundle plus details key to the broker over XMTP.
+- The broker verifies the BugBundle before target validation, credential validation, or IPFS pinning. Invalid signatures, wrong reporter/broker/chain/index bindings, key-commitment mismatches, ciphertext-hash mismatches, AAD mismatches, and decryption failures stop the submission flow.
 - The browser sends broker submissions as XMTP DMs to the configured broker wallet.
 - The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, blocked reporters, and insufficient BUGZ balance.
 - The broker sends staged plain text XMTP status messages after successful validation stages.
-- The broker now encrypts accepted plaintext XMTP submission details into an interim `cheapbugs.bug_bundle.v1` object before pinning to IPFS through local Kubo, and the pinned bundle carries the verified reporter signature over the canonical XMTP command.
-- The interim broker-built bundle keeps the details key outside IPFS and stores that key in broker SQLite for later reveal work.
+- The broker pins the verified signed BugBundle through local Kubo without adding broker status fields to the payload.
+- The signed bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
 ## Planned Reporter-Signed Broker Relay
 
-Before the broker may attest or register a user-attributed bug report onchain, the browser and contracts need a contract-verifiable signed relay path.
+Before the broker may attest or register a user-attributed bug report onchain, the browser and contracts need a contract-verifiable signed relay path. The current EIP-191 BugBundle signature is broker-verifiable, but not yet enforced by `CheapBugsBugIndex`.
 
 Required properties:
 
@@ -34,14 +35,14 @@ Required properties:
 - The browser generates a random details key, encrypts private details into the bundle, and keeps the details key outside the IPFS-bound bundle.
 - The reporter signs an EIP-712 typed message that binds schema, version, reporter, broker wallet, Base chain id, bug-index contract address, bundle/core hash, encrypted details hash, details-key commitment, reveal time, created time, and a nonce or deadline.
 - The XMTP message carries the signed BugBundle plus the out-of-bundle details key.
-- The broker verifies the envelope, confirms the supplied details key matches the bundle commitment, decrypts details for objective well-formedness checks, and pins the signed bundle bytes without modification before doing EAS or registry writes.
+- The broker verifies the envelope, confirms the supplied details key matches the bundle commitment, decrypts details for objective well-formedness checks, and pins the signed bundle payload without modification before doing EAS or registry writes.
 - `CheapBugsBugIndex` verifies the reporter signature for broker-relayed submissions and stores the recovered reporter, not a broker-supplied reporter field.
 - The contract rejects invalid signatures, wrong broker/domain, wrong chain or contract, expired signatures, duplicate report hashes, and replayed nonces if nonce tracking is added.
 - The contract stores the bundle CID/commitments and details-key commitment when the broker registers the report.
 - The contract accepts the details key only after the 7-day judgment period and only when it matches the stored key commitment.
 - If contract wallets are supported, the relay path must support EIP-1271 signature validation.
 
-Until this exists, the broker must not create bug-index records that claim to be from a user address. The current EIP-191 canonical command signature is useful broker-side authorization and audit material, but it is not the final onchain relay signature.
+Until this exists, the broker must not create bug-index records that claim to be from a user address. The current EIP-191 BugBundle signature is useful broker-side authorization and audit material, but it is not the final onchain relay signature.
 
 ## Trust Boundaries
 
@@ -67,7 +68,7 @@ Until this exists, the broker must not create bug-index records that claim to be
 - Base RPC and BUGZ token defaults are public configuration, not secrets.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
 - Broker SQLite now stores unrevealed details keys for IPFS-pinned BugBundles. Treat `.broker/broker.sqlite` as private disclosure material.
-- Broker logs are written to `BROKER_LOG_PATH` and stdout. New submissions intentionally log the full raw XMTP JSON payload, including private report detail bodies, for development visibility. Treat `broker.log` and debug logs as private disclosure material and do not share them outside trusted project operators.
+- Broker logs are written to `BROKER_LOG_PATH` and stdout. New submissions intentionally log the full raw XMTP JSON payload, including the out-of-bundle details key, for development visibility. Treat `broker.log` and debug logs as private disclosure material and do not share them outside trusted project operators.
 - Broker debug mode can include third-party XMTP/Rust diagnostics. Inspect debug logs before sharing them outside the project.
 - Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
 - The broker wallet must be deliberately funded and capped before live payouts. Rewards are ERC20 transfers, not mints.
@@ -75,8 +76,7 @@ Until this exists, the broker must not create bug-index records that claim to be
 ### IPFS And Pinata
 
 - Private report material must not be uploaded in plaintext by the browser.
-- In the planned broker flow, IPFS stores a single signed BugBundle JSON object whose `details` section is encrypted ciphertext.
-- In the current interim broker flow, IPFS stores a single unsigned broker-encrypted BugBundle JSON object whose `details` section is encrypted ciphertext.
+- In the current broker flow, IPFS stores a single signed BugBundle JSON object whose `details` section is encrypted ciphertext.
 - Details keys must not be included in IPFS bundles. They are held by the broker during the judgment period and later published through the bug index after the reveal window opens.
 - Public gateway priming is best-effort and does not guarantee persistence. It can also reveal a CID to a third-party gateway before the onchain index references it, so it is disabled by default.
 - IPFS CIDs and gateway responses are untrusted input. Rendering code must sanitize and validate fetched content.
@@ -106,8 +106,8 @@ Until this exists, the broker must not create bug-index records that claim to be
 ## Known Gaps
 
 - Contract-verifiable reporter-signed broker relay is not implemented.
-- The current XMTP JSON payload uses an EIP-191 command signature, not the planned EIP-712 BugBundle relay signature.
-- The broker IPFS pinning path is interim: it encrypts and pins broker-built bundles carrying verified command signatures, but does not yet verify submitter-built encrypted signed bundles.
+- The current XMTP JSON payload uses an EIP-191 BugBundle signature, not the planned EIP-712 contract relay signature.
+- The broker IPFS pinning path verifies submitter-built encrypted signed bundles, but dedicated negative tests still need to be expanded for mismatched details keys and undecryptable details.
 - The broker has not yet been wired to EAS submission or bug-index relay for accepted XMTP submissions.
 - Live XMTP broker smoke tests are manual.
 - Reviewer trust is frontend-enforced through an allowlist and should move to an onchain or resolver-backed trust model.
