@@ -13,9 +13,11 @@ import { appLog } from "./lib/logger";
 import { loadTokenDashboard } from "./lib/token";
 import { escapeHtml, formatTokenAmount, shortHash } from "./lib/utils";
 import { buildInfo, formatBuildTime } from "./buildInfo";
+import { chainConfig } from "./config/chains";
 import { env } from "./config/env";
 import type { AppNotice } from "./types/domain";
 import type { SessionState } from "./types/app";
+import type { TokenDashboard } from "./types/token";
 import type { AppViewContext, ViewResult } from "./views/types";
 
 const noticeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -79,24 +81,74 @@ const renderIdentityBlock = (session: SessionState): string => {
   `;
 };
 
-const renderBugzStatus = async (session: SessionState, tokenHref: string): Promise<string> => {
+type BugzHeaderState =
+  | { status: "idle"; address: null }
+  | { status: "loading"; address: `0x${string}`; requestId: number }
+  | { status: "ready"; address: `0x${string}`; dashboard: TokenDashboard }
+  | { status: "error"; address: `0x${string}`; errorMessage: string };
+
+const renderBugzStatus = (session: SessionState, tokenHref: string, state: BugzHeaderState): string => {
   if (!session.address) {
     return `<div class="bugz-chip">bugz: -</div>`;
   }
 
+  if (state.address !== session.address || state.status === "loading") {
+    return `<div class="bugz-chip">bugz: <a href="${tokenHref}" data-nav>loading</a></div>`;
+  }
+
+  if (state.status === "error") {
+    return `<div class="bugz-chip" title="${escapeHtml(state.errorMessage)}">bugz: <a href="${tokenHref}" data-nav>unavailable</a></div>`;
+  }
+
+  const dashboard = state.dashboard;
+  const balance =
+    dashboard.connectedBalance !== null
+      ? `${formatTokenAmount(dashboard.connectedBalance, dashboard.decimals)} ${dashboard.symbol}`
+      : "unavailable";
+  return `<div class="bugz-chip" title="${escapeHtml(dashboard.errorMessage ?? "")}">bugz: <a href="${tokenHref}" data-nav>${escapeHtml(balance)}</a></div>`;
+};
+
+const bugzHeaderErrorDetails = (
+  address: `0x${string}`,
+  errorMessage: string,
+  error?: unknown
+): Record<string, unknown> => ({
+  address: shortHash(address, 10, 6),
+  errorMessage,
+  error,
+  rpcUrl: chainConfig.rpcUrl,
+  chainId: chainConfig.id,
+  bugzTokenAddress: chainConfig.bugzTokenAddress,
+  guidance: "Check that VITE_CHAIN_RPC_URL points to Base mainnet and VITE_BUGZ_TOKEN_ADDRESS is the live BUGZ token."
+});
+
+const logBugzHeaderDashboardFailure = (address: `0x${string}`, dashboard: TokenDashboard): void => {
+  if (!dashboard.errorMessage && dashboard.connectedBalance !== null) {
+    return;
+  }
+
+  appLog.error(
+    "token: header BUGZ status load failed",
+    bugzHeaderErrorDetails(
+      address,
+      dashboard.errorMessage ?? "BUGZ balance read returned no value for the connected wallet."
+    )
+  );
+};
+
+const loadBugzHeaderDashboard = async (
+  address: `0x${string}`,
+  onResult: (state: BugzHeaderState) => void
+): Promise<void> => {
   try {
-    const dashboard = await loadTokenDashboard(session.address);
-    const balance =
-      dashboard.connectedBalance !== null
-        ? `${formatTokenAmount(dashboard.connectedBalance, dashboard.decimals)} ${dashboard.symbol}`
-        : "unavailable";
-    if (dashboard.errorMessage) {
-      appLog.warn("token: header balance read unavailable", { errorMessage: dashboard.errorMessage });
-    }
-    return `<div class="bugz-chip" title="${escapeHtml(dashboard.errorMessage ?? "")}">bugz: <a href="${tokenHref}" data-nav>${escapeHtml(balance)}</a></div>`;
+    const dashboard = await loadTokenDashboard(address);
+    logBugzHeaderDashboardFailure(address, dashboard);
+    onResult({ status: "ready", address, dashboard });
   } catch (error) {
-    appLog.warn("token: header dashboard read threw", { error });
-    return `<div class="bugz-chip">bugz: unavailable</div>`;
+    const errorMessage =
+      error instanceof Error ? error.message : "BUGZ dashboard read failed before a dashboard could be built.";
+    appLog.error("token: header BUGZ status load threw", bugzHeaderErrorDetails(address, errorMessage, error));
+    onResult({ status: "error", address, errorMessage });
   }
 };
 
@@ -173,6 +225,8 @@ export class CheapBugsApp {
   private notices: AppNotice[] = [];
   private renderToken = 0;
   private profileModalOpen = false;
+  private bugzHeaderState: BugzHeaderState = { status: "idle", address: null };
+  private bugzHeaderRequestId = 0;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -229,12 +283,41 @@ export class CheapBugsApp {
     }
   }
 
+  private ensureBugzHeaderLoad(session: SessionState): void {
+    if (!session.address) {
+      this.bugzHeaderState = { status: "idle", address: null };
+      return;
+    }
+
+    if (
+      this.bugzHeaderState.address === session.address &&
+      (this.bugzHeaderState.status === "loading" ||
+        this.bugzHeaderState.status === "ready" ||
+        this.bugzHeaderState.status === "error")
+    ) {
+      return;
+    }
+
+    const requestId = ++this.bugzHeaderRequestId;
+    const address = session.address;
+    this.bugzHeaderState = { status: "loading", address, requestId };
+    void loadBugzHeaderDashboard(address, (state) => {
+      if (this.bugzHeaderRequestId !== requestId || authController.getSession().address !== address) {
+        return;
+      }
+
+      this.bugzHeaderState = state;
+      void this.render();
+    });
+  }
+
   private async shell(view: ViewResult, context: AppViewContext): Promise<string> {
     const session = context.session;
     if (!session.address) {
       this.profileModalOpen = false;
     }
-    const bugzStatus = await renderBugzStatus(session, context.router.href("/token"));
+    this.ensureBugzHeaderLoad(session);
+    const bugzStatus = renderBugzStatus(session, context.router.href("/token"), this.bugzHeaderState);
     const profileModal = this.profileModalOpen ? renderProfileModal(session, bugzStatus) : "";
     const notices = context.notices
       .map(

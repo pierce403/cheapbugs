@@ -55,11 +55,12 @@ cheapbugs/
 - **Properties**:
   - The first screen is the usable app, not a landing page.
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
+  - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete and logs a high-visibility console error if the read resolves unavailable.
   - Header build metadata shows the bundle commit hash and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
-  - [x] `npm run test:e2e` covers the development banner, GitHub brand icon, and build metadata.
+  - [x] `npm run test:e2e` covers the development banner, GitHub brand icon, build metadata, and header BUGZ status states.
 
 ### Wallet Auth And Local XMTP Identity
 

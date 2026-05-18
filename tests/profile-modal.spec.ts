@@ -171,6 +171,59 @@ test("opens an ENS-backed profile modal from the avatar", async ({ page }) => {
   );
 });
 
+test("shows loading and logs a loud console error when header BUGZ balance fails", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+  await seedLocalIdentity(page);
+  await fulfillRpc(page, "https://mainnet.base.org/**", (request) => {
+    switch (request.method) {
+      case "eth_chainId":
+        return { id: request.id, jsonrpc: "2.0", result: "0x2105" };
+      case "net_version":
+        return { id: request.id, jsonrpc: "2.0", result: "8453" };
+      case "eth_call": {
+        const call = (request.params?.[0] ?? {}) as { data?: string };
+        const selector = call.data?.slice(0, 10).toLowerCase();
+        if (selector === "0x70a08231") {
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            error: { code: -32000, message: "BUGZ balance RPC unavailable" }
+          };
+        }
+
+        const result =
+          selector === "0x06fdde03"
+            ? abiCoder.encode(["string"], ["CheapBugs"])
+            : selector === "0x95d89b41"
+              ? abiCoder.encode(["string"], ["BUGZ"])
+              : selector === "0x313ce567"
+                ? abiCoder.encode(["uint8"], [18])
+                : selector === "0x18160ddd"
+                  ? abiCoder.encode(["uint256"], [10_000_000n * 10n ** 18n])
+                  : "0x";
+        return { id: request.id, jsonrpc: "2.0", result };
+      }
+      default:
+        return { id: request.id, jsonrpc: "2.0", result: "0x" };
+    }
+  });
+  await mockEnsRpc(page, { ensName: null });
+
+  await page.goto("/");
+
+  const authPanel = page.locator(".auth-panel");
+  await expect(authPanel).toContainText("bugz: loading");
+  await expect(authPanel).toContainText("bugz: unavailable");
+  await expect
+    .poll(() => consoleErrors.some((text) => text.includes("[cheapbugs] token: header BUGZ status load failed")))
+    .toBe(true);
+});
+
 test("loads ENS avatar text records without depending on a HEAD probe", async ({ page }) => {
   const avatarRecord = "ipfs://bafybeigdyrztuuvq6wtr4djs5h7kyf4e7d6hhi5m67zv6yn5m4cq/avatar.png";
   const gatewayUrl = "https://ipfs.io/ipfs/bafybeigdyrztuuvq6wtr4djs5h7kyf4e7d6hhi5m67zv6yn5m4cq/avatar.png";
