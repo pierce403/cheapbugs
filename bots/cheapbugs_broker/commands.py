@@ -67,6 +67,10 @@ class CommandError(ValueError):
     pass
 
 
+class UnknownCommandError(CommandError):
+    pass
+
+
 def normalize_address(address: str) -> str:
     value = address.strip()
     if not ADDRESS_RE.match(value):
@@ -80,7 +84,7 @@ def _coerce_type(value: str) -> str:
         return "submission"
     if normalized in {"access", "access_request", "join", "channel"}:
         return "access"
-    raise CommandError("Command must be a submission or access request.")
+    raise UnknownCommandError("Command is not a recognized broker flow.")
 
 
 def _string_field(data: dict[str, Any], *names: str, required: bool = True) -> str:

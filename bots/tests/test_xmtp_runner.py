@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import unittest
+from unittest.mock import patch
 
 from cheapbugs_broker.xmtp_runner import (
+    _ensure_xmtp_registered,
+    _installation_ids_for_revocation,
+    _sign_signature_request,
     patch_xmtp_agent_stream_stop,
     patch_xmtp_backend_connector,
     patch_xmtp_client_factory,
@@ -138,6 +143,76 @@ class BackendConnectorCompatTest(unittest.TestCase):
         asyncio.run(run_test())
 
 
+class InstallationRecoveryTest(unittest.TestCase):
+    def test_revocation_ids_exclude_current_installation(self) -> None:
+        installations = (
+            FakeInstallation(b"\x01", 3),
+            FakeInstallation(b"\x02", 2),
+            FakeInstallation(b"\x03", 1),
+        )
+
+        self.assertEqual(_installation_ids_for_revocation(installations, b"\x02"), [b"\x01", b"\x03"])
+
+    def test_signature_request_uses_eoa_signature(self) -> None:
+        signature_request = FakeSignatureRequest()
+
+        asyncio.run(_sign_signature_request(FakeSigner(), signature_request))
+
+        self.assertEqual(signature_request.ecdsa_signatures, [b"signed:sign this"])
+
+    def test_registered_client_prunes_old_installations(self) -> None:
+        client = FakeXmtpClient(
+            installations=[
+                FakeInstallation(b"current", 3),
+                FakeInstallation(b"old-1", 2),
+                FakeInstallation(b"old-2", 1),
+            ],
+            installation_id=b"current",
+            registered=True,
+        )
+
+        with patch.dict("os.environ", {"BROKER_XMTP_AUTO_REVOKE_OLD_INSTALLATIONS": "1"}, clear=False):
+            asyncio.run(_ensure_xmtp_registered(client, FakeSigner(), quiet_logger()))
+
+        self.assertEqual(client.register_calls, 0)
+        self.assertEqual(client.ffi.revoked_installations, [[b"old-1", b"old-2"]])
+        self.assertEqual([installation.id for installation in client.installations], [b"current"])
+
+    def test_unregistered_client_recovers_maxed_installations_before_registering(self) -> None:
+        old_installations = [FakeInstallation(f"old-{index}".encode(), index) for index in range(10)]
+        client = FakeXmtpClient(
+            installations=old_installations,
+            installation_id=b"current",
+            registered=False,
+        )
+
+        with patch.dict(
+            "os.environ",
+            {
+                "BROKER_XMTP_AUTO_REVOKE_OLD_INSTALLATIONS": "1",
+                "BROKER_XMTP_INSTALLATION_LIMIT": "10",
+            },
+            clear=False,
+        ):
+            asyncio.run(_ensure_xmtp_registered(client, FakeSigner(), quiet_logger()))
+
+        self.assertEqual(
+            client.ffi.revoked_installations,
+            [
+                [
+                    installation.id
+                    for installation in sorted(
+                        old_installations,
+                        key=lambda item: item.client_timestamp_ns,
+                        reverse=True,
+                    )
+                ]
+            ],
+        )
+        self.assertEqual(client.register_calls, 1)
+        self.assertEqual([installation.id for installation in client.installations], [b"current"])
+
+
 class FakeBindings:
     def __init__(self) -> None:
         self.calls: list[tuple[object, ...]] = []
@@ -219,6 +294,14 @@ class FakeBindings:
         return "xmtp-client"
 
 
+def quiet_logger() -> logging.Logger:
+    logger = logging.getLogger("test.xmtp_runner")
+    if not logger.handlers:
+        logger.addHandler(logging.NullHandler())
+    logger.propagate = False
+    return logger
+
+
 class FakeStreamHandle:
     def __init__(self) -> None:
         self.closed = False
@@ -242,3 +325,83 @@ class FakeAgent:
         if name.endswith("_stream_handle") and isinstance(getattr(self, name, None), FakeStreamHandle) and value is None:
             self.closed_handles += 1
         super().__setattr__(name, value)
+
+
+class FakeInstallation:
+    def __init__(self, installation_id: bytes, timestamp: int) -> None:
+        self.id = installation_id
+        self.client_timestamp_ns = timestamp
+
+
+class FakeInboxState:
+    def __init__(self, installations: list[FakeInstallation]) -> None:
+        self.installations = installations
+
+
+class FakePreferences:
+    def __init__(self, client: FakeXmtpClient) -> None:
+        self.client = client
+
+    async def inbox_state(self, refresh_from_network: bool = False) -> FakeInboxState:
+        return FakeInboxState(self.client.installations)
+
+
+class FakeSignatureRequest:
+    def __init__(self) -> None:
+        self.ecdsa_signatures: list[bytes] = []
+
+    def signature_text(self) -> str:
+        return "sign this"
+
+    async def add_ecdsa_signature(self, signature: bytes) -> None:
+        self.ecdsa_signatures.append(signature)
+
+
+class FakeSigner:
+    type = "EOA"
+
+    async def sign_message(self, message: bytes) -> bytes:
+        return b"signed:" + message
+
+
+class FakeFfiXmtpClient:
+    def __init__(self, client: FakeXmtpClient) -> None:
+        self.client = client
+        self.revoked_installations: list[list[bytes]] = []
+        self.applied_requests: list[FakeSignatureRequest] = []
+
+    async def revoke_installations(self, installation_ids: list[bytes]) -> FakeSignatureRequest:
+        self.revoked_installations.append(list(installation_ids))
+        return FakeSignatureRequest()
+
+    async def apply_signature_request(self, signature_request: FakeSignatureRequest) -> None:
+        self.applied_requests.append(signature_request)
+        revoked = {installation_id for batch in self.revoked_installations for installation_id in batch}
+        self.client.installations = [
+            installation for installation in self.client.installations if installation.id not in revoked
+        ]
+
+
+class FakeXmtpClient:
+    inbox_id = "fake-inbox"
+
+    def __init__(
+        self,
+        *,
+        installations: list[FakeInstallation],
+        installation_id: bytes,
+        registered: bool,
+    ) -> None:
+        self.installations = installations
+        self.installation_id = installation_id
+        self.is_registered = registered
+        self.preferences = FakePreferences(self)
+        self.ffi = FakeFfiXmtpClient(self)
+        self._client = self.ffi
+        self.register_calls = 0
+
+    async def register(self) -> None:
+        self.register_calls += 1
+        self.is_registered = True
+        if all(installation.id != self.installation_id for installation in self.installations):
+            self.installations.append(FakeInstallation(self.installation_id, 999))

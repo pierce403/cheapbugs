@@ -15,6 +15,7 @@ from .bug_index import BugIndexPublishError, BugIndexPublishResult
 from .commands import (
     CommandError,
     SUBMISSION_SCHEMA,
+    UnknownCommandError,
     command_help,
     parse_command,
     validate_submission_target,
@@ -69,6 +70,11 @@ class BrokerBot:
         )
         try:
             command = parse_command(text, sender_address)
+        except UnknownCommandError:
+            self.logger.info("xmtp message unrecognized message_id=%s; replying with liveness hello", message_id)
+            await self._reply(reply, message_id, "hello", "hello.")
+            self.store.mark_message_processed(message_id, "hello")
+            return
         except CommandError as exc:
             self.logger.warning("xmtp message rejected message_id=%s reason=%s", message_id, exc)
             await self._reply(reply, message_id, "invalid", f"{exc}\n\n{command_help()}")

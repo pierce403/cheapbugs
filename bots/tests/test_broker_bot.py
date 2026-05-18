@@ -324,6 +324,66 @@ class BugIndexPublishTest(unittest.TestCase):
 
 
 class BrokerServiceTest(unittest.TestCase):
+    def test_unrecognized_xmtp_text_gets_liveness_hello(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=0),
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            asyncio.run(
+                bot.handle_xmtp_text(
+                    "gm cheapbugs",
+                    sender_address=WALLET,
+                    conversation_id="conversation",
+                    message_id="hello-message",
+                    reply=reply,
+                )
+            )
+
+            self.assertEqual(replies, ["hello."])
+            self.assertTrue(store.message_seen("hello-message"))
+
+    def test_unrecognized_json_flow_gets_liveness_hello(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=0),
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            asyncio.run(
+                bot.handle_xmtp_text(
+                    '{"type":"ping"}',
+                    sender_address=WALLET,
+                    conversation_id="conversation",
+                    message_id="json-hello-message",
+                    reply=reply,
+                )
+            )
+
+            self.assertEqual(replies, ["hello."])
+            self.assertTrue(store.message_seen("json-hello-message"))
+
     def test_submission_logs_broker_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")

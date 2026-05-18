@@ -76,6 +76,7 @@ Current and required properties:
 - Base RPC and BUGZ token defaults are public configuration, not secrets.
 - Broker runtime secrets live in `.env` for local runs and must not be committed.
 - Broker SQLite now stores unrevealed details keys for IPFS-pinned BugBundles. Treat `.broker/broker.sqlite` as private disclosure material.
+- The broker XMTP database stores the active XMTP installation identity. Treat `.broker/xmtp*.db3` files as private key material and persist them across restarts. The broker can revoke stale installations for the same `BROKER_KEY` to recover from XMTP installation-limit exhaustion; do not run multiple broker instances with the same key unless `BROKER_XMTP_AUTO_REVOKE_OLD_INSTALLATIONS=0` is set and operators accept the installation-count risk.
 - Broker logs are written to `BROKER_LOG_PATH` and stdout. New submissions intentionally log the full raw XMTP JSON payload, including the out-of-bundle details key, for development visibility. Treat `broker.log` and debug logs as private disclosure material and do not share them outside trusted project operators.
 - Broker debug mode can include third-party XMTP/Rust diagnostics. Inspect debug logs before sharing them outside the project.
 - Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
