@@ -11,7 +11,7 @@ export const BROKER_SUBMISSION_VERSION = 1;
 export const BUG_BUNDLE_SCHEMA = "cheapbugs.bug_bundle.v1";
 export const BUG_BUNDLE_VERSION = 1;
 export const PUBLISH_AUTHORIZATION_SCHEME = "eip712_publish_bug_v1";
-const BROKER_IPFS_CONFIRMATION_PATTERN = /Encrypted BugBundle pinned to IPFS:\s*ipfs:\/\//i;
+const BROKER_SUBMISSION_COMPLETE_PATTERN = /Submission complete:\s*(?:Bug published onchain|Bug already exists onchain|Bug index dry-run complete):/i;
 const BROKER_TERMINAL_FAILURE_PATTERN = new RegExp(
   [
     "Invalid JSON command",
@@ -23,7 +23,8 @@ const BROKER_TERMINAL_FAILURE_PATTERN = new RegExp(
     "Publish authorization is invalid",
     "BugBundle is invalid",
     "Submission (?:target|credentials) is invalid",
-    "BugBundle IPFS publish failed"
+    "BugBundle IPFS publish failed",
+    "Bug index publish failed"
   ].join("|"),
   "i"
 );
@@ -136,6 +137,18 @@ const extractIpfsUri = (text?: string): string | undefined => {
   const match = text?.match(/ipfs:\/\/[^\s)]+/i);
   return match?.[0].replace(/[.,;:]+$/, "");
 };
+
+const extractReportHash = (text?: string): `0x${string}` | undefined => {
+  const match = text?.match(/report\s+(0x[a-fA-F0-9]{64})/);
+  return match?.[1]?.toLowerCase() as `0x${string}` | undefined;
+};
+
+const extractTxHash = (text?: string): `0x${string}` | undefined => {
+  const match = text?.match(/tx\s+(0x[a-fA-F0-9]{64})/);
+  return match?.[1] as `0x${string}` | undefined;
+};
+
+const isDryRunCompletion = (text?: string): boolean => /Bug index dry-run complete/i.test(text ?? "");
 
 const bytesToHex = (bytes: Uint8Array): `0x${string}` =>
   `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
@@ -450,14 +463,17 @@ export const sendBrokerSubmission = async (
 
   const message = await buildBrokerSubmissionMessage(input, identity, onProgress);
   const result = await sendXmtpDm(identity, env.brokerXmtpAddress, message, onProgress, {
-    completionPattern: BROKER_IPFS_CONFIRMATION_PATTERN,
+    completionPattern: BROKER_SUBMISSION_COMPLETE_PATTERN,
     failurePattern: BROKER_TERMINAL_FAILURE_PATTERN,
     timeoutMs: BROKER_IPFS_CONFIRMATION_TIMEOUT_MS,
-    waitingMessage: "waiting for broker validation and IPFS publish",
+    waitingMessage: "waiting for broker validation, IPFS publish, and onchain index transaction",
     onReply: (message) => onProgress?.(`broker: ${message}`)
   });
   return {
     ...result,
-    ipfsUri: extractIpfsUri(result.completionText)
+    ipfsUri: extractIpfsUri(result.replyMessages.join("\n")),
+    reportHash: extractReportHash(result.completionText),
+    txHash: extractTxHash(result.completionText),
+    dryRun: isDryRunCompletion(result.completionText)
   };
 };

@@ -34,7 +34,7 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BROKER_XMTP_ADDRESS` only when overriding that broker wallet. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
 
-Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The site currently asks only for title, public summary, and private details; the broker owns review-key generation and fills omitted triage metadata internally. The broker rejects malformed JSON, missing core fields, invalid provided target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP that the JSON is valid, the fields are well formed, the target is valid, and the reporter credentials are valid before relaying the submission.
+Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The site asks for bug type, severity, target interest, title, public summary, and private details; the browser encrypts the private details into a BugBundle, signs a `PublishBug` EIP-712 authorization, and sends the out-of-bundle details key to the broker. The broker rejects malformed JSON, missing core fields, invalid BugBundle signatures, invalid provided target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP through validation, IPFS pinning, and bug-index publication stages.
 
 Bot setup:
 
@@ -42,7 +42,7 @@ Bot setup:
 ./run-broker.sh
 ```
 
-`run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.5` and `BROKER_KEY`. `BROKER_KEY` is the broker wallet key used for both the XMTP identity and BUGZ payouts. Base RPC and BUGZ token settings default to Base mainnet and the live BUGZ token, and can be overridden with `BASE_RPC_URL` and `BUGZ_TOKEN_ADDRESS`. `BROKER_DRY_RUN` defaults to `1`, which prevents token transfers while still exercising the validation path; set `BROKER_DRY_RUN=0` only when the broker wallet is intentionally funded. Broker events are timestamped to stdout and `broker.log` by default; set `BROKER_LOG_PATH` to override the log file.
+`run-broker.sh` loads a shell-compatible `.env`, prepares `.venv-broker`, installs `requirements-broker.txt`, initializes the SQLite store, and starts the broker. It expects `xmtp==0.1.6` and `BROKER_KEY`. `BROKER_KEY` is the broker wallet key used for the XMTP identity, bug-index publishing, and current BUGZ payout adapter. Base RPC, BUGZ token, and bug-index settings default to Base mainnet and the live CheapBugs deployment, and can be overridden with `BASE_RPC_URL`, `BUGZ_TOKEN_ADDRESS`, and `BROKER_BUG_INDEX_ADDRESS`. `BROKER_DRY_RUN` defaults to `1`, which prevents `publishBug`, Signal relay, and token transfers while still exercising validation and IPFS pinning; set `BROKER_DRY_RUN=0` only when the broker wallet is intentionally funded and authorized. Broker events are timestamped to stdout and `broker.log` by default; set `BROKER_LOG_PATH` to override the log file.
 
 For crash/debug runs, use:
 

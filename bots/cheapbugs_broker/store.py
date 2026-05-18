@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS submissions (
   details_key_commitment TEXT,
   encrypted_details_hash TEXT,
   bundle_pinned_at INTEGER,
+  report_hash TEXT,
+  index_tx_hash TEXT,
+  index_published_at INTEGER,
   error TEXT,
   updated_at INTEGER NOT NULL
 );
@@ -123,9 +126,14 @@ class BrokerStore:
         review_window_seconds: int,
         status: str = "relayed",
         bug_bundle: PinnedBugBundle | None = None,
+        report_hash: str | None = None,
+        index_tx_hash: str | None = None,
+        index_published_at: int | None = None,
+        error: str | None = None,
         now: int | None = None,
     ) -> SubmissionRecord:
         created_at = now or int(time.time())
+        index_published = index_published_at if index_published_at is not None else (created_at if index_tx_hash else None)
         record_id = uuid4().hex
         with self.session() as conn:
             conn.execute(
@@ -136,9 +144,10 @@ class BrokerStore:
                   signal_message_timestamp, status, created_at, matures_at,
                   bundle_cid, bundle_uri, bundle_gateway_url, bundle_sha256,
                   details_key_b64, details_key_commitment, encrypted_details_hash, bundle_pinned_at,
+                  report_hash, index_tx_hash, index_published_at, error,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -165,6 +174,10 @@ class BrokerStore:
                     bug_bundle.details_key_commitment if bug_bundle else None,
                     bug_bundle.encrypted_details_hash if bug_bundle else None,
                     bug_bundle.pinned_at if bug_bundle else None,
+                    report_hash,
+                    index_tx_hash,
+                    index_published,
+                    error,
                     created_at,
                 ),
             )
@@ -310,6 +323,9 @@ def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
         details_key_commitment=str(row["details_key_commitment"]) if row["details_key_commitment"] is not None else None,
         encrypted_details_hash=str(row["encrypted_details_hash"]) if row["encrypted_details_hash"] is not None else None,
         bundle_pinned_at=int(row["bundle_pinned_at"]) if row["bundle_pinned_at"] is not None else None,
+        report_hash=str(row["report_hash"]) if row["report_hash"] is not None else None,
+        index_tx_hash=str(row["index_tx_hash"]) if row["index_tx_hash"] is not None else None,
+        index_published_at=int(row["index_published_at"]) if row["index_published_at"] is not None else None,
         error=str(row["error"]) if row["error"] is not None else None,
     )
 
@@ -336,3 +352,9 @@ def _ensure_submission_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE submissions ADD COLUMN encrypted_details_hash TEXT")
     if "bundle_pinned_at" not in columns:
         conn.execute("ALTER TABLE submissions ADD COLUMN bundle_pinned_at INTEGER")
+    if "report_hash" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN report_hash TEXT")
+    if "index_tx_hash" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN index_tx_hash TEXT")
+    if "index_published_at" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN index_published_at INTEGER")

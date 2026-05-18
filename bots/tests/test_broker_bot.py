@@ -20,6 +20,7 @@ from cheapbugs_broker.bugbundle import (
     canonical_json_bytes,
     verify_authorized_bug_bundle,
 )
+from cheapbugs_broker.bug_index import BugIndexPublishError, BugIndexPublishResult, build_publish_bug_call_args
 from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
 from cheapbugs_broker.config import BrokerConfig
 from cheapbugs_broker.ipfs import IpfsAddResult
@@ -254,6 +255,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.broker_key, "0xbroker")
         self.assertEqual(config.base_rpc_url, "https://mainnet.base.org")
         self.assertEqual(config.bugz_token_address, "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07")
+        self.assertEqual(config.bug_index_address, "0x515FDbc9876aC26870794E26605c7DD04c18679b")
         self.assertEqual(config.ipfs_api_url, "http://127.0.0.1:5001")
         self.assertEqual(config.ipfs_gateway_url, "https://ipfs.io/ipfs")
         self.assertFalse(config.ipfs_prime_gateway)
@@ -299,6 +301,28 @@ class StoreTest(unittest.TestCase):
             self.assertEqual([item.id for item in store.mature_unpaid_submissions(now=107)], [record.id])
 
 
+class BugIndexPublishTest(unittest.TestCase):
+    def test_publish_bug_call_args_match_verified_authorization(self) -> None:
+        command = parse_command(json.dumps(valid_submission_payload()))
+        self.assertIsInstance(command, SubmissionCommand)
+        verified = fake_verified_bundle()
+        bug_bundle = FakeIpfs().add_json(verified.payload, "bundle.json")
+        pinned = fake_pinned_bundle(bug_bundle)
+
+        bug_input, nonce, deadline, signature = build_publish_bug_call_args(command, verified, pinned)
+
+        self.assertEqual(bug_input[0], verified.report_hash)
+        self.assertEqual(bug_input[1], f"cb-{verified.report_hash[2:10]}")
+        self.assertEqual(bug_input[2], WALLET)
+        self.assertEqual(bug_input[5], "Public safe summary for reviewers.")
+        self.assertEqual(bug_input[6], "ipfs://bafyfakebugbundle")
+        self.assertEqual(bug_input[9], "")
+        self.assertEqual(bug_input[13], verified.details_key_commitment)
+        self.assertEqual(nonce, 7)
+        self.assertEqual(deadline, 1768694400)
+        self.assertTrue(signature.startswith("0x"))
+
+
 class BrokerServiceTest(unittest.TestCase):
     def test_submission_logs_broker_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -310,6 +334,7 @@ class BrokerServiceTest(unittest.TestCase):
                 signal=None,
                 token=FakeToken(balance=2 * 10**18),
                 ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
             )
 
             async def reply(_message: str) -> None:
@@ -347,6 +372,7 @@ class BrokerServiceTest(unittest.TestCase):
                 signal=signal,
                 token=FakeToken(balance=2 * 10**18),
                 ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
             )
 
             async def reply(message: str) -> None:
@@ -369,7 +395,9 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertIn("Submission target is valid", replies[3])
             self.assertIn("Submission credentials are valid", replies[4])
             self.assertIn("Encrypted BugBundle pinned to IPFS", replies[5])
-            self.assertIn("Submission relayed", replies[6])
+            self.assertIn("Bug published onchain", replies[6])
+            self.assertIn("Submission complete", replies[7])
+            self.assertIn("Submission relayed", replies[7])
             self.assertIn("BugBundle: ipfs://bafyfakebugbundle", signal.last_message)
 
     def test_submission_stops_when_bugbundle_fails(self) -> None:
@@ -383,6 +411,7 @@ class BrokerServiceTest(unittest.TestCase):
                 signal=FakeSignal(),
                 token=FakeToken(balance=2 * 10**18),
                 ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
             )
 
             async def reply(message: str) -> None:
@@ -416,6 +445,7 @@ class BrokerServiceTest(unittest.TestCase):
                 signal=FakeSignal(),
                 token=FakeToken(balance=0),
                 ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
             )
 
             async def reply(message: str) -> None:
@@ -448,6 +478,7 @@ class BrokerServiceTest(unittest.TestCase):
                 signal=None,
                 token=FakeToken(balance=2 * 10**18),
                 ipfs=ipfs,
+                bug_index=FakeBugIndex(),
             )
 
             async def reply(message: str) -> None:
@@ -466,13 +497,17 @@ class BrokerServiceTest(unittest.TestCase):
 
             self.assertIn("Submission credentials are valid", replies[4])
             self.assertIn("Encrypted BugBundle pinned to IPFS", replies[5])
-            self.assertIn("Signal is not configured", replies[6])
+            self.assertIn("Bug published onchain", replies[6])
+            self.assertIn("Signal is not configured", replies[7])
             self.assertTrue(store.message_seen("message"))
             with store.session() as conn:
                 row = conn.execute("SELECT * FROM submissions WHERE xmtp_message_id = ?", ("message",)).fetchone()
             self.assertIsNotNone(row)
             self.assertEqual(row["bundle_cid"], "bafyfakebugbundle")
             self.assertEqual(row["bundle_uri"], "ipfs://bafyfakebugbundle")
+            self.assertEqual(row["status"], "published")
+            self.assertEqual(row["report_hash"], fake_verified_bundle().report_hash)
+            self.assertEqual(row["index_tx_hash"], "0x" + "a" * 64)
             self.assertTrue(str(row["details_key_b64"]))
             self.assertTrue(str(row["details_key_commitment"]).startswith("0x"))
             self.assertIsNotNone(ipfs.last_payload)
@@ -482,6 +517,83 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertEqual(ipfs.last_payload["core"]["reporter"], WALLET)
             records = store.mature_unpaid_submissions(now=10_000)
             self.assertEqual(records, [])
+
+    def test_submission_records_index_publish_failure_with_pinned_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=2 * 10**18),
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(error=BugIndexPublishError("broker wallet is not authorized")),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch("cheapbugs_broker.service.verify_authorized_bug_bundle", return_value=fake_verified_bundle()):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="index-failure",
+                        reply=reply,
+                    )
+                )
+
+            self.assertIn("Encrypted BugBundle pinned to IPFS", replies[5])
+            self.assertIn("Bug index publish failed", replies[-1])
+            self.assertIn("broker wallet is not authorized", replies[-1])
+            self.assertFalse(any("Submission relayed" in reply for reply in replies))
+            with store.session() as conn:
+                row = conn.execute("SELECT * FROM submissions WHERE xmtp_message_id = ?", ("index-failure",)).fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row["status"], "index_failed")
+            self.assertEqual(row["bundle_cid"], "bafyfakebugbundle")
+            self.assertIn("broker wallet is not authorized", row["error"])
+
+    def test_submission_dry_run_skips_signal_relay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            signal = FakeSignal()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=signal,
+                token=FakeToken(balance=2 * 10**18),
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(dry_run=True),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch("cheapbugs_broker.service.verify_authorized_bug_bundle", return_value=fake_verified_bundle()):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="dry-run",
+                        reply=reply,
+                    )
+                )
+
+            self.assertIn("Bug index dry-run complete", replies[6])
+            self.assertIn("Submission complete", replies[7])
+            self.assertFalse(hasattr(signal, "last_message"))
+            with store.session() as conn:
+                row = conn.execute("SELECT * FROM submissions WHERE xmtp_message_id = ?", ("dry-run",)).fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row["status"], "dry_run")
+            self.assertTrue(str(row["index_tx_hash"]).startswith("dry-run:publishBug:"))
 
     def test_access_request_replies_without_signal_support(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -494,6 +606,7 @@ class BrokerServiceTest(unittest.TestCase):
                 signal=None,
                 token=FakeToken(balance=2 * 10**18),
                 ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
             )
 
             async def reply(message: str) -> None:
@@ -871,6 +984,7 @@ def test_config(path: Path, signal_enabled: bool = True) -> BrokerConfig:
         review_window_seconds=7,
         poll_seconds=30,
         dry_run=True,
+        tx_receipt_timeout_seconds=120,
     )
 
 
@@ -927,6 +1041,44 @@ class FakeIpfs:
     def prime_gateway(self, cid: str) -> bool:
         self.primed_cid = cid
         return False
+
+
+def fake_pinned_bundle(added: IpfsAddResult) -> object:
+    return type(
+        "FakePinnedBundle",
+        (),
+        {
+            "cid": added.cid,
+            "uri": added.uri,
+            "gateway_url": added.gateway_url,
+            "sha256": added.sha256,
+            "details_key_b64": DETAILS_KEY_B64,
+            "details_key_commitment": f"0x{hashlib.sha256(DETAILS_KEY).hexdigest()}",
+            "encrypted_details_hash": "0x" + "2" * 64,
+            "pinned_at": 100,
+        },
+    )()
+
+
+class FakeBugIndex:
+    def __init__(self, *, dry_run: bool = False, error: Exception | None = None):
+        self.dry_run = dry_run
+        self.error = error
+        self.last_command: SubmissionCommand | None = None
+        self.last_bundle: object | None = None
+
+    def publish_bug(self, command: SubmissionCommand, verified: VerifiedBugBundle, bug_bundle: object) -> BugIndexPublishResult:
+        self.last_command = command
+        self.last_bundle = bug_bundle
+        if self.error is not None:
+            raise self.error
+        return BugIndexPublishResult(
+            report_hash=verified.report_hash,
+            tx_hash=f"dry-run:publishBug:{verified.report_hash}" if self.dry_run else "0x" + "a" * 64,
+            dry_run=self.dry_run,
+            block_number=None if self.dry_run else 12345,
+            index_address=WALLET,
+        )
 
 
 if __name__ == "__main__":

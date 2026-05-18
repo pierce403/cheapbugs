@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "bots"))
 
 from cheapbugs_broker.config import BrokerConfig
+from cheapbugs_broker.bug_index import BugIndexClient
 from cheapbugs_broker.ipfs import KuboIpfsClient
 from cheapbugs_broker.logging_setup import configure_logging
 from cheapbugs_broker.service import BrokerBot
@@ -35,7 +36,15 @@ def build_bot(config: BrokerConfig, *, ipfs: KuboIpfsClient | None = None) -> Br
         broker_key=config.broker_key,
         dry_run=config.dry_run,
     )
-    return BrokerBot(config=config, store=store, signal=signal, token=token, ipfs=ipfs)
+    bug_index = BugIndexClient(
+        rpc_url=config.base_rpc_url,
+        index_address=config.bug_index_address,
+        broker_key=config.broker_key,
+        chain_id=config.chain_id,
+        dry_run=config.dry_run,
+        receipt_timeout_seconds=config.tx_receipt_timeout_seconds,
+    )
+    return BrokerBot(config=config, store=store, signal=signal, token=token, ipfs=ipfs, bug_index=bug_index)
 
 
 def main() -> int:

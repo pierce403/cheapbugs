@@ -10,6 +10,7 @@ from pathlib import Path
 
 DEFAULT_BASE_RPC_URL = "https://mainnet.base.org"
 DEFAULT_BUGZ_TOKEN_ADDRESS = "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07"
+DEFAULT_BUG_INDEX_ADDRESS = "0x515FDbc9876aC26870794E26605c7DD04c18679b"
 DEFAULT_IPFS_API_URL = "http://127.0.0.1:5001"
 DEFAULT_IPFS_GATEWAY_URL = "https://ipfs.io/ipfs"
 
@@ -82,6 +83,7 @@ class BrokerConfig:
     review_window_seconds: int
     poll_seconds: int
     dry_run: bool
+    tx_receipt_timeout_seconds: int
 
     @property
     def signal_enabled(self) -> bool:
@@ -111,7 +113,7 @@ class BrokerConfig:
             base_rpc_url=_env_first("BASE_RPC_URL", default=DEFAULT_BASE_RPC_URL),
             bugz_token_address=_env_first("BUGZ_TOKEN_ADDRESS", default=DEFAULT_BUGZ_TOKEN_ADDRESS),
             chain_id=_env_int_any(("BROKER_CHAIN_ID", "CHAIN_ID"), 8453),
-            bug_index_address=_env_first("BROKER_BUG_INDEX_ADDRESS", "VITE_BUG_INDEX_ADDRESS"),
+            bug_index_address=_env_first("BROKER_BUG_INDEX_ADDRESS", "VITE_BUG_INDEX_ADDRESS", default=DEFAULT_BUG_INDEX_ADDRESS),
             ipfs_api_url=_env_first("BROKER_IPFS_API_URL", default=DEFAULT_IPFS_API_URL),
             ipfs_gateway_url=_env_first("BROKER_IPFS_GATEWAY_URL", default=DEFAULT_IPFS_GATEWAY_URL),
             ipfs_prime_gateway=_env_bool_any(("BROKER_IPFS_PRIME_GATEWAY",), False),
@@ -125,12 +127,15 @@ class BrokerConfig:
             review_window_seconds=_env_int_any(("BROKER_REVIEW_WINDOW_SECONDS",), 7 * 24 * 60 * 60),
             poll_seconds=_env_int_any(("BROKER_POLL_SECONDS",), 30),
             dry_run=_env_bool_any(("BROKER_DRY_RUN",), False),
+            tx_receipt_timeout_seconds=_env_int_any(("BROKER_TX_RECEIPT_TIMEOUT_SECONDS",), 120),
         )
 
     def require_runtime(self) -> None:
         missing: list[str] = []
         if not self.broker_key:
             missing.append("BROKER_KEY")
+        if not self.dry_run and not self.bug_index_address:
+            missing.append("BROKER_BUG_INDEX_ADDRESS")
         if self.signal_enabled and not self.signal_account:
             missing.append("BROKER_SIGNAL_ACCOUNT")
         if self.signal_enabled and not self.signal_group_id:

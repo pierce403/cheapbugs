@@ -134,6 +134,10 @@ const isSignatureSettledProgress = (message: string): boolean =>
   );
 
 const isIpfsConfirmationProgress = (message: string): boolean => /Encrypted BugBundle pinned to IPFS:\s*ipfs:\/\//i.test(message);
+const isOnchainPublishProgress = (message: string): boolean =>
+  /Submission complete:.*(?:Bug published onchain|Bug already exists onchain):/i.test(message);
+const isDryRunCompletionProgress = (message: string): boolean =>
+  /Submission complete:.*Bug index dry-run complete:/i.test(message);
 
 const signatureWaitDetailForProgress = (message: string): string =>
   isBrokerSignatureWaitProgress(message)
@@ -325,9 +329,15 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         setSignatureWait(false);
       }
 
-      if (isIpfsConfirmationProgress(message)) {
+      if (isOnchainPublishProgress(message)) {
         setProcessing(true, message, true);
-        setStatus("sent", "broker: IPFS live", message);
+        setStatus("sent", "broker: onchain live", message);
+      } else if (isDryRunCompletionProgress(message)) {
+        setProcessing(true, message, true);
+        setStatus("sent", "broker: dry run complete", message);
+      } else if (isIpfsConfirmationProgress(message)) {
+        setProcessing(true, message);
+        setStatus("working", "broker: IPFS pinned", message);
       } else {
         setProcessing(true, message);
         setStatus("working", "xmtp: sending", message);
@@ -393,11 +403,13 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         const result = await sendBrokerSubmission(xmtpIdentity, input, (message) => {
           root.dispatchEvent(new CustomEvent(XMTP_PROGRESS_EVENT, { detail: { message } }));
         });
-        const successDetail = result.ipfsUri
-          ? `BugBundle is live on IPFS: ${result.ipfsUri}. Broker message ${result.messageId} was sent.`
-          : `Broker message ${result.messageId} sent and the broker confirmed the BugBundle is live on IPFS.`;
+        const successDetail = result.dryRun
+          ? `Broker dry-run completed for report ${result.reportHash ?? "unknown"}; no onchain transaction was sent. Set BROKER_DRY_RUN=0 for live publishing.`
+          : result.txHash
+            ? `Bug report ${result.reportHash ?? "unknown"} published onchain in transaction ${result.txHash}.${result.ipfsUri ? ` BugBundle: ${result.ipfsUri}.` : ""}`
+            : `Broker message ${result.messageId} sent and the broker confirmed the report is published.`;
         setProcessing(true, successDetail, true);
-        setStatus("sent", "broker: IPFS live", successDetail);
+        setStatus("sent", result.dryRun ? "broker: dry run complete" : "broker: onchain live", successDetail);
         terminalModalShown = true;
         form.reset();
         appLog.info("submit: broker submission sent", result);

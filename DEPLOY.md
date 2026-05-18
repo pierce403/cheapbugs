@@ -140,7 +140,7 @@ If you publish the app itself to IPFS, validate your gateway and asset-path beha
 
 ## Operational Notes
 
-- The smart contracts cover the planned onchain mechanics for bonding, slashing, detail-key payment records, broker-published reports, bonded voting, details-key reveal, and ordered treasury payouts. The full production system is not ready until the broker submits accepted XMTP/IPFS submissions to `CheapBugsBugIndex.publishBug`, live XMTP smoke tests pass, and operational keys/funding are finalized.
+- The smart contracts cover the planned onchain mechanics for bonding, slashing, detail-key payment records, broker-published reports, bonded voting, details-key reveal, and ordered treasury payouts. The broker now submits accepted XMTP/IPFS submissions to `CheapBugsBugIndex.publishBug` when `BROKER_DRY_RUN=0`; the full production system still needs live XMTP smoke tests and finalized operational key/funding procedures.
 - Deployment manifests under `deployments/` are intentionally tracked reproducibility records. `artifacts/`, `out/`, `cache/`, and `broadcast/` remain transient Foundry/launcher output unless a future task explicitly says otherwise.
 - Public report metadata is immutable once written onchain.
 - Private report details stay encrypted, but the encrypted blob CID is public because it is stored onchain.

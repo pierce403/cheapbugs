@@ -179,8 +179,22 @@ test("submit route shows a processing modal during broker submission progress", 
 
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("ipfs://bafybrokerbundle");
+  await expect(dialog).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByTestId("xmtp-status")).toContainText("broker: IPFS pinned");
+
+  await page.locator("[data-view-root]").evaluate((root) => {
+    root.dispatchEvent(
+      new CustomEvent("cheapbugs:xmtp-progress", {
+        detail: {
+          message:
+            "broker: Submission complete: Bug published onchain: report 0x1111111111111111111111111111111111111111111111111111111111111111 tx 0x2222222222222222222222222222222222222222222222222222222222222222. Signal is not configured."
+        }
+      })
+    );
+  });
+
   await expect(dialog).toHaveAttribute("aria-busy", "false");
-  await expect(page.getByTestId("xmtp-status")).toContainText("broker: IPFS live");
+  await expect(page.getByTestId("xmtp-status")).toContainText("broker: onchain live");
   await dialog.getByRole("button", { name: "close" }).click();
   await expect(dialog).toBeHidden();
 });

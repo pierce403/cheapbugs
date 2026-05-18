@@ -10,7 +10,7 @@ The current contract-side claim is:
 
 > A bug-index record attributed to a reporter can only be created by an owner-authorized broker that includes a valid reporter EIP-712 signature over the canonical publish commitment.
 
-The browser and Python broker now produce and verify that EIP-712 publish envelope before IPFS pinning. The remaining live relay work is for the broker to submit accepted records to the index after pinning.
+The browser and Python broker now produce and verify that EIP-712 publish envelope before IPFS pinning, and the broker relays accepted records to the index after pinning when `BROKER_DRY_RUN=0`.
 
 ## Current Implemented Guarantees
 
@@ -32,6 +32,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The broker sends staged plain text XMTP status messages after successful validation stages.
 - The broker pins the verified encrypted BugBundle through local Kubo without adding broker status fields to the payload.
 - The pinned bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
+- After IPFS pinning, the broker publishes the signed report to `CheapBugsBugIndex.publishBug`, checks the broker role and gas funding before broadcast, waits for a receipt, and records the report hash and transaction hash in SQLite. `BROKER_DRY_RUN=1` skips the broadcast and Signal relay while still exercising validation and IPFS pinning.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
 ## Reporter-Signed Broker Relay
@@ -50,8 +51,6 @@ Current and required properties:
 - The contract stores the bundle CID/commitments and details-key commitment when the broker registers the report.
 - The contract accepts the details key only after the 7-day judgment period and only when it matches the stored key commitment.
 - If contract wallets are supported, the relay path must support EIP-1271 signature validation.
-
-The broker still must not create live bug-index records until its accepted-submission path actually sends the verified `publish_authorization` to `CheapBugsBugIndex.publishBug` after IPFS pinning.
 
 ## Trust Boundaries
 
@@ -130,7 +129,7 @@ The broker still must not create live bug-index records until its accepted-submi
 ## Known Gaps
 
 - The broker IPFS pinning path verifies submitter-built encrypted EIP-712-authorized bundles, but dedicated negative tests still need to be expanded for mismatched details keys and undecryptable details.
-- The broker has not yet been wired to EAS submission or bug-index relay for accepted XMTP submissions.
+- The broker has not yet been wired to EAS submission attestations for accepted XMTP submissions.
 - EIP-1271 contract-wallet reporter signatures are not implemented.
 - Live XMTP broker smoke tests are manual.
 - Reviewer trust is frontend-enforced through an allowlist and should move to an onchain or resolver-backed trust model.

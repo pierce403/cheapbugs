@@ -287,7 +287,7 @@ const waitForXmtpReply = async (
     await stream?.return?.().catch(() => undefined);
   }
 
-  throw new Error(`Timed out waiting ${Math.round(timeoutMs / 1000)} seconds for broker IPFS confirmation.`);
+  throw new Error(`Timed out waiting ${Math.round(timeoutMs / 1000)} seconds for broker completion confirmation.`);
 };
 
 export const connectBrowserXmtp = async (

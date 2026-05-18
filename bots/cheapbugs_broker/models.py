@@ -80,6 +80,9 @@ class SubmissionRecord:
     details_key_commitment: str | None
     encrypted_details_hash: str | None
     bundle_pinned_at: int | None
+    report_hash: str | None
+    index_tx_hash: str | None
+    index_published_at: int | None
     error: str | None
 
 

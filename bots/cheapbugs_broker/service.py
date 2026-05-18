@@ -11,6 +11,7 @@ from dataclasses import replace
 from decimal import Decimal
 
 from .bugbundle import BugBundleError, VerifiedBugBundle, verify_authorized_bug_bundle
+from .bug_index import BugIndexPublishError, BugIndexPublishResult
 from .commands import (
     CommandError,
     SUBMISSION_SCHEMA,
@@ -37,6 +38,7 @@ class BrokerBot:
         signal: SignalCli | None,
         token: BugzTokenClient,
         ipfs=None,
+        bug_index=None,
         logger: logging.Logger | None = None,
     ):
         self.config = config
@@ -44,6 +46,7 @@ class BrokerBot:
         self.signal = signal
         self.token = token
         self.ipfs = ipfs
+        self.bug_index = bug_index
         self.logger = logger or logging.getLogger(__name__)
 
     async def handle_xmtp_text(
@@ -263,11 +266,83 @@ class BrokerBot:
             f"Encrypted BugBundle pinned to IPFS: {bug_bundle.uri}.",
         )
 
+        try:
+            publish_result = self._publish_bug_to_index(command, verified_bundle, bug_bundle)
+        except Exception as exc:
+            if isinstance(exc, BugIndexPublishError):
+                self.logger.info(
+                    "submission bug-index publish failed message_id=%s reporter=%s report_hash=%s bundle_cid=%s reason=%s",
+                    message_id,
+                    command.reporter_address,
+                    verified_bundle.report_hash,
+                    bug_bundle.cid,
+                    exc,
+                )
+            else:
+                self.logger.exception(
+                    "submission bug-index publish crashed message_id=%s reporter=%s report_hash=%s bundle_cid=%s",
+                    message_id,
+                    command.reporter_address,
+                    verified_bundle.report_hash,
+                    bug_bundle.cid,
+                )
+            record = self.store.create_submission(
+                command=command,
+                xmtp_conversation_id=conversation_id,
+                xmtp_message_id=message_id,
+                signal_group_id=self.config.signal_group_id or "signal-disabled",
+                signal_message_timestamp=0,
+                review_window_seconds=0,
+                status="index_failed",
+                bug_bundle=bug_bundle,
+                report_hash=verified_bundle.report_hash,
+                error=str(exc),
+            )
+            self.store.mark_message_processed(message_id, "index_failed")
+            await self._reply(
+                reply,
+                message_id,
+                "index_failed",
+                "Bug index publish failed: "
+                f"{exc}. The encrypted BugBundle remains pinned at {bug_bundle.uri}. Broker id: {record.id}.",
+            )
+            return
+
+        await self._reply(reply, message_id, "bug_index_published", _publish_progress_message(publish_result))
+
+        if publish_result.dry_run:
+            record = self.store.create_submission(
+                command=command,
+                xmtp_conversation_id=conversation_id,
+                xmtp_message_id=message_id,
+                signal_group_id="dry-run",
+                signal_message_timestamp=0,
+                review_window_seconds=0,
+                status="dry_run",
+                bug_bundle=bug_bundle,
+                report_hash=publish_result.report_hash,
+                index_tx_hash=publish_result.tx_hash,
+                index_published_at=int(time.time()),
+            )
+            self.store.mark_message_processed(message_id, "submission_dry_run")
+            await self._reply(
+                reply,
+                message_id,
+                "submission_dry_run",
+                "Submission complete: "
+                f"{_publish_progress_message(publish_result)} No Signal relay was sent. "
+                "Set BROKER_DRY_RUN=0 to publish live on Base. "
+                f"Broker id: {record.id}.",
+            )
+            return
+
         if self.signal is None:
             self.logger.info(
-                "submission accepted without signal message_id=%s reporter=%s bundle_cid=%s",
+                "submission published without signal message_id=%s reporter=%s report_hash=%s tx=%s bundle_cid=%s",
                 message_id,
                 command.reporter_address,
+                publish_result.report_hash,
+                publish_result.tx_hash,
                 bug_bundle.cid,
             )
             record = self.store.create_submission(
@@ -277,8 +352,11 @@ class BrokerBot:
                 signal_group_id="signal-disabled",
                 signal_message_timestamp=0,
                 review_window_seconds=0,
-                status="accepted",
+                status="published",
                 bug_bundle=bug_bundle,
+                report_hash=publish_result.report_hash,
+                index_tx_hash=publish_result.tx_hash,
+                index_published_at=int(time.time()),
             )
             self.store.mark_message_processed(message_id, "submission_signal_disabled")
             self.logger.info(
@@ -290,19 +368,49 @@ class BrokerBot:
                 reply,
                 message_id,
                 "submission_signal_disabled",
-                "Signal is not configured, so this submission was validated and recorded locally "
+                "Submission complete: "
+                f"{_publish_progress_message(publish_result)} Signal is not configured, so this submission was recorded locally "
                 f"but not relayed to a reviewer channel. Broker id: {record.id}.",
             )
             return
 
         signal_message = format_signal_submission(command, bug_bundle)
         self.logger.info(
-            "submission relay to signal message_id=%s reporter=%s bundle_cid=%s",
+            "submission relay to signal message_id=%s reporter=%s report_hash=%s tx=%s bundle_cid=%s",
             message_id,
             command.reporter_address,
+            publish_result.report_hash,
+            publish_result.tx_hash,
             bug_bundle.cid,
         )
-        sent = self.signal.send_group_message(signal_message)
+        try:
+            sent = self.signal.send_group_message(signal_message)
+        except Exception as exc:
+            self.logger.exception("submission signal relay failed after index publish message_id=%s", message_id)
+            record = self.store.create_submission(
+                command=command,
+                xmtp_conversation_id=conversation_id,
+                xmtp_message_id=message_id,
+                signal_group_id=self.config.signal_group_id,
+                signal_message_timestamp=0,
+                review_window_seconds=0,
+                status="signal_failed",
+                bug_bundle=bug_bundle,
+                report_hash=publish_result.report_hash,
+                index_tx_hash=publish_result.tx_hash,
+                index_published_at=int(time.time()),
+                error=str(exc),
+            )
+            self.store.mark_message_processed(message_id, "signal_failed")
+            await self._reply(
+                reply,
+                message_id,
+                "signal_failed",
+                "Submission complete: "
+                f"{_publish_progress_message(publish_result)} Signal relay failed after onchain publish: {exc}. "
+                f"Broker id: {record.id}.",
+            )
+            return
         record = self.store.create_submission(
             command=command,
             xmtp_conversation_id=conversation_id,
@@ -311,6 +419,9 @@ class BrokerBot:
             signal_message_timestamp=sent.sent_timestamp,
             review_window_seconds=self.config.review_window_seconds,
             bug_bundle=bug_bundle,
+            report_hash=publish_result.report_hash,
+            index_tx_hash=publish_result.tx_hash,
+            index_published_at=int(time.time()),
         )
         self.store.mark_message_processed(message_id, "submission")
         self.logger.info(
@@ -323,7 +434,8 @@ class BrokerBot:
             reply,
             message_id,
             "submission",
-            "Submission relayed to the private Signal channel. "
+            "Submission complete: "
+            f"{_publish_progress_message(publish_result)} Submission relayed to the private Signal channel. "
             f"BugBundle: {bug_bundle.uri}. Broker id: {record.id}. Reward window closes after "
             f"{self.config.review_window_seconds // 86400} days.",
         )
@@ -353,6 +465,25 @@ class BrokerBot:
             encrypted_details_hash=verified.encrypted_details_hash,
             pinned_at=now,
         )
+
+    def _publish_bug_to_index(
+        self,
+        command: SubmissionCommand,
+        verified: VerifiedBugBundle,
+        bug_bundle: PinnedBugBundle,
+    ) -> BugIndexPublishResult:
+        if self.bug_index is None:
+            raise BugIndexPublishError("Bug index publisher is not configured in the broker runtime.")
+        result = self.bug_index.publish_bug(command, verified, bug_bundle)
+        self.logger.info(
+            "bug published to index reporter=%s report_hash=%s tx=%s dry_run=%s already_published=%s",
+            command.reporter_address,
+            result.report_hash,
+            result.tx_hash,
+            result.dry_run,
+            result.already_published,
+        )
+        return result
 
     async def _reply(self, reply: ReplyFn, message_id: str, stage: str, message: str) -> None:
         self.logger.info("xmtp status queued message_id=%s stage=%s chars=%s", message_id, stage, len(message))
@@ -444,6 +575,20 @@ class BrokerBot:
             except Exception:
                 self.logger.exception("Settlement sweep failed.")
             await asyncio.sleep(max(self.config.poll_seconds, 60))
+
+
+def _publish_progress_message(result: BugIndexPublishResult) -> str:
+    if result.dry_run:
+        return (
+            "Bug index dry-run complete: "
+            f"report {result.report_hash} would publish to {result.index_address}; "
+            "no onchain transaction was sent because BROKER_DRY_RUN=1."
+        )
+    if result.already_published:
+        return f"Bug already exists onchain: report {result.report_hash}."
+    block = f" block {result.block_number}" if result.block_number is not None else ""
+    return f"Bug published onchain: report {result.report_hash} tx {result.tx_hash}{block}."
+
 
 def format_signal_submission(command: SubmissionCommand, bug_bundle: PinnedBugBundle | None = None) -> str:
     title = _compact(command.title, 140)

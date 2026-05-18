@@ -45,8 +45,8 @@ cheapbugs/
 - BUGZ bonds are held in `CheapBugsBondVault`; pending withdrawals remain slashable through the 7-day delay.
 - Detail-key purchases and ordered broker rewards settle through `CheapBugsTreasuryVault`.
 - The vaults hardcode the live Base BUGZ token address `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`; this repo no longer deploys a BUGZ token contract.
-- XMTP broker submissions are private XMTP DMs to the broker; the browser builds an encrypted `BugBundle`, signs a contract-verifiable EIP-712 `PublishBug` authorization, sends the out-of-bundle reveal key to the broker, and the broker verifies then pins the bundle through a local Kubo IPFS node.
-- The remaining broker publishing path work is the broker transaction that calls `CheapBugsBugIndex.publishBug` after IPFS pinning and later reveals the details key through the bug index.
+- XMTP broker submissions are private XMTP DMs to the broker; the browser builds an encrypted `BugBundle`, signs a contract-verifiable EIP-712 `PublishBug` authorization, sends the out-of-bundle reveal key to the broker, and the broker verifies, pins the bundle through local Kubo IPFS, then calls `CheapBugsBugIndex.publishBug`.
+- The remaining broker lifecycle work is post-window details-key reveal and ordered payout completion through the bug index.
 - Reviewer verdicts are EAS attestations on Base and are read through EAS GraphQL.
 - The Python broker is an optional off-static runtime with SQLite state; it does not change the frontend deployment model.
 
@@ -173,20 +173,22 @@ cheapbugs/
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, broker-triage target defaults, client metadata, an encrypted `bug_bundle`, a reporter EIP-712 `publish_authorization`, and an out-of-bundle `details_key`.
   - The frontend generates the random details key, encrypts details into the BugBundle with AES-256-GCM, hashes the canonical BugBundle core, and signs the `PublishBug` EIP-712 message that the index verifies.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
-  - The submit route shows a processing-submission modal while broker XMTP submission work is in progress, keeps it open across broker status replies, and only marks the submission complete after the broker confirms the BugBundle is pinned to IPFS.
+  - The submit route shows a processing-submission modal while broker XMTP submission work is in progress, keeps it open across broker status replies, treats IPFS pinning as progress, and only marks the submission complete after the broker confirms live onchain publication or an explicit broker dry run.
   - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve either XMTP registration or the `PublishBug` authorization signature.
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
   - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.
   - The broker verifies the BugBundle and publish authorization before pinning: schema, fields, reporter/broker/chain/index binding, EIP-712 signature recovery, key commitment, encrypted details hash, AAD, and successful details decryption.
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid or missing publish authorizations, invalid provided target references, and invalid reporter credentials.
-  - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, publish authorization/details valid, target valid, credentials valid.
+  - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, publish authorization/details valid, target valid, credentials valid, IPFS pinned, and bug-index published or dry-run complete.
+  - After IPFS pinning, the broker maps the verified `PublishBug` authorization and pinned BugBundle URI into `CheapBugsBugIndex.publishBug`, checks broker authorization and gas funding before broadcast, waits for a receipt, and records the report hash plus index transaction hash in SQLite.
+  - If bug-index publication fails after IPFS pinning, the broker records an `index_failed` submission with the pinned CID and returns an XMTP error that includes the actionable publish failure.
   - Broker status messages intentionally avoid XMTP reply-content encoding so the submission flow does not depend on nonessential reply-content codec behavior.
-  - After sending the submission DM, the browser waits for broker plain text replies in the same XMTP conversation. `Encrypted BugBundle pinned to IPFS: ipfs://...` is treated as terminal success; target, credential, JSON, or IPFS failure replies are terminal errors.
+  - After sending the submission DM, the browser waits for broker plain text replies in the same XMTP conversation. `Submission complete: Bug published onchain...`, `Submission complete: Bug already exists onchain...`, or `Submission complete: Bug index dry-run complete...` is treated as terminal success; target, credential, JSON, IPFS, or bug-index publish failure replies are terminal errors.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:
-  - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, and credential failure.
-  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, field ordering, PublishBug-signature wait modal, and structured XMTP submit UI including the IPFS-confirmation modal state.
+  - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, credential failure, bug-index publish call shaping, publish failures, and dry-run handling.
+  - [x] Playwright covers the default broker wallet, inline XMTP status, disconnected submit feedback, field ordering, PublishBug-signature wait modal, and structured XMTP submit UI including IPFS-progress and onchain-completion modal states.
   - [x] Browser and broker code create and verify the EIP-712 `PublishBug` envelope required by the bug index.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
 
@@ -199,7 +201,7 @@ cheapbugs/
   - The bundle includes public fields such as reporter, broker, chain id, reveal timing, title, public summary, `bug_type`, `severity`, and `target_interest`.
   - The bundle includes the encrypted `details` ciphertext and encryption metadata, but never the details key.
   - Current implementation has the submitter generate the random details key, encrypt the details, sign the `PublishBug` authorization over the bundle hash and commitments, and send the bundle plus out-of-bundle details key to the broker over XMTP.
-  - The broker verifies the EIP-712 authorization, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, then pins the encrypted bundle payload to IPFS without adding broker status fields.
+  - The broker verifies the EIP-712 authorization, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, pins the encrypted bundle payload to IPFS without adding broker status fields, then publishes the signed report commitment to the bug index unless `BROKER_DRY_RUN=1`.
   - Broker pinning uses a locally running Kubo HTTP API. `BROKER_IPFS_API_URL` defaults to `http://127.0.0.1:5001`.
   - On broker startup, the `run` command checks Kubo `/api/v0/version` and verifies `/api/v0/add` accepts write requests using a tiny unpinned probe.
   - `BROKER_IPFS_GATEWAY_URL` defaults to the frontend's current `https://ipfs.io/ipfs` gateway. `BROKER_IPFS_PRIME_GATEWAY=1` performs a best-effort gateway fetch after pinning, but gateway caching is not durable and can fail when the local node is not publicly reachable through the IPFS swarm.
@@ -228,13 +230,14 @@ cheapbugs/
   - The contract prevents replay through used reporter nonces, broker binding, EIP-712 domain binding, signature deadlines, and duplicate report hashes.
   - XMTP sender identity is useful broker-side evidence, but it is not enough for the smart-contract-level anti-forgery claim.
   - Private plaintext details must never be placed onchain; onchain records should contain public metadata, IPFS CIDs, commitments, content hashes, and post-window details keys only.
-  - The browser and Python broker now create and verify the contract EIP-712 publish signature; the remaining live path is for the broker to submit the verified record to the index after pinning.
+  - The browser and Python broker now create, verify, and relay the contract EIP-712 publish signature to the index after IPFS pinning. `BROKER_DRY_RUN=1` verifies the path and records local state without broadcasting or relaying to Signal.
 - **Test Criteria**:
   - [x] Contract tests prove a broker cannot submit a forged report for an arbitrary reporter.
   - [x] Contract tests prove valid reporter signatures are accepted through the broker-relay path.
   - [x] Contract tests prove wrong broker, expired/deadline, and replayed submissions fail.
   - [x] Browser tests cover the signature prompt state.
   - [x] Broker tests verify signed envelopes before IPFS pinning.
+  - [x] Broker tests cover shaping the verified authorization into `publishBug`, recording publish failures after IPFS pinning, and dry-run behavior.
 
 ### Python Broker Bot
 
@@ -242,7 +245,7 @@ cheapbugs/
 - **Description**: Optional Python runtime receives website-initiated JSON commands over XMTP, validates broker flows, optionally relays accepted submissions to a private Signal group, stores broker state in SQLite, tracks Signal reactions, and pays BUGZ rewards when Signal is configured.
 - **Properties**:
   - The broker has three distinct incoming XMTP message flows, all initiated by interaction with the main website and sent as strict JSON commands over XMTP.
-  - Publisher flow: the currently active work path where a submitter sends a bug submission to the broker for validation, staged status replies, broker-managed review-key handling, and future publish/pin/attestation/registry work.
+  - Publisher flow: the currently active work path where a submitter sends a bug submission to the broker for validation, staged status replies, broker-managed review-key handling, IPFS pinning, and bug-index publication.
   - Seller flow: planned, not implemented. A user on the site requests access to preview a bug that is still inside its judging period. The broker will validate the request, enforce the relevant eligibility/payment/access rules, and return access status over XMTP.
   - Bouncer flow: planned, partially represented by existing access-request command handling. A user on the site requests access to the special Signal group. The broker validates credentials and, when Signal is configured, grants or denies group access.
   - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`.
@@ -257,7 +260,7 @@ cheapbugs/
   - The broker runner temporarily shims `xmtp==0.1.6` wrapper calls and renamed bindings symbols to the updated bindings surface, avoiding a local XMTP DB wipe for that package mismatch.
   - The broker runner patches XMTP agent stream shutdown so a stream error cannot recursively cancel the currently running stream task and hide the original error.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
-  - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; disable it only when the broker wallet is intentionally funded for live payouts.
+  - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; while enabled, accepted submissions verify and pin but skip the `publishBug` transaction and Signal relay. Set it to `0` only when the broker wallet is intentionally funded for live index publishing and payouts.
   - SQLite tracks processed XMTP message IDs, relayed submissions, BugBundle CIDs and details keys, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
   - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ`.
   - Live payouts spend from the broker wallet and should run only from an intentionally funded wallet.
