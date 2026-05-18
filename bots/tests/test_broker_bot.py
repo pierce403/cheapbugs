@@ -319,7 +319,7 @@ class BugIndexPublishTest(unittest.TestCase):
         self.assertEqual(bug_input[9], "")
         self.assertEqual(bug_input[13], verified.details_key_commitment)
         self.assertEqual(nonce, 7)
-        self.assertEqual(deadline, 1768694400)
+        self.assertEqual(deadline, 1779062400)
         self.assertTrue(signature.startswith("0x"))
 
 
@@ -788,7 +788,7 @@ def fake_publish_authorization(core: object) -> dict[str, object]:
             "reportHash": "0x" + "1" * 64,
             "reportIdHash": "0x" + "2" * 64,
             "reporter": core["reporter"],
-            "createdAt": 1768608000,
+            "createdAt": 1778976000,
             "disclosureMode": 0,
             "publicSummaryHash": "0x" + "3" * 64,
             "targetKind": 5,
@@ -798,9 +798,9 @@ def fake_publish_authorization(core: object) -> dict[str, object]:
             "bugBundleHash": canonical_sha256(core),
             "encryptedDetailsHash": commitments["encrypted_details_sha256"],
             "detailsKeyCommitment": commitments["details_key_commitment"],
-            "revealAfter": 1769212800,
+            "revealAfter": 1779580800,
             "nonce": 7,
-            "deadline": 1768694400,
+            "deadline": 1779062400,
             "broker": core["broker"],
         },
         "value": "0x" + "1" * 130,
@@ -899,7 +899,7 @@ def real_signed_submission_payload(reporter: str, account: object, aesgcm_cls: o
         "reportHash": report_hash,
         "reportIdHash": f"0x{keccak(text=report_id).hex()}",
         "reporter": reporter,
-        "createdAt": 1768608000,
+        "createdAt": 1778976000,
         "disclosureMode": 0,
         "publicSummaryHash": f"0x{keccak(text=submission['public_summary']).hex()}",
         "targetKind": 0,
@@ -909,9 +909,9 @@ def real_signed_submission_payload(reporter: str, account: object, aesgcm_cls: o
         "bugBundleHash": core_sha256,
         "encryptedDetailsHash": core["commitments"]["encrypted_details_sha256"],
         "detailsKeyCommitment": core["commitments"]["details_key_commitment"],
-        "revealAfter": 1769212800,
+        "revealAfter": 1779580800,
         "nonce": 42,
-        "deadline": 1768694400,
+        "deadline": 1779062400,
         "broker": BROKER,
     }
     domain = {

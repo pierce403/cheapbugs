@@ -7,6 +7,7 @@ from cheapbugs_broker.xmtp_runner import (
     patch_xmtp_agent_stream_stop,
     patch_xmtp_backend_connector,
     patch_xmtp_client_factory,
+    patch_xmtp_register_identity,
     patch_xmtp_subscribe_error_type,
     plain_text_status_sender,
 )
@@ -106,6 +107,15 @@ class BackendConnectorCompatTest(unittest.TestCase):
         self.assertTrue(isinstance(FakeBindings.FfiError("stream failed"), bindings.FfiSubscribeError))
         self.assertTrue(isinstance(FakeBindings.InternalError("stream failed"), bindings.FfiSubscribeError))
 
+    def test_patch_bridges_optional_register_identity_options(self) -> None:
+        bindings = FakeBindings()
+
+        self.assertTrue(patch_xmtp_register_identity(bindings))
+        client = bindings.FfiXmtpClient()
+        asyncio.run(client.register_identity("signature-request"))
+
+        self.assertEqual(client.register_calls, [("signature-request", None)])
+
     def test_patch_stream_stop_does_not_cancel_current_stream_task(self) -> None:
         async def run_test() -> None:
             agent = FakeAgent()
@@ -159,6 +169,13 @@ class FakeBindings:
             self.encryption_key = encryption_key
             self.max_db_pool_size = max_db_pool_size
             self.min_db_pool_size = min_db_pool_size
+
+    class FfiXmtpClient:
+        def __init__(self) -> None:
+            self.register_calls: list[tuple[object, object]] = []
+
+        async def register_identity(self, signature_request: object, visibility_confirmation_options: object) -> None:
+            self.register_calls.append((signature_request, visibility_confirmation_options))
 
     async def connect_to_backend(
         self,

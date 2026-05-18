@@ -13,7 +13,7 @@ from .service import BrokerBot
 
 
 def patch_xmtp_backend_connector(native_bindings: Any) -> bool:
-    """Bridge xmtp 0.1.6's client wrapper to the updated bindings connector."""
+    """Bridge old xmtp wrapper calls when bindings drift to a newer connector."""
 
     original = getattr(native_bindings, "connect_to_backend", None)
     if original is None:
@@ -38,8 +38,33 @@ def patch_xmtp_backend_connector(native_bindings: Any) -> bool:
     return True
 
 
+def patch_xmtp_register_identity(native_bindings: Any) -> bool:
+    """Bridge old xmtp wrapper calls when bindings add register options."""
+
+    client_cls = getattr(native_bindings, "FfiXmtpClient", None)
+    if client_cls is None:
+        return False
+    original = getattr(client_cls, "register_identity", None)
+    if original is None or getattr(original, "_cheapbugs_patched", False):
+        return False
+
+    try:
+        parameter_count = len(inspect.signature(original).parameters)
+    except (TypeError, ValueError):
+        return False
+    if parameter_count != 3:
+        return False
+
+    async def register_identity_compat(self: Any, signature_request: Any, visibility_confirmation_options: Any = None) -> Any:
+        return await original(self, signature_request, visibility_confirmation_options)
+
+    register_identity_compat._cheapbugs_patched = True  # type: ignore[attr-defined]
+    setattr(client_cls, "register_identity", register_identity_compat)
+    return True
+
+
 def patch_xmtp_client_factory(native_bindings: Any) -> bool:
-    """Bridge xmtp 0.1.6's client wrapper to the updated create_client binding."""
+    """Bridge old xmtp wrapper calls when bindings use DbOptions."""
 
     patched = False
     if not hasattr(native_bindings, "FfiSyncWorkerMode") and hasattr(native_bindings, "FfiDeviceSyncMode"):
@@ -122,7 +147,8 @@ def patch_xmtp_native_compat(native_bindings: Any) -> bool:
     subscribe_error_patched = patch_xmtp_subscribe_error_type(native_bindings)
     connector_patched = patch_xmtp_backend_connector(native_bindings)
     factory_patched = patch_xmtp_client_factory(native_bindings)
-    return subscribe_error_patched or connector_patched or factory_patched
+    register_identity_patched = patch_xmtp_register_identity(native_bindings)
+    return subscribe_error_patched or connector_patched or factory_patched or register_identity_patched
 
 
 def patch_xmtp_agent_stream_stop(agent_cls: Any) -> bool:
