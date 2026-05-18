@@ -256,8 +256,8 @@ cheapbugs/
   - The `run` command requires a writable local Kubo IPFS API and fails startup if the Kubo version or add probe fails.
   - `./run-broker.sh debug` enables Python DEBUG logging, Python fault-handler output, Rust XMTP backtraces, `RUST_LOG=debug`, and a default `broker-debug.log`.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
-  - The broker dependency is pinned to `xmtp==0.1.6`, which pulls `xmtp-bindings>=0.1.6`.
-  - The broker runner temporarily shims `xmtp==0.1.6` wrapper calls and renamed bindings symbols to the updated bindings surface, avoiding a local XMTP DB wipe for that package mismatch.
+  - `requirements-broker.txt` currently asks for `xmtp==0.1.6`, but public PyPI showed `xmtp==0.1.5` and `xmtp-bindings==0.1.5` as the latest releases on 2026-05-18; verify the actual broker virtualenv before assuming the runtime matches the requested pin.
+  - The broker runner temporarily shims the Python XMTP wrapper calls and renamed bindings symbols to the updated bindings surface, avoiding a local XMTP DB wipe for that package mismatch.
   - The broker runner patches XMTP agent stream shutdown so a stream error cannot recursively cancel the currently running stream task and hide the original error.
   - `BROKER_KEY` is the single broker wallet key, used for the XMTP identity and BUGZ payouts.
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; while enabled, accepted submissions verify and pin but skip the `publishBug` transaction and Signal relay. Set it to `0` only when the broker wallet is intentionally funded for live index publishing and payouts.
