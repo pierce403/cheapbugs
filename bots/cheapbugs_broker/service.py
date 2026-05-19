@@ -643,9 +643,6 @@ def format_signal_submission(command: SubmissionCommand, bug_bundle: PinnedBugBu
     title = _compact(command.title, 140)
     summary = _compact(command.summary, 600)
     details = _compact(command.details or command.body, 4_000)
-    repro_steps = _compact(command.repro_steps or "-", 1_500)
-    evidence = _compact(command.evidence or "-", 1_500)
-    contact_hints = _compact(command.contact_hints or "-", 800)
     tags = ", ".join(command.tags) if command.tags else "-"
     heading_lines = [
         "[CheapBugs submission]",
@@ -667,15 +664,11 @@ def format_signal_submission(command: SubmissionCommand, bug_bundle: PinnedBugBu
             f"Title: {title}",
         ]
     )
-    return (
-        "\n".join(heading_lines)
-        + "\n\n"
-        f"Summary:\n{summary}\n\n"
-        f"Details:\n{details}\n\n"
-        f"Repro steps:\n{repro_steps}\n\n"
-        f"Evidence:\n{evidence}\n\n"
-        f"Contact hints:\n{contact_hints}"
-    )
+    body_sections = [
+        f"Summary:\n{summary}",
+        f"Details:\n{details}",
+    ]
+    return "\n".join(heading_lines) + "\n\n" + "\n\n".join(body_sections)
 
 
 def _compact(value: str, limit: int) -> str:

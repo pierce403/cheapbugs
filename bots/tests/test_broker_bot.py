@@ -540,6 +540,9 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertIn("Submission complete", replies[7])
             self.assertIn("Submission relayed", replies[7])
             self.assertIn("BugBundle: ipfs://bafyfakebugbundle", signal.last_message)
+            self.assertNotIn("Repro steps:", signal.last_message)
+            self.assertNotIn("Evidence:", signal.last_message)
+            self.assertNotIn("Contact hints:", signal.last_message)
 
     def test_submission_stops_when_bugbundle_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

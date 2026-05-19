@@ -262,6 +262,7 @@ cheapbugs/
   - The `run` command requires a writable local Kubo IPFS API and fails startup if the Kubo version or add probe fails.
   - `./run-broker.sh debug` enables Python DEBUG logging, Python fault-handler output, Rust XMTP backtraces, `RUST_LOG=debug`, and a default `broker-debug.log`.
   - Signal support is optional. When `BROKER_SIGNAL_CLI` is unset, the broker validates XMTP submissions and records accepted submissions locally without Signal relay, reaction syncing, or reward settlement.
+  - Signal relay messages include the report heading, public summary, private details, and BugBundle URI, but omit unused repro, evidence, and contact-hint placeholder sections.
   - The broker dependencies are pinned to `xmtp==0.1.5` and `xmtp-bindings==0.1.5`.
   - Verify the actual broker virtualenv with `.venv-broker/bin/python -m pip show xmtp xmtp-bindings xmtp-agent` before assuming the runtime matches the requested pin.
   - The broker runner keeps guarded native compatibility shims for accidental `xmtp-bindings` drift that changes wrapper-call signatures or renamed bindings symbols, avoiding a local XMTP DB wipe for package mismatch debugging.
