@@ -51,6 +51,12 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
   await expect(page.getByRole("button", { name: "submit to broker" })).toBeEnabled();
   await expect(page.locator("#submit-form label").nth(0)).toContainText("title");
   await expect(page.locator("#submit-form label").nth(1)).toContainText("bug type");
+  await expect(page.getByLabel("title")).toHaveAttribute("minlength", "3");
+  await expect(page.getByLabel("title")).toHaveAttribute("maxlength", "120");
+  await expect(page.getByLabel("public summary")).toHaveAttribute("minlength", "10");
+  await expect(page.getByLabel("public summary")).toHaveAttribute("maxlength", "2000");
+  await expect(page.getByLabel("details")).toHaveAttribute("minlength", "10");
+  await expect(page.getByLabel("details")).toHaveAttribute("maxlength", "12000");
   await expect(page.getByLabel("bug type")).toHaveValue("0day");
   await expect(page.getByLabel("bug type").locator('option[value="web3"]')).toHaveText(
     "web3 : bug in smart contracts, wallets, dapps, or onchain protocols"
@@ -79,6 +85,28 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
   ]) {
     await expect(page.getByText(removedLabel, { exact: true })).toHaveCount(0);
   }
+});
+
+test("submit route validates broker field sizes before wallet checks", async ({ page }) => {
+  await page.goto("/submit");
+
+  await page.getByLabel("title").fill("Parser overflow");
+  await page.getByLabel("public summary").fill("short");
+  await page.getByLabel("details").fill("Private details for the broker only.");
+  await page.getByRole("button", { name: "submit to broker" }).click();
+
+  await expect(page.getByTestId("xmtp-status")).toContainText("form: check fields");
+  await expect(page.getByTestId("xmtp-status")).toContainText(
+    "Public summary must be at least 10 characters after trimming."
+  );
+  await expect(page.getByRole("dialog", { name: "processing submission" })).toBeHidden();
+
+  await page.getByLabel("public summary").fill("Public safe summary for reviewers.");
+  await page.getByLabel("details").fill("tiny");
+  await page.getByRole("button", { name: "submit to broker" }).click();
+
+  await expect(page.getByTestId("xmtp-status")).toContainText("form: check fields");
+  await expect(page.getByTestId("xmtp-status")).toContainText("Details must be at least 10 characters after trimming.");
 });
 
 test("submit route gives inline XMTP feedback when submit is blocked", async ({ page }) => {

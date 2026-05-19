@@ -32,6 +32,41 @@ export type BugType = (typeof BUG_TYPE_OPTIONS)[number]["value"];
 export const SUBMISSION_RATING_VALUES = ["low", "medium", "high", "critical"] as const;
 export type SubmissionRating = (typeof SUBMISSION_RATING_VALUES)[number];
 
+export const SUBMISSION_TEXT_LIMITS = {
+  title: { label: "Title", min: 3, max: 120 },
+  publicSummary: { label: "Public summary", min: 10, max: 2_000 },
+  details: { label: "Details", min: 10, max: 12_000 }
+} as const;
+
+export type SubmissionTextField = keyof typeof SUBMISSION_TEXT_LIMITS;
+
+export type SubmissionTextValidationIssue = {
+  field: SubmissionTextField;
+  message: string;
+};
+
+export type SubmissionTextValues = Record<SubmissionTextField, string>;
+
+export const validateSubmissionTextFields = (input: SubmissionTextValues): SubmissionTextValidationIssue | null => {
+  for (const field of Object.keys(SUBMISSION_TEXT_LIMITS) as SubmissionTextField[]) {
+    const limit = SUBMISSION_TEXT_LIMITS[field];
+    const length = input[field].trim().length;
+    if (length < limit.min) {
+      return {
+        field,
+        message: `${limit.label} must be at least ${limit.min.toLocaleString("en-US")} characters after trimming.`
+      };
+    }
+    if (length > limit.max) {
+      return {
+        field,
+        message: `${limit.label} must be at most ${limit.max.toLocaleString("en-US")} characters after trimming.`
+      };
+    }
+  }
+  return null;
+};
+
 export type SubmissionPublic = {
   reportId: string;
   reportHash: HexString;

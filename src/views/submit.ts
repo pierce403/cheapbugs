@@ -2,7 +2,15 @@ import { authController } from "../services";
 import { env } from "../config/env";
 import { appLog } from "../lib/logger";
 import { escapeHtml } from "../lib/utils";
-import { BUG_TYPE_OPTIONS, SUBMISSION_RATING_VALUES, type BugType, type SubmissionRating } from "../types/submission";
+import {
+  BUG_TYPE_OPTIONS,
+  SUBMISSION_RATING_VALUES,
+  SUBMISSION_TEXT_LIMITS,
+  validateSubmissionTextFields,
+  type BugType,
+  type SubmissionRating,
+  type SubmissionTextField
+} from "../types/submission";
 import { sendBrokerSubmission } from "../xmtp/broker";
 
 import type { AppViewContext, ViewResult } from "./types";
@@ -38,6 +46,11 @@ let submitInFlight = false;
 const XMTP_PROGRESS_EVENT = "cheapbugs:xmtp-progress";
 const signatureWaitDetail =
   "Approve the XMTP registration signature in your wallet app or browser extension. This does not send a transaction.";
+const submissionFieldNames: Record<SubmissionTextField, string> = {
+  title: "title",
+  publicSummary: "publicSummary",
+  details: "details"
+};
 
 const bugTypeOptionsMarkup = (): string =>
   BUG_TYPE_OPTIONS.map(
@@ -220,16 +233,16 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
       }
     </section>
 
-    <form id="submit-form" class="panel stack-form">
+    <form id="submit-form" class="panel stack-form" novalidate>
       <div class="panel-title">[ report fields ]</div>
-      <label>title<input name="title" required maxlength="120" placeholder="Heap corruption in parser" /></label>
+      <label>title<input name="title" required minlength="${SUBMISSION_TEXT_LIMITS.title.min}" maxlength="${SUBMISSION_TEXT_LIMITS.title.max}" placeholder="Heap corruption in parser" /></label>
       <label>bug type<select name="bugType" required>${bugTypeOptionsMarkup()}</select></label>
       <div class="two-column slider-grid">
         ${sliderMarkup("severity", "severity")}
         ${sliderMarkup("targetInterest", "target interest")}
       </div>
-      <label>public summary<textarea name="publicSummary" rows="3" required placeholder="Redacted public-safe summary for browsing and indexing."></textarea></label>
-      <label>details<textarea name="details" rows="7" required placeholder="Private details only."></textarea></label>
+      <label>public summary<textarea name="publicSummary" rows="3" required minlength="${SUBMISSION_TEXT_LIMITS.publicSummary.min}" maxlength="${SUBMISSION_TEXT_LIMITS.publicSummary.max}" placeholder="Redacted public-safe summary for browsing and indexing."></textarea></label>
+      <label>details<textarea name="details" rows="7" required minlength="${SUBMISSION_TEXT_LIMITS.details.min}" maxlength="${SUBMISSION_TEXT_LIMITS.details.max}" placeholder="Private details only."></textarea></label>
       <button id="submit-to-broker" class="button" type="submit">
         submit to broker
       </button>
@@ -362,6 +375,35 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         setStatus("working", "xmtp: sending", "A broker submission is already in progress.");
         return;
       }
+
+      const formData = new FormData(form);
+      const input = {
+        bugType: bugTypeFromFormValue(formData.get("bugType")),
+        severity: ratingFromFormValue(formData.get("severityIndex")),
+        targetInterest: ratingFromFormValue(formData.get("targetInterestIndex")),
+        title: String(formData.get("title") || ""),
+        publicSummary: String(formData.get("publicSummary") || ""),
+        details: String(formData.get("details") || ""),
+        reproSteps: "",
+        evidence: "",
+        contactHints: "",
+        targetKind: "other" as never,
+        targetRef: "",
+        tags: "",
+        disclosureMode: "private" as never
+      };
+      const validationIssue = validateSubmissionTextFields(input);
+      if (validationIssue) {
+        setProcessing(false);
+        setStatus("blocked", "form: check fields", validationIssue.message);
+        const element = form.elements.namedItem(submissionFieldNames[validationIssue.field]);
+        if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+          element.focus();
+        }
+        appLog.warn("submit: broker submit blocked by field validation", validationIssue);
+        return;
+      }
+
       const address = authController.getSession().address;
       if (!address) {
         setStatus("blocked", "xmtp: wallet required", "Connect a local XMTP wallet or compatible external wallet before submitting.");
@@ -369,29 +411,12 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         return;
       }
 
-      const formData = new FormData(form);
       submitInFlight = true;
       let terminalModalShown = false;
       submitButton?.setAttribute("disabled", "true");
       submitButton?.setAttribute("aria-busy", "true");
       setProcessing(true, "Preparing broker submission.");
       try {
-        const input = {
-          bugType: bugTypeFromFormValue(formData.get("bugType")),
-          severity: ratingFromFormValue(formData.get("severityIndex")),
-          targetInterest: ratingFromFormValue(formData.get("targetInterestIndex")),
-          title: String(formData.get("title") || ""),
-          publicSummary: String(formData.get("publicSummary") || ""),
-          details: String(formData.get("details") || ""),
-          reproSteps: "",
-          evidence: "",
-          contactHints: "",
-          targetKind: "other" as never,
-          targetRef: "",
-          tags: "",
-          disclosureMode: "private" as never
-        };
-
         const xmtpIdentity = authController.getXmtpIdentity();
         if (!xmtpIdentity) {
           setProcessing(false);

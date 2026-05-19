@@ -4,6 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { env } from "../config/env";
 import type { SubmissionFormInput } from "../lib/reports";
 import { disclosureModeToIndex, hashJson, normalizeAddress, stableStringify, targetKindToIndex, toReportId } from "../lib/utils";
+import { validateSubmissionTextFields } from "../types/submission";
 import { sendXmtpDm, type BrowserXmtpIdentity, type XmtpProgressHandler } from "./browser";
 
 export const BROKER_SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1";
@@ -423,6 +424,11 @@ export const buildBrokerSubmissionMessage = async (
   identity: BrowserXmtpIdentity,
   onProgress?: XmtpProgressHandler
 ): Promise<string> => {
+  const validationIssue = validateSubmissionTextFields(input);
+  if (validationIssue) {
+    throw new Error(validationIssue.message);
+  }
+
   const reporterAddress = normalizeAddress(identity.address);
   const brokerAddress = normalizeAddress(env.brokerXmtpAddress);
   const { bugBundle, publishAuthorization, detailsKey } = await buildAuthorizedBugBundle(input, identity, onProgress);
