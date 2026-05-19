@@ -19,6 +19,7 @@ from cheapbugs_broker.service import BrokerBot
 from cheapbugs_broker.signal_cli import SignalCli
 from cheapbugs_broker.store import BrokerStore
 from cheapbugs_broker.token import BugzTokenClient
+from cheapbugs_broker.treasury import TreasuryVaultClient
 from cheapbugs_broker.xmtp_runner import run_xmtp_broker
 
 
@@ -44,7 +45,16 @@ def build_bot(config: BrokerConfig, *, ipfs: KuboIpfsClient | None = None) -> Br
         dry_run=config.dry_run,
         receipt_timeout_seconds=config.tx_receipt_timeout_seconds,
     )
-    return BrokerBot(config=config, store=store, signal=signal, token=token, ipfs=ipfs, bug_index=bug_index)
+    treasury = TreasuryVaultClient(config.base_rpc_url, config.treasury_vault_address)
+    return BrokerBot(
+        config=config,
+        store=store,
+        signal=signal,
+        token=token,
+        ipfs=ipfs,
+        bug_index=bug_index,
+        treasury=treasury,
+    )
 
 
 def main() -> int:

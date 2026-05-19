@@ -62,7 +62,7 @@ cheapbugs/
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
   - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete and logs a high-visibility console error if the read resolves unavailable.
   - Header BUGZ status only reads the connected wallet BUGZ balance; it must not load token metadata, treasury BUGZ, or treasury native ETH on ordinary route changes.
-  - Browser contract adapters disable ethers' automatic HTTP 429 retry loop, dedupe in-flight Base RPC reads, cache successful reads briefly, share a cross-adapter cooldown after rate-limit errors, and persist public bug-index reads where useful.
+  - Browser contract adapters disable ethers' automatic HTTP 429 retry loop, dedupe in-flight Base RPC reads, cache successful reads briefly, serialize public Base reads through a shared queue, use exponential global cooldown after rate-limit errors, and persist public bug-index reads where useful.
   - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows `VITE_BUILD_ID`/`VITE_BUILD_TIME` when provided, otherwise falls back to the bundle commit hash and current build time, and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
@@ -148,10 +148,28 @@ cheapbugs/
   - The `/treasury` route encourages users to fund the treasury, exposes a copyable treasury address, and shows the current treasury BUGZ balance.
   - The `/treasury` route shows the current base payout range per valid bug by reading `calculateRewardAmount(1)` through `calculateRewardAmount(10)`, which is normally 0.1% to 1% of treasury funds.
   - Treasury USD estimates use a BUGZ/WETH Uniswap v4 quote plus the Chainlink Base mainnet ETH/USD standard feed, defaulting to `0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70`. If pricing fails, the route keeps BUGZ-denominated values visible and shows an informative warning.
+  - The `/treasury` route renders cached or placeholder data immediately and refreshes values through throttled background Base reads so visiting the page does not launch a burst of concurrent RPC calls.
 - **Test Criteria**:
   - [x] Forge unit tests cover deposits, detail-key purchase accounting, broker list management, index-only payouts, treasury broker checks, divisor changes, multiplier caps, and reward transfers.
   - [x] Forge fuzz tests cover payout math across balances, divisors, and multipliers.
   - [x] Playwright covers the treasury route's current value, 0.1%-1% payout range, USD conversion, copy-address action presence, and fail-open price-read warning.
+
+### Detail-Key Unlock Sales
+
+- **Stability**: in-progress
+- **Description**: During the reveal delay, buyers can request an offchain broker quote, pay the treasury vault onchain, and receive the report's details key over XMTP after broker verification.
+- **Properties**:
+  - The report page shows a lock-button early-access path while the report is still unrevealed and the browser does not already have a stored key.
+  - Quote requests use strict JSON schema `cheapbugs.detail_unlock.v1`, type `detail_unlock_quote`, and include request id, buyer, broker, chain id, bug index, treasury vault, and report hash.
+  - The broker binds the buyer to the authenticated XMTP sender; message-supplied `buyer_address` values that do not match sender identity are rejected before pricing or key release.
+  - The broker computes the default quote as `CheapBugsTreasuryVault.calculateRewardAmount(1) * ceil(days remaining until the 7-day reveal window)`, stores the quote by request id for 15 minutes, and returns price wei, days remaining, and expiry over XMTP.
+  - The browser approves BUGZ for the treasury as needed, calls `CheapBugsTreasuryVault.purchaseDetailKey(reportHash, amount)`, waits for confirmation, then sends a `detail_unlock_paid` XMTP message with the original request id and transaction hash.
+  - The broker does not trust buyer-supplied amounts. It verifies the stored quote, report hash, buyer, expiry, transaction receipt success, transaction sender, transaction recipient, and `detailKeyPayments(reportHash, buyer) >= quoted price` before sending the details key.
+  - After receiving the key, the browser stores it through the existing per-report access-key localStorage path and decrypts the encrypted BugBundle details locally.
+- **Test Criteria**:
+  - [x] Python unit tests cover quote parsing, spoofed buyer rejection, quote pricing, payment verification, key release, and underpayment rejection.
+  - [x] `npm run build` type-checks the browser quote/payment/key-storage flow.
+  - [ ] Live XMTP and Base payment testing is still manual because it requires a funded buyer wallet and the production broker inbox.
 
 ### Onchain Bug Index
 
@@ -295,12 +313,12 @@ cheapbugs/
 - **Properties**:
   - The broker has three distinct incoming XMTP message flows, all initiated by interaction with the main website and sent as strict JSON commands over XMTP.
   - Publisher flow: the currently active work path where a submitter sends a bug submission to the broker for validation, staged status replies, broker-managed review-key handling, IPFS pinning, and bug-index publication.
-  - Seller flow: planned, not implemented. A user on the site requests access to preview a bug that is still inside its judging period. The broker will validate the request, enforce the relevant eligibility/payment/access rules, and return access status over XMTP.
+  - Seller flow: implemented for early detail-key unlocks. A user on the report page requests a quote, pays the treasury vault, and receives the details key only after the broker verifies the authenticated XMTP buyer, stored quote, transaction receipt, and `detailKeyPayments` ledger.
   - Bouncer flow: planned, partially represented by existing access-request command handling. A user on the site requests access to the special Signal group. The broker validates credentials and, when Signal is configured, grants or denies group access.
   - Runtime config comes from `BROKER_*` environment variables and `BrokerConfig`.
   - `run-broker.sh` loads `.env`, validates mandatory `BROKER_KEY`, prepares a `.venv-broker*` virtualenv, initializes the SQLite store, and runs the broker.
   - `run-broker.sh` prefers Python 3.10 through 3.13 over generic `python3` so `xmtp-bindings` can use published wheels when available; `BROKER_PYTHON` and `BROKER_VENV_DIR` override this.
-  - Base RPC defaults to `https://mainnet.base.org`; BUGZ token defaults to the live Base BUGZ token and can be overridden for local testing.
+  - Base RPC defaults to `https://mainnet.base.org`; BUGZ token, bug index, and treasury vault default to the live Base deployment and can be overridden for local testing.
   - Broker runtime logs are timestamped to stdout and `BROKER_LOG_PATH`, defaulting to `broker.log`; new submissions log a clear `NEW SUBMISSION from <reporter>` line and the full raw XMTP JSON payload, including private detail bodies.
   - The `run` command requires a writable local Kubo IPFS API and fails startup if the Kubo version or add probe fails.
   - `./run-broker.sh debug` enables Python DEBUG logging, Python fault-handler output, Rust XMTP backtraces, `RUST_LOG=debug`, and a default `broker-debug.log`.
@@ -317,14 +335,15 @@ cheapbugs/
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; while enabled, accepted submissions verify and pin but skip the `publishBug` transaction and Signal relay. Set it to `0` only when the broker wallet is intentionally funded for live index publishing and payouts.
   - Broker verification may normalize EVM addresses to lowercase internally, but `bots/cheapbugs_broker/bug_index.py` converts ABI `address` arguments to checksum form before calling web3.py contract functions.
   - SQLite tracks processed XMTP message IDs, relayed submissions, BugBundle CIDs and details keys, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
+  - SQLite also tracks detail-unlock quotes by request id, report hash, buyer, quoted price, expiry, and fulfilled transaction hash so payment confirmation cannot be faked with buyer-supplied amounts.
   - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ` for the authenticated XMTP sender wallet. Optional `wallet` fields must match that sender, and spoofed wallet claims are rejected before BUGZ balance checks or Signal invites.
   - Live payouts spend from the broker wallet and should run only from an intentionally funded wallet.
 - **Test Criteria**:
-  - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, access wallet/sender binding, SQLite maturity, reaction parsing, and reward math.
+  - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, access wallet/sender binding, detail-unlock quote/payment verification, SQLite maturity, reaction parsing, and reward math.
   - [x] Broker tests cover XMTP installation pruning, inactive local installation detection, and maxed-installation recovery.
   - [x] `python3 -m compileall bots scripts/broker-bot.py` checks Python syntax.
   - [x] `bash -n run-broker.sh` checks the root launcher syntax.
-  - [ ] Add website-to-XMTP JSON command tests for publisher, seller, and bouncer flows.
+  - [x] Add website-to-XMTP JSON command tests for publisher, seller, and bouncer flows.
   - [ ] Add integration smoke tests with a disposable XMTP wallet and Signal group before production broker launch.
 
 ### EAS Reviewer Verdicts

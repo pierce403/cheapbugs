@@ -7,10 +7,12 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
-from .models import AccessCommand, IncomingCommand, SubmissionCommand
+from .models import AccessCommand, DetailUnlockCommand, IncomingCommand, SubmissionCommand
 
 
 ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
+BYTES16_RE = re.compile(r"^0x[a-fA-F0-9]{32}$")
+BYTES32_RE = re.compile(r"^0x[a-fA-F0-9]{64}$")
 DOMAIN_RE = re.compile(
     r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$"
 )
@@ -21,6 +23,8 @@ B64URL_32_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
 SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1"
 SUBMISSION_VERSION = 1
+DETAIL_UNLOCK_SCHEMA = "cheapbugs.detail_unlock.v1"
+DETAIL_UNLOCK_VERSION = 1
 BUG_TYPES = {"0day", "nday", "web", "web3", "net", "intel"}
 RATING_VALUES = {"low", "medium", "high", "critical"}
 TARGET_KINDS = {"repo", "package", "domain", "contract", "protocol", "other"}
@@ -61,6 +65,32 @@ SUBMISSION_REQUIRED_KEYS = {
     "details_key",
 }
 CLIENT_ALLOWED_KEYS = {"name", "sent_at"}
+DETAIL_UNLOCK_ALLOWED_KEYS = {
+    "schema",
+    "type",
+    "version",
+    "request_id",
+    "buyer_address",
+    "broker_address",
+    "chain_id",
+    "bug_index",
+    "treasury_vault",
+    "report_hash",
+    "tx_hash",
+    "client",
+}
+DETAIL_UNLOCK_REQUIRED_KEYS = {
+    "schema",
+    "type",
+    "version",
+    "request_id",
+    "buyer_address",
+    "broker_address",
+    "chain_id",
+    "bug_index",
+    "treasury_vault",
+    "report_hash",
+}
 
 
 class CommandError(ValueError):
@@ -84,6 +114,10 @@ def _coerce_type(value: str) -> str:
         return "submission"
     if normalized in {"access", "access_request", "join", "channel"}:
         return "access"
+    if normalized in {"detail_unlock_quote", "unlock_quote"}:
+        return "detail_unlock_quote"
+    if normalized in {"detail_unlock_paid", "unlock_paid"}:
+        return "detail_unlock_paid"
     raise UnknownCommandError("Command is not a recognized broker flow.")
 
 
@@ -187,6 +221,28 @@ def _strict_details_key(data: dict[str, Any]) -> str:
     return value
 
 
+def _strict_hex(data: dict[str, Any], name: str, pattern: re.Pattern[str], label: str) -> str:
+    value = _strict_string(data, name, max_length=80).lower()
+    if not pattern.match(value):
+        raise CommandError(f"Field {name} must be a {label}.")
+    return value
+
+
+def _strict_chain_id(data: dict[str, Any]) -> int:
+    value = data.get("chain_id")
+    if isinstance(value, bool):
+        raise CommandError("Field chain_id must be an integer.")
+    if isinstance(value, int):
+        chain_id = value
+    elif isinstance(value, str) and value.isdigit():
+        chain_id = int(value)
+    else:
+        raise CommandError("Field chain_id must be an integer.")
+    if chain_id <= 0:
+        raise CommandError("Field chain_id must be positive.")
+    return chain_id
+
+
 def _access_wallet_from_sender(claimed_wallet: str, fallback_sender_address: str | None) -> str:
     if not fallback_sender_address:
         raise CommandError("Access requests require an authenticated XMTP sender address.")
@@ -221,8 +277,56 @@ def _parse_json_command(text: str, fallback_sender_address: str | None) -> Incom
             wallet_address=wallet,
             signal_recipient=_string_field(data, "signal", "signal_recipient", "phone", "username"),
         )
+    if command_type in {"detail_unlock_quote", "detail_unlock_paid"}:
+        return _parse_detail_unlock_json(data, command_type, fallback_sender_address)
 
     return _parse_submission_json(data)
+
+
+def _parse_detail_unlock_json(
+    data: dict[str, Any],
+    command_type: str,
+    fallback_sender_address: str | None,
+) -> DetailUnlockCommand:
+    required = set(DETAIL_UNLOCK_REQUIRED_KEYS)
+    if command_type == "detail_unlock_paid":
+        required.add("tx_hash")
+    missing_keys = sorted(required - set(data.keys()))
+    if missing_keys:
+        raise CommandError(f"Missing required field(s): {', '.join(missing_keys)}.")
+
+    unknown_keys = sorted(set(data.keys()) - DETAIL_UNLOCK_ALLOWED_KEYS)
+    if unknown_keys:
+        raise CommandError(f"Unexpected detail unlock field(s): {', '.join(unknown_keys)}.")
+    _validate_optional_client(data)
+
+    schema = _strict_string(data, "schema", max_length=80)
+    if schema != DETAIL_UNLOCK_SCHEMA:
+        raise CommandError(f"Detail unlock schema must be {DETAIL_UNLOCK_SCHEMA}.")
+    if data.get("version") != DETAIL_UNLOCK_VERSION:
+        raise CommandError(f"Detail unlock version must be {DETAIL_UNLOCK_VERSION}.")
+
+    parsed_type = _coerce_type(_strict_string(data, "type", max_length=40))
+    if parsed_type != command_type:
+        raise CommandError("Detail unlock type does not match the requested action.")
+
+    buyer = _access_wallet_from_sender(_strict_string(data, "buyer_address", max_length=42), fallback_sender_address)
+    tx_hash = (
+        _strict_hex(data, "tx_hash", BYTES32_RE, "32-byte transaction hash")
+        if command_type == "detail_unlock_paid"
+        else ""
+    )
+    return DetailUnlockCommand(
+        action="quote" if command_type == "detail_unlock_quote" else "paid",
+        request_id=_strict_hex(data, "request_id", BYTES16_RE, "16-byte request id"),
+        buyer_address=buyer,
+        broker_address=normalize_address(_strict_string(data, "broker_address", max_length=42)),
+        chain_id=_strict_chain_id(data),
+        bug_index_address=normalize_address(_strict_string(data, "bug_index", max_length=42)),
+        treasury_vault_address=normalize_address(_strict_string(data, "treasury_vault", max_length=42)),
+        report_hash=_strict_hex(data, "report_hash", BYTES32_RE, "32-byte report hash"),
+        tx_hash=tx_hash,
+    )
 
 
 def _parse_submission_json(data: dict[str, Any]) -> SubmissionCommand:
@@ -320,6 +424,8 @@ def parse_command(text: str, fallback_sender_address: str | None = None) -> Inco
     command_type, fields = _parse_keyed_text(text)
     if command_type == "submission":
         raise CommandError("Bug submissions must use the strict CheapBugs JSON schema.")
+    if command_type in {"detail_unlock_quote", "detail_unlock_paid"}:
+        raise CommandError("Detail unlock requests must use the strict CheapBugs JSON schema.")
 
     wallet = _access_wallet_from_sender(
         fields.get("wallet") or fields.get("wallet_address") or "",

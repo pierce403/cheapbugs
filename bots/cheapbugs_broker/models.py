@@ -48,7 +48,33 @@ class AccessCommand:
     signal_recipient: str
 
 
-IncomingCommand = SubmissionCommand | AccessCommand
+@dataclass(frozen=True)
+class DetailUnlockCommand:
+    action: str
+    request_id: str
+    buyer_address: str
+    broker_address: str
+    chain_id: int
+    bug_index_address: str
+    treasury_vault_address: str
+    report_hash: str
+    tx_hash: str = ""
+
+
+@dataclass(frozen=True)
+class DetailUnlockQuote:
+    request_id: str
+    report_hash: str
+    buyer_address: str
+    price_wei: int
+    days_remaining: int
+    expires_at: int
+    created_at: int
+    paid_tx_hash: str | None
+    fulfilled_at: int | None
+
+
+IncomingCommand = SubmissionCommand | AccessCommand | DetailUnlockCommand
 
 
 @dataclass(frozen=True)

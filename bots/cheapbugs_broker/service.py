@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
@@ -23,7 +24,7 @@ from .commands import (
     validate_submission_target,
 )
 from .config import BrokerConfig
-from .models import AccessCommand, PinnedBugBundle, SubmissionCommand
+from .models import AccessCommand, DetailUnlockCommand, PinnedBugBundle, SubmissionCommand
 from .rewards import reward_tokens, tokens_to_wei
 from .signal_cli import SignalCli, extract_reaction_events
 from .store import BrokerStore
@@ -33,6 +34,7 @@ from .token import BugzTokenClient
 ReplyFn = Callable[[str], Awaitable[None]]
 BUG_INDEX_JUDGMENT_PERIOD_SECONDS = 7 * 24 * 60 * 60
 BUG_INDEX_REVEAL_PREFLIGHT_BUFFER_SECONDS = 60
+DETAIL_UNLOCK_QUOTE_TTL_SECONDS = 15 * 60
 
 
 class BrokerBot:
@@ -44,6 +46,7 @@ class BrokerBot:
         token: BugzTokenClient,
         ipfs=None,
         bug_index=None,
+        treasury=None,
         logger: logging.Logger | None = None,
     ):
         self.config = config
@@ -52,6 +55,7 @@ class BrokerBot:
         self.token = token
         self.ipfs = ipfs
         self.bug_index = bug_index
+        self.treasury = treasury
         self.logger = logger or logging.getLogger(__name__)
 
     async def handle_xmtp_text(
@@ -94,6 +98,17 @@ class BrokerBot:
             )
             await self._handle_access(command, message_id, reply)
             return
+        if isinstance(command, DetailUnlockCommand):
+            self.logger.info(
+                "detail unlock command parsed message_id=%s action=%s buyer=%s report_hash=%s request_id=%s",
+                message_id,
+                command.action,
+                command.buyer_address,
+                command.report_hash,
+                command.request_id,
+            )
+            await self._handle_detail_unlock(command, message_id, reply)
+            return
         self.logger.info(
             "NEW SUBMISSION from %s message_id=%s conversation_id=%s xmtp_sender=%s title=%r",
             command.reporter_address,
@@ -120,6 +135,130 @@ class BrokerBot:
             "present" if command.bug_bundle else "missing",
         )
         await self._handle_submission(command, conversation_id, message_id, reply, sender_address)
+
+    async def _handle_detail_unlock(self, command: DetailUnlockCommand, message_id: str, reply: ReplyFn) -> None:
+        try:
+            self._validate_detail_unlock_command(command)
+            if command.action == "quote":
+                await self._handle_detail_unlock_quote(command, message_id, reply)
+            else:
+                await self._handle_detail_unlock_paid(command, message_id, reply)
+        except CommandError as exc:
+            self.logger.info(
+                "detail unlock rejected message_id=%s action=%s buyer=%s report_hash=%s reason=%s",
+                message_id,
+                command.action,
+                command.buyer_address,
+                command.report_hash,
+                exc,
+            )
+            await self._reply(reply, message_id, "detail_unlock_rejected", f"Detail unlock rejected: {exc}")
+            self.store.mark_message_processed(message_id, f"detail_unlock_{command.action}_rejected")
+        except Exception as exc:
+            self.logger.exception(
+                "detail unlock failed message_id=%s action=%s buyer=%s report_hash=%s",
+                message_id,
+                command.action,
+                command.buyer_address,
+                command.report_hash,
+            )
+            await self._reply(reply, message_id, "detail_unlock_failed", f"Detail unlock failed: {exc}")
+            self.store.mark_message_processed(message_id, f"detail_unlock_{command.action}_failed")
+
+    async def _handle_detail_unlock_quote(
+        self,
+        command: DetailUnlockCommand,
+        message_id: str,
+        reply: ReplyFn,
+    ) -> None:
+        if self.treasury is None:
+            raise CommandError("treasury verifier is not configured.")
+        submission = self.store.find_submission_by_report_hash(command.report_hash)
+        if submission is None:
+            raise CommandError("report hash is not known to this broker.")
+        if not _has_live_index_record(submission):
+            raise CommandError("report hash has not been published live onchain by this broker.")
+        if not submission.details_key_b64:
+            raise CommandError("this broker does not have the detail key for that report.")
+
+        now = int(time.time())
+        reveal_at = (submission.index_published_at or submission.created_at) + BUG_INDEX_JUDGMENT_PERIOD_SECONDS
+        seconds_remaining = reveal_at - now
+        if seconds_remaining <= 0:
+            raise CommandError("the public reveal window has ended; wait for public details.")
+        days_remaining = max(1, math.ceil(seconds_remaining / 86_400))
+        base_reward = int(self.treasury.base_reward())
+        price_wei = base_reward * days_remaining
+        if price_wei <= 0:
+            raise CommandError("treasury base detail price is currently zero.")
+        expires_at = now + DETAIL_UNLOCK_QUOTE_TTL_SECONDS
+        self.store.create_detail_unlock_quote(
+            request_id=command.request_id,
+            report_hash=command.report_hash,
+            buyer_address=command.buyer_address,
+            price_wei=price_wei,
+            days_remaining=days_remaining,
+            expires_at=expires_at,
+            now=now,
+        )
+        self.store.mark_message_processed(message_id, "detail_unlock_quote")
+        await self._reply(
+            reply,
+            message_id,
+            "detail_unlock_quote",
+            "Detail unlock quote: "
+            f"report {command.report_hash} request {command.request_id} price_wei {price_wei} "
+            f"days_remaining {days_remaining} expires_at {_format_timestamp(expires_at)}.",
+        )
+
+    async def _handle_detail_unlock_paid(
+        self,
+        command: DetailUnlockCommand,
+        message_id: str,
+        reply: ReplyFn,
+    ) -> None:
+        if self.treasury is None:
+            raise CommandError("treasury verifier is not configured.")
+        quote = self.store.get_detail_unlock_quote(command.request_id)
+        if quote is None:
+            raise CommandError("unlock quote request id is unknown or expired.")
+        if quote.report_hash.lower() != command.report_hash or quote.buyer_address.lower() != command.buyer_address:
+            raise CommandError("unlock payment does not match the quoted report and buyer.")
+        now = int(time.time())
+        if quote.expires_at < now:
+            raise CommandError("unlock quote has expired; request a fresh quote.")
+        submission = self.store.find_submission_by_report_hash(command.report_hash)
+        if submission is None or not submission.details_key_b64:
+            raise CommandError("this broker does not have the detail key for that report.")
+        if not _has_live_index_record(submission):
+            raise CommandError("report hash has not been published live onchain by this broker.")
+
+        self.treasury.verify_successful_payment_tx(command.tx_hash, command.buyer_address)
+        paid_total = int(self.treasury.detail_key_payment_total(command.report_hash, command.buyer_address))
+        if paid_total < quote.price_wei:
+            raise CommandError(
+                "treasury payment is below the quoted price: "
+                f"paid {paid_total} wei, required {quote.price_wei} wei."
+            )
+        self.store.mark_detail_unlock_fulfilled(command.request_id, command.tx_hash, now=now)
+        self.store.mark_message_processed(message_id, "detail_unlock_paid")
+        await self._reply(
+            reply,
+            message_id,
+            "detail_unlock_paid",
+            f"Detail key: report {command.report_hash} request {command.request_id} key {submission.details_key_b64}",
+        )
+
+    def _validate_detail_unlock_command(self, command: DetailUnlockCommand) -> None:
+        configured_broker_address = self.config.broker_address
+        if configured_broker_address and command.broker_address != configured_broker_address:
+            raise CommandError("broker_address does not match this broker.")
+        if command.chain_id != self.config.chain_id:
+            raise CommandError("chain_id does not match this broker.")
+        if command.bug_index_address != self.config.bug_index_address.lower():
+            raise CommandError("bug_index does not match this broker.")
+        if command.treasury_vault_address != self.config.treasury_vault_address.lower():
+            raise CommandError("treasury_vault does not match this broker.")
 
     async def _handle_access(self, command: AccessCommand, message_id: str, reply: ReplyFn) -> None:
         if self.signal is None:
@@ -642,6 +781,11 @@ def _publish_progress_message(result: BugIndexPublishResult) -> str:
         return f"Bug already exists onchain: report {result.report_hash}."
     block = f" block {result.block_number}" if result.block_number is not None else ""
     return f"Bug published onchain: report {result.report_hash} tx {result.tx_hash}{block}."
+
+
+def _has_live_index_record(submission) -> bool:
+    tx_hash = submission.index_tx_hash or ""
+    return bool(tx_hash.startswith("0x") and len(tx_hash) == 66)
 
 
 def _publish_authorization_uint(verified: VerifiedBugBundle, name: str) -> int:

@@ -329,6 +329,29 @@ button:disabled,
   margin-top: 5px;
 }
 
+.lock-action {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.lock-icon::before {
+  content: "\1F512";
+  display: inline-block;
+}
+
+.detail-unlock-modal {
+  align-items: start;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
 @keyframes signature-spin {
   to {
     transform: rotate(360deg);

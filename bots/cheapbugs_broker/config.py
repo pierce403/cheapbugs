@@ -11,6 +11,7 @@ from pathlib import Path
 DEFAULT_BASE_RPC_URL = "https://mainnet.base.org"
 DEFAULT_BUGZ_TOKEN_ADDRESS = "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07"
 DEFAULT_BUG_INDEX_ADDRESS = "0x515FDbc9876aC26870794E26605c7DD04c18679b"
+DEFAULT_TREASURY_VAULT_ADDRESS = "0x4A080668d9848928dc6D48921cbDc4273fe27A9d"
 DEFAULT_IPFS_API_URL = "http://127.0.0.1:5001"
 DEFAULT_IPFS_GATEWAY_URL = "https://ipfs.io/ipfs"
 
@@ -70,6 +71,7 @@ class BrokerConfig:
     bugz_token_address: str
     chain_id: int
     bug_index_address: str
+    treasury_vault_address: str
     ipfs_api_url: str
     ipfs_gateway_url: str
     ipfs_prime_gateway: bool
@@ -114,6 +116,12 @@ class BrokerConfig:
             bugz_token_address=_env_first("BUGZ_TOKEN_ADDRESS", default=DEFAULT_BUGZ_TOKEN_ADDRESS),
             chain_id=_env_int_any(("BROKER_CHAIN_ID", "CHAIN_ID"), 8453),
             bug_index_address=_env_first("BROKER_BUG_INDEX_ADDRESS", "VITE_BUG_INDEX_ADDRESS", default=DEFAULT_BUG_INDEX_ADDRESS),
+            treasury_vault_address=_env_first(
+                "BROKER_TREASURY_VAULT_ADDRESS",
+                "VITE_BUG_TREASURY_VAULT_ADDRESS",
+                "VITE_BUGZ_TREASURY_ADDRESS",
+                default=DEFAULT_TREASURY_VAULT_ADDRESS,
+            ),
             ipfs_api_url=_env_first("BROKER_IPFS_API_URL", default=DEFAULT_IPFS_API_URL),
             ipfs_gateway_url=_env_first("BROKER_IPFS_GATEWAY_URL", default=DEFAULT_IPFS_GATEWAY_URL),
             ipfs_prime_gateway=_env_bool_any(("BROKER_IPFS_PRIME_GATEWAY",), False),
@@ -136,6 +144,8 @@ class BrokerConfig:
             missing.append("BROKER_KEY")
         if not self.dry_run and not self.bug_index_address:
             missing.append("BROKER_BUG_INDEX_ADDRESS")
+        if not self.dry_run and not self.treasury_vault_address:
+            missing.append("BROKER_TREASURY_VAULT_ADDRESS")
         if self.signal_enabled and not self.signal_account:
             missing.append("BROKER_SIGNAL_ACCOUNT")
         if self.signal_enabled and not self.signal_group_id:

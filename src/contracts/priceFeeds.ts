@@ -1,7 +1,7 @@
 import { Contract } from "ethers";
 
 import { chainConfig } from "../config/chains";
-import { RpcReadCache } from "../lib/rpcReadCache";
+import { RpcReadCache, scheduleBaseRpcRead } from "../lib/rpcReadCache";
 import { normalizeAddress } from "../lib/utils";
 
 import { createBaseReadProvider } from "./rpcProvider";
@@ -30,10 +30,11 @@ export const getEthUsdPrice = async (): Promise<EthUsdPrice | null> => {
   const feedAddress = normalizeAddress(chainConfig.ethUsdFeedAddress);
   return readCache.getOrLoad(`eth-usd:${chainConfig.id}:${feedAddress}`, TTL_MS, async () => {
     const contract = new Contract(feedAddress, priceFeedAbi, readProvider);
-    const [decimals, roundData] = (await Promise.all([
-      contract.decimals() as Promise<bigint>,
-      contract.latestRoundData() as Promise<[bigint, bigint, bigint, bigint, bigint]>
-    ])) as [bigint, [bigint, bigint, bigint, bigint, bigint]];
+    const decimals = await scheduleBaseRpcRead("ETH/USD feed decimals", () => contract.decimals() as Promise<bigint>);
+    const roundData = await scheduleBaseRpcRead(
+      "ETH/USD latest round data",
+      () => contract.latestRoundData() as Promise<[bigint, bigint, bigint, bigint, bigint]>
+    );
     const answer = roundData[1];
     const updatedAt = Number(roundData[3]);
 

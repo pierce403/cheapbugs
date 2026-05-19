@@ -3,7 +3,7 @@ import { Contract, parseUnits } from "ethers";
 import { chainConfig } from "../config/chains";
 import { authController } from "../services";
 import { appLog } from "../lib/logger";
-import { RpcReadCache, isRateLimitError } from "../lib/rpcReadCache";
+import { RpcReadCache, isRateLimitError, scheduleBaseRpcRead } from "../lib/rpcReadCache";
 import { normalizeAddress } from "../lib/utils";
 import type { HexString } from "../types/domain";
 
@@ -213,7 +213,7 @@ export const loadBondVaultDashboard = async (account: HexString): Promise<BondVa
 
     try {
       const accountTuple = await withReadTimeout(
-        vault.accountOf(normalizedAccount) as Promise<BondAccountTuple>,
+        scheduleBaseRpcRead("Bond vault account", () => vault.accountOf(normalizedAccount) as Promise<BondAccountTuple>),
         "Bond vault account"
       );
       const active = accountTuple.active ?? accountTuple[0];
@@ -251,7 +251,10 @@ export const loadBondVaultDashboard = async (account: HexString): Promise<BondVa
 
       try {
         allowance = await withReadTimeout(
-          token.allowance(normalizedAccount, bondVaultAddress()) as Promise<bigint>,
+          scheduleBaseRpcRead(
+            "Bond vault allowance",
+            () => token.allowance(normalizedAccount, bondVaultAddress()) as Promise<bigint>
+          ),
           "Bond vault allowance"
         );
       } catch (error) {
@@ -309,7 +312,10 @@ const connectedAccount = (): HexString => {
 export const approveBondVault = async (rawAmount: string): Promise<BondActionResult> => {
   const account = connectedAccount();
   const amount = await parseAmount(rawAmount);
-  const currentAllowance = (await readToken().allowance(account, bondVaultAddress())) as bigint;
+  const currentAllowance = await scheduleBaseRpcRead(
+    "Bond vault allowance",
+    () => readToken().allowance(account, bondVaultAddress()) as Promise<bigint>
+  );
   if (currentAllowance >= amount) {
     return {
       label: "Bond vault approval",

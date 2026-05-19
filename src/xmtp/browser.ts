@@ -367,10 +367,10 @@ export const sendXmtpDm = async (
 
   onProgress?.("opening broker DM");
   const dm = await client.conversations.createDm(inboxId);
-  onProgress?.("sending broker submission");
+  onProgress?.("sending broker message");
   const sentAtMs = Date.now();
   const messageId = await dm.sendText(message);
-  onProgress?.("broker submission sent");
+  onProgress?.("broker message sent");
   const replyResult = waitForReply
     ? await waitForXmtpReply(dm, sdk, client.inboxId, messageId, sentAtMs, waitForReply, onProgress)
     : { replyMessages: [] };

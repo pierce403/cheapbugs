@@ -20,6 +20,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - `CheapBugsBugIndex` accepts details-key reveals only after the 7-day window and only when `sha256(raw 32-byte key)` matches the stored commitment.
 - `CheapBugsBondVault` keeps pending withdrawals slashable during the 7-day withdrawal delay, and new bonds cancel pending withdrawals.
 - `CheapBugsTreasuryVault` records detail-key purchases and pays rewards only when called by the configured index for a treasury-authorized broker.
+- Detail-key unlock sales use strict XMTP schema `cheapbugs.detail_unlock.v1`. The broker binds quote and paid messages to the authenticated XMTP buyer, stores quote price/expiry in SQLite, verifies the submitted transaction receipt, and reads `CheapBugsTreasuryVault.detailKeyPayments(reportHash, buyer)` before releasing a details key.
 - The vaults hardcode the live Base BUGZ token address `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`; this repo no longer deploys a BUGZ token contract.
 - Real deployment launchers now check deployed vault/index wiring and verify all three contracts on Etherscan/BaseScan by default.
 - The verified Base deployment is `CheapBugsBugIndex` `0x515FDbc9876aC26870794E26605c7DD04c18679b`, `CheapBugsBondVault` `0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3`, and `CheapBugsTreasuryVault` `0x4A080668d9848928dc6D48921cbDc4273fe27A9d`.
@@ -36,6 +37,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The broker sends staged plain text XMTP status messages after successful validation stages.
 - The broker pins the verified encrypted BugBundle through local Kubo without adding broker status fields to the payload.
 - The pinned bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
+- The browser stores a purchased details key only after the broker returns it over XMTP, then decrypts the already pinned encrypted BugBundle locally. Decrypted private details are not written to the BugBundle/IPFS cache.
 - The frontend may fetch the pinned BugBundle public core to display title and target metadata, but that gateway content is untrusted display data and must not override onchain attribution, commitments, payout state, or authorization checks.
 - The frontend owner console reads contract ownership and exposes owner transaction forms only as a convenience layer. `onlyOwner` checks in the contracts remain the authority for all management calls.
 - The frontend staking route helps users approve, bond, request withdrawal, and withdraw BUGZ, but bond accounting, withdrawal delays, and slashing guarantees are enforced only by `CheapBugsBondVault`.
@@ -81,6 +83,7 @@ Current and required properties:
 ### Broker
 
 - The broker is trusted to receive private submissions, hold unrevealed details keys, pin encrypted BugBundles to IPFS, optionally create EAS attestations, and relay accepted reports.
+- The broker is trusted to release unrevealed details keys early after a verified treasury payment. A compromised broker can still leak details keys without payment.
 - The broker is not trusted to choose the reporter address for onchain attribution.
 - Broker compromise can expose submissions it has received, unrevealed details keys it holds, Signal relay data, SQLite state, and the `BROKER_KEY` available to the process.
 - `BROKER_KEY` is the single broker wallet key. It controls the broker XMTP identity and currently signs direct BUGZ payout transfers in the Python bot; the new contract path should route rewards through the index and `CheapBugsTreasuryVault`.
@@ -91,6 +94,7 @@ Current and required properties:
 - Broker logs are written to `BROKER_LOG_PATH` and stdout. New submissions intentionally log the full raw XMTP JSON payload, including the out-of-bundle details key, for development visibility. Treat `broker.log` and debug logs as private disclosure material and do not share them outside trusted project operators.
 - Broker debug mode can include third-party XMTP/Rust diagnostics. Inspect debug logs before sharing them outside the project.
 - Signal can be disabled for local broker testing. In that mode, submissions are validated and recorded locally, but there is no reviewer-channel relay, reaction source, or reward settlement.
+- Detail-unlock buyers are treated as adversarial. The broker must reject spoofed buyer fields, wrong broker/index/treasury bindings, expired quote ids, unknown report hashes, failed or unrelated transaction hashes, and payments whose treasury ledger total is below the stored quote.
 - The broker wallet must be deliberately funded and capped before using the current direct payout path. The contract reward path pays from `CheapBugsTreasuryVault`, not from broker wallet funds.
 
 ### IPFS And Pinata
@@ -130,6 +134,7 @@ Current and required properties:
 ### CheapBugsTreasuryVault
 
 - Detail-key purchases are onchain payment records for broker verification; the broker still decides whether and when to deliver a key offchain.
+- Early-access quote amounts are broker policy, not an onchain invariant. The current broker calculates price from treasury base reward times days remaining, but key release is gated by the onchain purchase ledger rather than by buyer-provided amount fields.
 - Rewards can only be paid by the configured index and only for brokers also authorized by the treasury.
 - A bad treasury/index configuration can block payouts or pay from an unintended treasury. The launcher checks the deployed wiring, and operators should still record the verified addresses before funding the treasury.
 - Browser owner controls for vault/index wiring, role lists, payout divisor, and ownership transfer are operational convenience only. Operators should still verify transaction prompts and resulting contract state before funding or relying on a new configuration.
@@ -148,6 +153,7 @@ Current and required properties:
 - The broker has not yet been wired to EAS submission attestations for accepted XMTP submissions.
 - EIP-1271 contract-wallet reporter signatures are not implemented.
 - Live XMTP broker smoke tests are manual.
+- Live detail-unlock testing is manual and needs a funded buyer wallet, broker XMTP inbox, Base RPC, and a report whose details key is still unrevealed.
 - Reviewer trust is frontend-enforced through an allowlist and should move to an onchain or resolver-backed trust model.
 - Browser bundle integrity depends on the static hosting and deployment pipeline.
 

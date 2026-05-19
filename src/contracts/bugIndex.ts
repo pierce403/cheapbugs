@@ -8,7 +8,7 @@ import {
   normalizeAddress,
   parseTags
 } from "../lib/utils";
-import { RpcReadCache } from "../lib/rpcReadCache";
+import { RpcReadCache, scheduleBaseRpcRead } from "../lib/rpcReadCache";
 import { QueryCache } from "../lib/cache";
 
 import { bugIndexAbi } from "./bugIndexAbi";
@@ -26,6 +26,9 @@ type ContractSubmission = {
   targetRefHash: `0x${string}`;
   tags: string;
   contentHash: `0x${string}`;
+  bugBundleHash: `0x${string}`;
+  encryptedDetailsHash: `0x${string}`;
+  detailsKeyCommitment: `0x${string}`;
   revealAfter: bigint;
   detailsKeyRevealed: boolean;
 };
@@ -70,6 +73,9 @@ const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => 
   targetRefHash: entry.targetRefHash,
   tags: parseTags(entry.tags),
   contentHash: entry.contentHash,
+  bugBundleHash: entry.bugBundleHash,
+  encryptedDetailsHash: entry.encryptedDetailsHash,
+  detailsKeyCommitment: entry.detailsKeyCommitment,
   revealAfter: new Date(Number(entry.revealAfter) * 1000).toISOString(),
   detailsKeyRevealed: entry.detailsKeyRevealed
 });
@@ -89,7 +95,9 @@ export const getBugReport = async (reportHash: `0x${string}`): Promise<Submissio
   try {
     const report = await readCache.getOrLoad(key, REPORT_TTL_MS, async () => {
       const record = (await withReadTimeout(
-        readContract().getReport(reportHash) as Promise<ContractSubmission>,
+        scheduleBaseRpcRead("Bug index getReport", () =>
+          readContract().getReport(reportHash) as Promise<ContractSubmission>
+        ),
         "Bug index getReport"
       )) as ContractSubmission;
       return fromContractSubmission(record);
@@ -119,7 +127,9 @@ export const getLatestBugReports = async (limit: number): Promise<SubmissionPubl
   try {
     const reports = await readCache.getOrLoad(key, LATEST_REPORTS_TTL_MS, async () => {
       const hashes = await withReadTimeout(
-        readContract().latestReportHashes(BigInt(limit)) as Promise<`0x${string}`[]>,
+        scheduleBaseRpcRead("Bug index latestReportHashes", () =>
+          readContract().latestReportHashes(BigInt(limit)) as Promise<`0x${string}`[]>
+        ),
         "Bug index latestReportHashes"
       );
       const reports = await Promise.all(hashes.map((hash) => getBugReport(hash)));

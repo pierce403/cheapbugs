@@ -71,6 +71,9 @@ const submissionPublic = () => ({
   targetRefHash: id("base-protocol"),
   tags: ["base", "parser"],
   contentHash: id("public-content"),
+  bugBundleHash: id("bug-bundle"),
+  encryptedDetailsHash: id("encrypted-details"),
+  detailsKeyCommitment: id("details-key"),
   revealAfter: revealAfterDate().toISOString(),
   detailsKeyRevealed: false
 });

@@ -8,10 +8,15 @@ type FailureRecord = {
   retryAt: number;
 };
 
-const RATE_LIMIT_COOLDOWN_MS = 60_000;
+const INITIAL_RATE_LIMIT_COOLDOWN_MS = 5_000;
+const MAX_RATE_LIMIT_COOLDOWN_MS = 60_000;
 const ERROR_COOLDOWN_MS = 10_000;
+const BASE_RPC_QUEUE_MIN_DELAY_MS = 300;
 
 let globalRateLimitFailure: FailureRecord | null = null;
+let globalRateLimitCooldownMs = 0;
+let baseRpcQueue: Promise<unknown> = Promise.resolve();
+let baseRpcNextReadAt = 0;
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -21,6 +26,23 @@ export const isRateLimitError = (error: unknown): boolean =>
 const rateLimitCooldownError = (retryAt: number): Error => {
   const retrySeconds = Math.max(1, Math.ceil((retryAt - Date.now()) / 1_000));
   return new Error(`Base RPC is temporarily rate-limiting reads. Try again in ${retrySeconds}s.`);
+};
+
+const sleep = (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds));
+
+const recordGlobalRateLimit = (error: unknown): number => {
+  globalRateLimitCooldownMs = globalRateLimitCooldownMs
+    ? Math.min(globalRateLimitCooldownMs * 2, MAX_RATE_LIMIT_COOLDOWN_MS)
+    : INITIAL_RATE_LIMIT_COOLDOWN_MS;
+  const retryAt = Date.now() + globalRateLimitCooldownMs;
+  globalRateLimitFailure = { error, retryAt };
+  return retryAt;
+};
+
+const clearGlobalRateLimit = (): void => {
+  globalRateLimitFailure = null;
+  globalRateLimitCooldownMs = 0;
 };
 
 const activeGlobalRateLimitFailure = (): Error | null => {
@@ -34,6 +56,43 @@ const activeGlobalRateLimitFailure = (): Error | null => {
   }
 
   return rateLimitCooldownError(globalRateLimitFailure.retryAt);
+};
+
+export const scheduleBaseRpcRead = async <T>(label: string, loader: () => Promise<T>): Promise<T> => {
+  const read = baseRpcQueue.then(async () => {
+    const globalRateLimit = activeGlobalRateLimitFailure();
+    if (globalRateLimit) {
+      throw globalRateLimit;
+    }
+
+    const waitMs = Math.max(0, baseRpcNextReadAt - Date.now());
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
+
+    try {
+      const value = await loader();
+      clearGlobalRateLimit();
+      return value;
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        recordGlobalRateLimit(error);
+      }
+      throw error;
+    } finally {
+      baseRpcNextReadAt = Date.now() + BASE_RPC_QUEUE_MIN_DELAY_MS;
+    }
+  });
+
+  baseRpcQueue = read.catch(() => undefined);
+  try {
+    return (await read) as T;
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      throw rateLimitCooldownError(globalRateLimitFailure?.retryAt ?? Date.now() + INITIAL_RATE_LIMIT_COOLDOWN_MS);
+    }
+    throw new Error(`${label} failed: ${errorMessage(error)}`);
+  }
 };
 
 export class RpcReadCache {
@@ -88,10 +147,7 @@ export class RpcReadCache {
       .then((value) => this.set(key, value, ttlMs))
       .catch((error) => {
         const rateLimited = isRateLimitError(error);
-        const retryAt = Date.now() + (rateLimited ? RATE_LIMIT_COOLDOWN_MS : ERROR_COOLDOWN_MS);
-        if (rateLimited) {
-          globalRateLimitFailure = { error, retryAt };
-        }
+        const retryAt = rateLimited ? recordGlobalRateLimit(error) : Date.now() + ERROR_COOLDOWN_MS;
         this.failures.set(key, {
           error,
           retryAt

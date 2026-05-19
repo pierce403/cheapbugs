@@ -30,7 +30,7 @@ from cheapbugs_broker.bug_index import (
 from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
 from cheapbugs_broker.config import BrokerConfig
 from cheapbugs_broker.ipfs import IpfsAddResult
-from cheapbugs_broker.models import AccessCommand, SignalReactionEvent, SubmissionCommand
+from cheapbugs_broker.models import AccessCommand, DetailUnlockCommand, SignalReactionEvent, SubmissionCommand
 from cheapbugs_broker.rewards import reward_tokens, tokens_to_wei
 from cheapbugs_broker.service import BrokerBot
 from cheapbugs_broker.signal_cli import extract_reaction_events, parse_signal_timestamp
@@ -221,6 +221,26 @@ signal: u:alice.01
 
         self.assertIsInstance(command, AccessCommand)
         self.assertEqual(command.wallet_address, WALLET)
+
+    def test_parse_detail_unlock_quote_requires_authenticated_buyer(self) -> None:
+        command = parse_command(json.dumps(detail_unlock_payload()), fallback_sender_address=WALLET)
+
+        self.assertIsInstance(command, DetailUnlockCommand)
+        self.assertEqual(command.action, "quote")
+        self.assertEqual(command.buyer_address, WALLET)
+        self.assertEqual(command.treasury_vault_address, BROKER)
+
+    def test_parse_detail_unlock_rejects_spoofed_buyer(self) -> None:
+        payload = detail_unlock_payload(buyer_address=BROKER)
+
+        with self.assertRaisesRegex(CommandError, "authenticated XMTP sender"):
+            parse_command(json.dumps(payload), fallback_sender_address=WALLET)
+
+    def test_parse_detail_unlock_paid_requires_tx_hash(self) -> None:
+        payload = detail_unlock_payload(type="detail_unlock_paid")
+
+        with self.assertRaisesRegex(CommandError, "tx_hash"):
+            parse_command(json.dumps(payload), fallback_sender_address=WALLET)
 
 
 class RewardTest(unittest.TestCase):
@@ -958,6 +978,242 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertIn("Signal is not configured", replies[0])
             self.assertTrue(store.message_seen("access-message"))
 
+    def test_detail_unlock_quote_prices_days_remaining_from_treasury_base_reward(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            report_hash = "0x" + "4" * 64
+            store.create_submission(
+                command=SubmissionCommand(
+                    reporter_address=WALLET,
+                    signal_recipient="broker-managed",
+                    bug_type="web",
+                    title="Title",
+                    summary="Public summary",
+                    severity="high",
+                    target_interest="high",
+                    body="Details",
+                ),
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="submission-message",
+                signal_group_id="signal-disabled",
+                signal_message_timestamp=0,
+                review_window_seconds=0,
+                status="published",
+                bug_bundle=fake_pinned_bundle(
+                    IpfsAddResult(
+                        cid="bafyfakebugbundle",
+                        uri="ipfs://bafyfakebugbundle",
+                        name="bugbundle",
+                        size=1,
+                        sha256="0x" + "2" * 64,
+                        gateway_url="https://ipfs.io/ipfs/bafyfakebugbundle",
+                    )
+                ),
+                report_hash=report_hash,
+                index_tx_hash="0x" + "a" * 64,
+                index_published_at=1_000,
+                now=1_000,
+            )
+            replies: list[str] = []
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=0),
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
+                treasury=FakeTreasury(base_reward=100),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch("cheapbugs_broker.service.time.time", return_value=1_000):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(detail_unlock_payload(report_hash=report_hash)),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="unlock-quote",
+                        reply=reply,
+                    )
+                )
+
+            self.assertIn("Detail unlock quote", replies[-1])
+            self.assertIn("price_wei 700", replies[-1])
+            self.assertIn("days_remaining 7", replies[-1])
+            quote = store.get_detail_unlock_quote("0x" + "3" * 32)
+            self.assertIsNotNone(quote)
+            assert quote is not None
+            self.assertEqual(quote.price_wei, 700)
+
+    def test_detail_unlock_paid_verifies_onchain_total_before_releasing_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            report_hash = "0x" + "4" * 64
+            request_id = "0x" + "3" * 32
+            store.create_submission(
+                command=SubmissionCommand(
+                    reporter_address=WALLET,
+                    signal_recipient="broker-managed",
+                    bug_type="web",
+                    title="Title",
+                    summary="Public summary",
+                    severity="high",
+                    target_interest="high",
+                    body="Details",
+                ),
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="submission-message",
+                signal_group_id="signal-disabled",
+                signal_message_timestamp=0,
+                review_window_seconds=0,
+                status="published",
+                bug_bundle=fake_pinned_bundle(
+                    IpfsAddResult(
+                        cid="bafyfakebugbundle",
+                        uri="ipfs://bafyfakebugbundle",
+                        name="bugbundle",
+                        size=1,
+                        sha256="0x" + "2" * 64,
+                        gateway_url="https://ipfs.io/ipfs/bafyfakebugbundle",
+                    )
+                ),
+                report_hash=report_hash,
+                index_tx_hash="0x" + "a" * 64,
+                index_published_at=1_000,
+                now=1_000,
+            )
+            store.create_detail_unlock_quote(
+                request_id=request_id,
+                report_hash=report_hash,
+                buyer_address=WALLET,
+                price_wei=700,
+                days_remaining=7,
+                expires_at=2_000,
+                now=1_000,
+            )
+            replies: list[str] = []
+            treasury = FakeTreasury(base_reward=100, paid_total=700)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=0),
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
+                treasury=treasury,
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch("cheapbugs_broker.service.time.time", return_value=1_100):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(
+                            detail_unlock_payload(
+                                type="detail_unlock_paid",
+                                report_hash=report_hash,
+                                tx_hash="0x" + "5" * 64,
+                            )
+                        ),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="unlock-paid",
+                        reply=reply,
+                    )
+                )
+
+            self.assertEqual(treasury.verified_tx, "0x" + "5" * 64)
+            self.assertIn(f"key {DETAILS_KEY_B64}", replies[-1])
+            quote = store.get_detail_unlock_quote(request_id)
+            self.assertIsNotNone(quote)
+            assert quote is not None
+            self.assertEqual(quote.paid_tx_hash, "0x" + "5" * 64)
+
+    def test_detail_unlock_paid_rejects_underpayment_without_releasing_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            report_hash = "0x" + "4" * 64
+            store.create_submission(
+                command=SubmissionCommand(
+                    reporter_address=WALLET,
+                    signal_recipient="broker-managed",
+                    bug_type="web",
+                    title="Title",
+                    summary="Public summary",
+                    severity="high",
+                    target_interest="high",
+                    body="Details",
+                ),
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="submission-message",
+                signal_group_id="signal-disabled",
+                signal_message_timestamp=0,
+                review_window_seconds=0,
+                status="published",
+                bug_bundle=fake_pinned_bundle(
+                    IpfsAddResult(
+                        cid="bafyfakebugbundle",
+                        uri="ipfs://bafyfakebugbundle",
+                        name="bugbundle",
+                        size=1,
+                        sha256="0x" + "2" * 64,
+                        gateway_url="https://ipfs.io/ipfs/bafyfakebugbundle",
+                    )
+                ),
+                report_hash=report_hash,
+                index_tx_hash="0x" + "a" * 64,
+                index_published_at=1_000,
+                now=1_000,
+            )
+            store.create_detail_unlock_quote(
+                request_id="0x" + "3" * 32,
+                report_hash=report_hash,
+                buyer_address=WALLET,
+                price_wei=700,
+                days_remaining=7,
+                expires_at=2_000,
+                now=1_000,
+            )
+            replies: list[str] = []
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=0),
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
+                treasury=FakeTreasury(base_reward=100, paid_total=699),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch("cheapbugs_broker.service.time.time", return_value=1_100):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(
+                            detail_unlock_payload(
+                                type="detail_unlock_paid",
+                                report_hash=report_hash,
+                                tx_hash="0x" + "5" * 64,
+                            )
+                        ),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="unlock-underpaid",
+                        reply=reply,
+                    )
+                )
+
+            self.assertIn("below the quoted price", replies[-1])
+            self.assertNotIn("Detail key", replies[-1])
+
 
 def valid_submission_payload(**overrides: object) -> dict[str, object]:
     bug_bundle = fake_bug_bundle(
@@ -989,6 +1245,24 @@ def valid_submission_payload(**overrides: object) -> dict[str, object]:
         "bug_bundle": bug_bundle,
         "publish_authorization": fake_publish_authorization(bug_bundle["core"]),
         "details_key": DETAILS_KEY_B64,
+        "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def detail_unlock_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema": "cheapbugs.detail_unlock.v1",
+        "type": "detail_unlock_quote",
+        "version": 1,
+        "request_id": "0x" + "3" * 32,
+        "buyer_address": WALLET,
+        "broker_address": BROKER,
+        "chain_id": 8453,
+        "bug_index": WALLET,
+        "treasury_vault": BROKER,
+        "report_hash": "0x" + "4" * 64,
         "client": {"name": "cheapbugs-web", "sent_at": "2026-05-17T00:00:00.000Z"},
     }
     payload.update(overrides)
@@ -1309,6 +1583,7 @@ def test_config(
         bugz_token_address=WALLET,
         chain_id=8453,
         bug_index_address=WALLET,
+        treasury_vault_address=BROKER,
         ipfs_api_url="http://127.0.0.1:5001",
         ipfs_gateway_url="https://ipfs.io/ipfs",
         ipfs_prime_gateway=False,
@@ -1417,6 +1692,25 @@ class FakeBugIndex:
             block_number=None if self.dry_run else 12345,
             index_address=WALLET,
         )
+
+
+class FakeTreasury:
+    def __init__(self, *, base_reward: int, paid_total: int = 0):
+        self._base_reward = base_reward
+        self._paid_total = paid_total
+        self.verified_tx = ""
+        self.payment_lookup: tuple[str, str] | None = None
+
+    def base_reward(self) -> int:
+        return self._base_reward
+
+    def verify_successful_payment_tx(self, tx_hash: str, buyer_address: str) -> None:
+        self.verified_tx = tx_hash
+        self.verified_buyer = buyer_address
+
+    def detail_key_payment_total(self, report_hash: str, buyer_address: str) -> int:
+        self.payment_lookup = (report_hash, buyer_address)
+        return self._paid_total
 
 
 class FakeWeb3:

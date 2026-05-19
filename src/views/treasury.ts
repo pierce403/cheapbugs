@@ -35,7 +35,10 @@ const percentFromDivisor = (multiplier: number, divisor: bigint | null): string 
 };
 
 export const renderTreasuryView = async (context: AppViewContext): Promise<ViewResult> => {
-  const dashboard = await loadTreasuryDashboard();
+  const dashboard = await loadTreasuryDashboard({
+    background: true,
+    onUpdate: context.rerender
+  });
   const quoteDecimals = dashboard.usdQuote?.ethUsdDecimals ?? null;
   const treasuryUsd = usdValueForBugz(dashboard.treasuryBalance, dashboard.usdQuote);
   const minPayoutUsd = usdValueForBugz(dashboard.minPayout, dashboard.usdQuote);

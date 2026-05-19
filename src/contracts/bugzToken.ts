@@ -4,7 +4,7 @@ import { chainConfig } from "../config/chains";
 import { QueryCache } from "../lib/cache";
 import { ZERO_ADDRESS } from "../lib/constants";
 import { appLog } from "../lib/logger";
-import { RpcReadCache } from "../lib/rpcReadCache";
+import { RpcReadCache, scheduleBaseRpcRead } from "../lib/rpcReadCache";
 import { normalizeAddress } from "../lib/utils";
 
 import { bugzTokenAbi } from "./bugzTokenAbi";
@@ -103,12 +103,10 @@ export const getBugzTokenMetadata = async (): Promise<TokenMetadata | null> => {
     TTL_MS,
     async () => {
       const contract = readContract();
-      const [name, symbol, decimals, totalSupply] = await Promise.all([
-        contract.name() as Promise<string>,
-        contract.symbol() as Promise<string>,
-        contract.decimals() as Promise<bigint>,
-        contract.totalSupply() as Promise<bigint>
-      ]);
+      const name = await scheduleBaseRpcRead("BUGZ token name", () => contract.name() as Promise<string>);
+      const symbol = await scheduleBaseRpcRead("BUGZ token symbol", () => contract.symbol() as Promise<string>);
+      const decimals = await scheduleBaseRpcRead("BUGZ token decimals", () => contract.decimals() as Promise<bigint>);
+      const totalSupply = await scheduleBaseRpcRead("BUGZ token total supply", () => contract.totalSupply() as Promise<bigint>);
 
       return {
         name,
@@ -126,7 +124,9 @@ export const getBugzTokenBalance = async (address: `0x${string}`): Promise<bigin
   }
 
   const key = `balance:${bugzTokenAddress()}:${address}`;
-  return readCache.getOrLoad(key, TTL_MS, async () => (await readContract().balanceOf(address)) as bigint);
+  return readCache.getOrLoad(key, TTL_MS, async () =>
+    scheduleBaseRpcRead("BUGZ token balance", () => readContract().balanceOf(address) as Promise<bigint>)
+  );
 };
 
 export const getBugzTreasurySnapshot = async (): Promise<TreasurySnapshot | null> => {
@@ -137,10 +137,12 @@ export const getBugzTreasurySnapshot = async (): Promise<TreasurySnapshot | null
   const treasuryAddress = chainConfig.bugzTreasuryAddress;
   const key = `treasury:${bugzTokenAddress()}:${treasuryAddress}`;
   return readCache.getOrLoad(key, TTL_MS, async () => {
-    const [tokenBalance, nativeBalance] = await Promise.all([
-      readContract().balanceOf(treasuryAddress) as Promise<bigint>,
+    const tokenBalance = await scheduleBaseRpcRead("treasury BUGZ token balance", () =>
+      readContract().balanceOf(treasuryAddress) as Promise<bigint>
+    );
+    const nativeBalance = await scheduleBaseRpcRead("treasury native balance", () =>
       readProvider.getBalance(treasuryAddress)
-    ]);
+    );
 
     return {
       address: treasuryAddress,
@@ -159,7 +161,9 @@ export const getBugzTreasuryTokenBalance = async (): Promise<TreasuryTokenSnapsh
   const key = `treasury-token:${bugzTokenAddress()}:${treasuryAddress}`;
   return readCache.getOrLoad(key, TTL_MS, async () => ({
     address: treasuryAddress,
-    tokenBalance: (await readContract().balanceOf(treasuryAddress)) as bigint
+    tokenBalance: await scheduleBaseRpcRead("treasury BUGZ token balance", () =>
+      readContract().balanceOf(treasuryAddress) as Promise<bigint>
+    )
   }));
 };
 

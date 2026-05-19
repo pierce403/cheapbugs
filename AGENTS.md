@@ -80,7 +80,7 @@ npm run launch:bug-index
 - `src/contracts/bugIndex.ts`: frontend read/write adapter for the bug index contract
 - `src/contracts/cheapbugsSuite.ts`: frontend owner/read/write adapter for CheapBugs contract-suite management
 - `src/contracts/bondVault.ts`: frontend bond-vault staking adapter for BUGZ approval, bonding, delayed withdrawals, and level reads
-- `src/contracts/treasuryVault.ts`: frontend read adapter for treasury payout divisor and reward-range reads
+- `src/contracts/treasuryVault.ts`: frontend read/write adapter for treasury payout reads, detail-key payment approval, and `purchaseDetailKey`
 - `src/contracts/priceFeeds.ts`: frontend Chainlink ETH/USD feed adapter for treasury USD estimates
 - `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, connected-wallet balances, optional treasury stats, and patron scans
 - `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
@@ -91,6 +91,7 @@ npm run launch:bug-index
 - `src/lib/download.ts`: browser text-file download helper used for embedded wallet key export
 - `src/lib/authors.ts`: ENS-backed report-author display helper with a fail-open timeout
 - `src/lib/reportDisplay.ts`: title/target display fallbacks from BugBundle public metadata plus onchain fields
+- `src/lib/rpcReadCache.ts`: shared browser Base RPC read cache, serialized read queue, and exponential rate-limit cooldown
 - `src/lib/logger.ts`: namespaced browser console logging helper for click/auth/debug breadcrumbs
 - `src/views/about.ts`: static protocol explainer route for lifecycle, contract mechanics, tech stack, and tokenomics
 - `src/views/profile.ts`: public author profile route for ENS avatar/name, BUGZ balance, and recent submissions
@@ -98,7 +99,7 @@ npm run launch:bug-index
 - `src/views/stake.ts`: connected-wallet BUGZ bonding and delayed-withdrawal route
 - `src/views/treasury.ts`: public treasury route for funding address, treasury value, and BUGZ/USD payout range
 - `src/xmtp/browser.ts`: browser XMTP SDK adapter for local/external wallet signers
-- `src/xmtp/broker.ts`: structured broker submission DM helper
+- `src/xmtp/broker.ts`: structured broker submission and detail-unlock XMTP DM helpers
 - `src/storage/gateway.ts`: static IPFS gateway reader and disabled-upload fallback
 - `src/storage/pinata.ts`: presigned-upload Pinata adapter
 - `src/attest/eas.ts`: EAS write adapter for verdicts and payout placeholders
@@ -111,6 +112,7 @@ npm run launch:bug-index
 - `scripts/broker-bot.py`: Python XMTP-to-Signal broker runner
 - `bots/cheapbugs_broker/`: broker command parsing, SQLite store, optional Signal CLI, and BUGZ payout adapters
 - `bots/cheapbugs_broker/bug_index.py`: broker-side `CheapBugsBugIndex.publishBug` adapter and call-shaping helper for accepted BugBundles
+- `bots/cheapbugs_broker/treasury.py`: broker-side treasury verifier for detail-key unlock payments
 
 ## Project Conventions
 
@@ -146,10 +148,10 @@ npm run launch:bug-index
 - The BUGZ patrons leaderboard prefers the Etherscan V2 `tokenholderlist` API when `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` is configured, falls back to 10,000-block Transfer-log pages from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, and caches holder snapshots in localStorage for 24 hours. Treasury stats use the committed Base treasury vault by default; `VITE_BUGZ_TREASURY_ADDRESS` only overrides that address.
 - The home page no longer renders a patrons preview; keep BUGZ holder scans isolated to `/patrons`.
 - Header BUGZ status should call `loadBugzHeaderBalance`, not `loadTokenDashboard`; ordinary route chrome must only read connected wallet BUGZ balance and avoid treasury/token metadata dashboard reads.
-- Base RPC contract adapters use `src/lib/rpcReadCache.ts` for short success caching, in-flight deduplication, and rate-limit cooldowns. Reuse that for new public RPC read adapters.
+- Base RPC contract adapters use `src/lib/rpcReadCache.ts` for short success caching, in-flight deduplication, a shared serialized read queue, and exponential global cooldown after 429/rate-limit errors. Wrap new public Base reads in `scheduleBaseRpcRead(...)` instead of issuing parallel `Promise.all` RPC bursts.
 - The `/manage` route uses `src/contracts/cheapbugsSuite.ts` to read `owner()` across the suite and expose owner actions for index brokers/admins/vault wiring, treasury broker/index/divisor wiring, bond slasher/treasury wiring, and ownership transfers. `renounceOwnership` is intentionally not exposed in the browser UI.
 - The `/stake` route uses `src/contracts/bondVault.ts` and shows active bond, pending withdrawal, wallet BUGZ, allowance, level, next-level threshold, and a live countdown for delayed withdrawal step 2. Keep copy clear that pending withdrawals remain slashable and new bonds cancel pending withdrawals.
-- The `/treasury` route uses `src/lib/treasury.ts`, `src/contracts/treasuryVault.ts`, `src/contracts/priceFeeds.ts`, and the existing BUGZ Uniswap v4 quote path to show treasury BUGZ, estimated USD value, and `calculateRewardAmount(1)` through `calculateRewardAmount(10)` as the per-bug range. USD estimates default to Chainlink Base ETH/USD feed `0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70`; if the quote/feed fails, keep BUGZ values visible with an informative warning.
+- The `/treasury` route uses `src/lib/treasury.ts`, `src/contracts/treasuryVault.ts`, `src/contracts/priceFeeds.ts`, and the existing BUGZ Uniswap v4 quote path to show treasury BUGZ, estimated USD value, and `calculateRewardAmount(1)` through `calculateRewardAmount(10)` as the per-bug range. It renders cached or placeholder data first, then fills values in a throttled background refresh. USD estimates default to Chainlink Base ETH/USD feed `0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70`; if the quote/feed fails, keep BUGZ values visible with an informative warning.
 - `tests/manage-stake.spec.ts` mocks Base RPC for owner checks, role snapshots, and bond-vault account state.
 - `tests/treasury.spec.ts` mocks Base RPC for BUGZ metadata, treasury balance, treasury reward math, Uniswap v4 quotes, and Chainlink ETH/USD reads.
 - `tests/recent-reports.spec.ts` mocks Base JSON-RPC, IPFS BugBundle public metadata, ENS, and BUGZ balance reads to verify that index `latestReportHashes` plus `getReport` results render in the home route's `[ recent reports ]` table with date/title/target/author/details columns, cache across route changes and reloads, survive 429s from Base/IPFS using stale localStorage, and link to the author profile route.
@@ -183,7 +185,9 @@ npm run launch:bug-index
 - During broker submission progress, the submit route shows `#xmtp-processing-modal` with the latest XMTP or broker status message, treats `Encrypted BugBundle pinned to IPFS: ipfs://...` as progress, keeps it open until a `Submission complete: Bug published onchain...`, `Bug already exists onchain...`, or `Bug index dry-run complete...` broker reply, then switches the modal into a closeable completed state.
 - Browser XMTP registration can require a wallet signature before any broker message is sent. `src/xmtp/browser.ts` caches identical signature requests, skips redundant registration when the SDK reports the installation is already registered, and checks broker inboxes with both stripped and `0x` Ethereum identifier forms.
 - The Python parser rejects text `!submit` messages, missing core fields, unexpected fields, and invalid provided target references.
-- The broker has three website-initiated JSON-over-XMTP flows: publisher for bug submission/publishing, seller for planned judging-period preview access requests, and bouncer for special Signal group access requests.
+- The broker has three website-initiated JSON-over-XMTP flows: publisher for bug submission/publishing, seller/detail-unlock for paid early access to unrevealed details keys, and bouncer for special Signal group access requests.
+- Detail unlocks use strict JSON schema `cheapbugs.detail_unlock.v1` in `src/xmtp/broker.ts` and `bots/cheapbugs_broker/commands.py`. The browser asks for a quote, approves/pays `CheapBugsTreasuryVault.purchaseDetailKey(reportHash, amount)`, sends the tx hash back, then stores the returned details key in the existing per-report access-key localStorage path.
+- Broker detail-unlock verification must treat the buyer as adversarial: bind `buyer_address` to the authenticated XMTP sender, verify broker/index/treasury/chain config, use the SQLite quote by request id, verify the transaction sender/recipient/status, and require `detailKeyPayments(reportHash,buyer) >= stored_quote.price_wei` before sending the key. Do not trust buyer-supplied prices or amounts.
 - `bots/cheapbugs_broker/xmtp_runner.py` passes `ctx.get_sender_address()` into `BrokerBot.handle_xmtp_text`. The bouncer/access path treats that authenticated XMTP sender as the only wallet identity; optional `wallet` fields must match it and are rejected before BUGZ balance checks or Signal invites if they differ.
 - Broker submission records must use the verified PublishBug reporter. `bots/cheapbugs_broker/service.py` rejects submissions when the verified EIP-712 reporter differs from `reporter_address`, or when an available authenticated XMTP sender differs from that verified reporter, before credentials, IPFS pinning, index publication, Signal relay, or payout persistence.
 - Signal relay formatting in `bots/cheapbugs_broker/service.py` should stay compact: include the heading, summary, details, and BugBundle URI, but do not re-add empty repro/evidence/contact-hint placeholder sections.

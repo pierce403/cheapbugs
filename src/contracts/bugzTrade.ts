@@ -8,6 +8,7 @@ import {
 import { chainConfig } from "../config/chains";
 import { authController } from "../services";
 import type { HexString } from "../types/domain";
+import { scheduleBaseRpcRead } from "../lib/rpcReadCache";
 import { normalizeAddress } from "../lib/utils";
 
 import { clearBugzTokenCache, getBugzTokenMetadata } from "./bugzToken";
@@ -191,12 +192,14 @@ const isInputCurrency0 = (pool: BugzPool, side: BugzTradeSide): boolean => {
 
 const quoteV4ExactInput = async (pool: BugzPool, side: BugzTradeSide, amountIn: bigint): Promise<bigint> => {
   const quoter = new Contract(UNISWAP_V4_QUOTER_BASE, quoterV4Abi, readProvider);
-  const quoted = (await quoter.quoteExactInputSingle.staticCall({
-    poolKey: pool.key,
-    zeroForOne: isInputCurrency0(pool, side),
-    exactAmount: amountIn,
-    hookData: "0x"
-  })) as [bigint, bigint];
+  const quoted = await scheduleBaseRpcRead("BUGZ pool quote", () =>
+    quoter.quoteExactInputSingle.staticCall({
+      poolKey: pool.key,
+      zeroForOne: isInputCurrency0(pool, side),
+      exactAmount: amountIn,
+      hookData: "0x"
+    }) as Promise<[bigint, bigint]>
+  );
   return quoted[0];
 };
 

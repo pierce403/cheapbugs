@@ -6,7 +6,10 @@ import { saveReportAccessKey } from "../lib/report-access";
 import { toGatewayUrl } from "../lib/ipfs";
 import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { chainConfig } from "../config/chains";
-import { escapeHtml, formatDate, newlineToBreaks, shortHash, textOrDash } from "../lib/utils";
+import { approveTreasuryForDetailKeyPayment, purchaseDetailKey } from "../contracts/treasuryVault";
+import { authController } from "../services";
+import { confirmDetailUnlockPayment, requestDetailUnlockQuote } from "../xmtp/broker";
+import { escapeHtml, formatDate, formatTokenAmount, newlineToBreaks, shortHash, textOrDash } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
 
@@ -33,11 +36,29 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
   const reviews = await loadReviewVerdicts(reportHash);
   const reviewState = computeReviewDisplayState(reviews);
   const accessKey = getStoredAccessKey(reportHash);
+  const revealAt = bundle.publicSubmission.revealAfter ? Date.parse(bundle.publicSubmission.revealAfter) : NaN;
+  const canBuyEarlyDetails =
+    !accessKey &&
+    !bundle.publicSubmission.detailsKeyRevealed &&
+    Number.isFinite(revealAt) &&
+    revealAt > Date.now();
   let privateView = `<p class="muted-copy">Private dossier locked. Paste the review access key to decrypt client-side.</p>`;
+  const earlyUnlockCta = canBuyEarlyDetails
+    ? `
+      <button id="buy-detail-unlock" type="button" class="button secondary lock-action">
+        <span class="lock-icon" aria-hidden="true"></span>
+        buy early access
+      </button>
+    `
+    : "";
 
   if (accessKey) {
     try {
-      const privateSubmission = await decryptPrivateSubmission(bundle.publicSubmission.encryptedPayloadCid, accessKey);
+      const privateSubmission = await decryptPrivateSubmission(
+        bundle.publicSubmission.encryptedPayloadCid,
+        accessKey,
+        bundle.publicSubmission
+      );
       privateView = `
         <table class="data-table">
           <tbody>
@@ -138,6 +159,7 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
 
       <section class="panel">
         <div class="panel-title">[ private dossier ]</div>
+        ${earlyUnlockCta}
         <form id="access-key-form" class="stack-form narrow-form">
           <label>
             review access key
@@ -151,6 +173,17 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
         </form>
         <div class="private-view">${privateView}</div>
       </section>
+
+      <div id="detail-unlock-modal" class="processing-modal-backdrop" hidden>
+        <div class="panel processing-modal detail-unlock-modal">
+          <div class="signature-spinner" aria-hidden="true"></div>
+          <div class="signature-modal-copy">
+            <strong id="detail-unlock-title">detail unlock</strong>
+            <p id="detail-unlock-status">waiting for broker quote.</p>
+            <div id="detail-unlock-actions" class="modal-actions"></div>
+          </div>
+        </div>
+      </div>
 
       ${
         context.session.isReviewer
@@ -208,7 +241,32 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
       const accessInput = root.querySelector<HTMLInputElement>("#report-access-key");
       const revealButton = root.querySelector<HTMLButtonElement>("#reveal-access-key");
       const copyButton = root.querySelector<HTMLButtonElement>("#copy-access-key");
+      const unlockButton = root.querySelector<HTMLButtonElement>("#buy-detail-unlock");
+      const unlockModal = root.querySelector<HTMLDivElement>("#detail-unlock-modal");
+      const unlockTitle = root.querySelector<HTMLElement>("#detail-unlock-title");
+      const unlockStatus = root.querySelector<HTMLElement>("#detail-unlock-status");
+      const unlockActions = root.querySelector<HTMLDivElement>("#detail-unlock-actions");
       const reviewForm = root.querySelector<HTMLFormElement>("#review-form");
+
+      const setUnlockStatus = (title: string, message: string): void => {
+        if (unlockTitle) {
+          unlockTitle.textContent = title;
+        }
+        if (unlockStatus) {
+          unlockStatus.textContent = message;
+        }
+      };
+
+      const setUnlockActions = (html: string): void => {
+        if (unlockActions) {
+          unlockActions.innerHTML = html;
+        }
+      };
+
+      const closeUnlockModal = (): void => {
+        unlockModal?.setAttribute("hidden", "");
+        setUnlockActions("");
+      };
 
       revealButton?.addEventListener("click", () => {
         if (!accessInput) {
@@ -240,6 +298,74 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
         saveReportAccessKey(reportHash, key);
         appContext.notify("success", "Review access key saved locally for this report.");
         await appContext.rerender();
+      });
+
+      unlockButton?.addEventListener("click", async () => {
+        const identity = authController.getXmtpIdentity();
+        const buyer = appContext.session.address;
+        if (!buyer || !identity) {
+          appContext.notify("info", "Connect a wallet before buying detail access.");
+          appContext.openWalletOnboarding();
+          return;
+        }
+        if (identity.address.toLowerCase() !== buyer.toLowerCase()) {
+          appContext.notify("error", "XMTP identity does not match the connected wallet.");
+          return;
+        }
+
+        unlockModal?.removeAttribute("hidden");
+        setUnlockActions("");
+        setUnlockStatus("detail unlock", "asking the broker for a report-specific price.");
+        try {
+          const quote = await requestDetailUnlockQuote(identity, reportHash, (message) =>
+            setUnlockStatus("detail unlock", message)
+          );
+          const priceLabel = `${formatTokenAmount(quote.priceWei, 18)} BUGZ`;
+          setUnlockStatus(
+            "detail unlock quote",
+            `${priceLabel} for ${quote.daysRemaining} day${quote.daysRemaining === 1 ? "" : "s"} of early access.`
+          );
+          setUnlockActions(`
+            <button id="confirm-detail-unlock" class="button" type="button">yes, pay ${escapeHtml(priceLabel)}</button>
+            <button id="cancel-detail-unlock" class="button secondary" type="button">cancel</button>
+          `);
+          root.querySelector<HTMLButtonElement>("#cancel-detail-unlock")?.addEventListener("click", closeUnlockModal);
+          root.querySelector<HTMLButtonElement>("#confirm-detail-unlock")?.addEventListener("click", async () => {
+            const confirmButton = root.querySelector<HTMLButtonElement>("#confirm-detail-unlock");
+            if (confirmButton) {
+              confirmButton.disabled = true;
+            }
+            setUnlockActions("");
+            try {
+              setUnlockStatus("approving BUGZ", "checking treasury allowance.");
+              await approveTreasuryForDetailKeyPayment(quote.priceWei);
+              setUnlockStatus("paying treasury", "sending the detail-key payment to the treasury vault.");
+              const payment = await purchaseDetailKey(reportHash, quote.priceWei);
+              setUnlockStatus("verifying payment", `payment confirmed: ${shortHash(payment.txHash, 12, 8)}. Asking broker for key.`);
+              const key = await confirmDetailUnlockPayment(
+                identity,
+                {
+                  reportHash,
+                  requestId: quote.requestId,
+                  txHash: payment.txHash
+                },
+                (message) => setUnlockStatus("broker verification", message)
+              );
+              saveReportAccessKey(reportHash, key.detailsKey);
+              appContext.notify("success", "Detail key saved locally for this report.");
+              closeUnlockModal();
+              await appContext.rerender();
+            } catch (error) {
+              setUnlockStatus("detail unlock failed", error instanceof Error ? error.message : "Detail unlock failed.");
+              setUnlockActions(`<button id="close-detail-unlock" class="button secondary" type="button">close</button>`);
+              root.querySelector<HTMLButtonElement>("#close-detail-unlock")?.addEventListener("click", closeUnlockModal);
+            }
+          });
+        } catch (error) {
+          setUnlockStatus("detail unlock failed", error instanceof Error ? error.message : "Broker quote failed.");
+          setUnlockActions(`<button id="close-detail-unlock" class="button secondary" type="button">close</button>`);
+          root.querySelector<HTMLButtonElement>("#close-detail-unlock")?.addEventListener("click", closeUnlockModal);
+        }
       });
 
       reviewForm?.addEventListener("submit", async (event) => {

@@ -80,6 +80,9 @@ export type SubmissionPublic = {
   targetRefHash: HexString;
   tags: string[];
   contentHash: HexString;
+  bugBundleHash: HexString;
+  encryptedDetailsHash: HexString;
+  detailsKeyCommitment: HexString;
   revealAfter: string | null;
   detailsKeyRevealed: boolean;
 };

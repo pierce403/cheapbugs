@@ -9,6 +9,8 @@ import { sendXmtpDm, type BrowserXmtpIdentity, type XmtpProgressHandler } from "
 
 export const BROKER_SUBMISSION_SCHEMA = "cheapbugs.bug_submission.v1";
 export const BROKER_SUBMISSION_VERSION = 1;
+export const BROKER_DETAIL_UNLOCK_SCHEMA = "cheapbugs.detail_unlock.v1";
+export const BROKER_DETAIL_UNLOCK_VERSION = 1;
 export const BUG_BUNDLE_SCHEMA = "cheapbugs.bug_bundle.v1";
 export const BUG_BUNDLE_VERSION = 1;
 export const PUBLISH_AUTHORIZATION_SCHEME = "eip712_publish_bug_v1";
@@ -30,6 +32,13 @@ const BROKER_TERMINAL_FAILURE_PATTERN = new RegExp(
   "i"
 );
 const BROKER_IPFS_CONFIRMATION_TIMEOUT_MS = 120 * 1000;
+const BROKER_UNLOCK_QUOTE_TIMEOUT_MS = 90 * 1000;
+const BROKER_UNLOCK_KEY_TIMEOUT_MS = 120 * 1000;
+const BROKER_DETAIL_UNLOCK_QUOTE_PATTERN =
+  /Detail unlock quote:\s*report\s+0x[a-fA-F0-9]{64}\s+request\s+0x[a-fA-F0-9]{32}\s+price_wei\s+\d+/i;
+const BROKER_DETAIL_UNLOCK_KEY_PATTERN =
+  /Detail key:\s*report\s+0x[a-fA-F0-9]{64}\s+request\s+0x[a-fA-F0-9]{32}\s+key\s+[A-Za-z0-9_-]{43}/i;
+const BROKER_DETAIL_UNLOCK_FAILURE_PATTERN = /Detail unlock (?:rejected|failed|unavailable)|Invalid JSON command|Missing required field|Unexpected/i;
 const BUG_BUNDLE_REVEAL_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 const BUG_BUNDLE_REVEAL_PUBLISH_BUFFER_MS = 60 * 60 * 1000;
 const PUBLISH_AUTHORIZATION_TTL_SECONDS = 24 * 60 * 60;
@@ -152,6 +161,36 @@ const extractTxHash = (text?: string): `0x${string}` | undefined => {
 
 const isDryRunCompletion = (text?: string): boolean => /Bug index dry-run complete/i.test(text ?? "");
 
+const extractUnlockQuote = (text?: string) => {
+  const match = text?.match(
+    /Detail unlock quote:\s*report\s+(0x[a-fA-F0-9]{64})\s+request\s+(0x[a-fA-F0-9]{32})\s+price_wei\s+(\d+)\s+days_remaining\s+(\d+)\s+expires_at\s+(\S+)/i
+  );
+  if (!match) {
+    return null;
+  }
+  return {
+    reportHash: match[1].toLowerCase() as `0x${string}`,
+    requestId: match[2].toLowerCase() as `0x${string}`,
+    priceWei: BigInt(match[3]),
+    daysRemaining: Number(match[4]),
+    expiresAt: match[5]
+  };
+};
+
+const extractDetailKey = (text?: string) => {
+  const match = text?.match(
+    /Detail key:\s*report\s+(0x[a-fA-F0-9]{64})\s+request\s+(0x[a-fA-F0-9]{32})\s+key\s+([A-Za-z0-9_-]{43})/i
+  );
+  if (!match) {
+    return null;
+  }
+  return {
+    reportHash: match[1].toLowerCase() as `0x${string}`,
+    requestId: match[2].toLowerCase() as `0x${string}`,
+    detailsKey: match[3]
+  };
+};
+
 const bytesToHex = (bytes: Uint8Array): `0x${string}` =>
   `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 
@@ -192,6 +231,8 @@ const optionalAddress = (address: string): `0x${string}` | "" => (address ? norm
 const unixSeconds = (iso: string): bigint => BigInt(Math.floor(Date.parse(iso) / 1000));
 
 const randomUint256 = (): bigint => BigInt(bytesToHex(randomBytes(32)));
+
+const randomRequestId = (): `0x${string}` => bytesToHex(randomBytes(16));
 
 const hashString = (value: string): `0x${string}` => keccak256(toBytes(value));
 
@@ -483,5 +524,101 @@ export const sendBrokerSubmission = async (
     reportHash: extractReportHash(result.completionText),
     txHash: extractTxHash(result.completionText),
     dryRun: isDryRunCompletion(result.completionText)
+  };
+};
+
+export const requestDetailUnlockQuote = async (
+  identity: BrowserXmtpIdentity,
+  reportHash: `0x${string}`,
+  onProgress?: XmtpProgressHandler
+) => {
+  if (!env.brokerXmtpAddress) {
+    throw new Error("Set VITE_BROKER_XMTP_ADDRESS before requesting detail unlocks.");
+  }
+  if (!env.bugTreasuryVaultAddress) {
+    throw new Error("Set VITE_BUG_TREASURY_VAULT_ADDRESS before requesting detail unlocks.");
+  }
+
+  const requestId = randomRequestId();
+  const message = stableStringify({
+    schema: BROKER_DETAIL_UNLOCK_SCHEMA,
+    type: "detail_unlock_quote",
+    version: BROKER_DETAIL_UNLOCK_VERSION,
+    request_id: requestId,
+    buyer_address: normalizeAddress(identity.address),
+    broker_address: normalizeAddress(env.brokerXmtpAddress),
+    chain_id: env.chainId,
+    bug_index: optionalAddress(env.bugIndexAddress),
+    treasury_vault: optionalAddress(env.bugTreasuryVaultAddress),
+    report_hash: reportHash.toLowerCase(),
+    client: {
+      name: "cheapbugs-web",
+      sent_at: new Date().toISOString()
+    }
+  });
+  const result = await sendXmtpDm(identity, env.brokerXmtpAddress, message, onProgress, {
+    completionPattern: BROKER_DETAIL_UNLOCK_QUOTE_PATTERN,
+    failurePattern: BROKER_DETAIL_UNLOCK_FAILURE_PATTERN,
+    timeoutMs: BROKER_UNLOCK_QUOTE_TIMEOUT_MS,
+    waitingMessage: "waiting for broker detail-unlock quote",
+    onReply: (message) => onProgress?.(`broker: ${message}`)
+  });
+  const quote = extractUnlockQuote(result.completionText);
+  if (!quote || quote.requestId !== requestId || quote.reportHash !== reportHash.toLowerCase()) {
+    throw new Error("Broker returned an invalid detail-unlock quote.");
+  }
+  return {
+    ...result,
+    ...quote
+  };
+};
+
+export const confirmDetailUnlockPayment = async (
+  identity: BrowserXmtpIdentity,
+  input: {
+    reportHash: `0x${string}`;
+    requestId: `0x${string}`;
+    txHash: `0x${string}`;
+  },
+  onProgress?: XmtpProgressHandler
+) => {
+  if (!env.brokerXmtpAddress) {
+    throw new Error("Set VITE_BROKER_XMTP_ADDRESS before confirming detail unlocks.");
+  }
+  if (!env.bugTreasuryVaultAddress) {
+    throw new Error("Set VITE_BUG_TREASURY_VAULT_ADDRESS before confirming detail unlocks.");
+  }
+
+  const message = stableStringify({
+    schema: BROKER_DETAIL_UNLOCK_SCHEMA,
+    type: "detail_unlock_paid",
+    version: BROKER_DETAIL_UNLOCK_VERSION,
+    request_id: input.requestId,
+    buyer_address: normalizeAddress(identity.address),
+    broker_address: normalizeAddress(env.brokerXmtpAddress),
+    chain_id: env.chainId,
+    bug_index: optionalAddress(env.bugIndexAddress),
+    treasury_vault: optionalAddress(env.bugTreasuryVaultAddress),
+    report_hash: input.reportHash.toLowerCase(),
+    tx_hash: input.txHash.toLowerCase(),
+    client: {
+      name: "cheapbugs-web",
+      sent_at: new Date().toISOString()
+    }
+  });
+  const result = await sendXmtpDm(identity, env.brokerXmtpAddress, message, onProgress, {
+    completionPattern: BROKER_DETAIL_UNLOCK_KEY_PATTERN,
+    failurePattern: BROKER_DETAIL_UNLOCK_FAILURE_PATTERN,
+    timeoutMs: BROKER_UNLOCK_KEY_TIMEOUT_MS,
+    waitingMessage: "waiting for broker payment verification and detail key",
+    onReply: (message) => onProgress?.(`broker: ${message}`)
+  });
+  const key = extractDetailKey(result.completionText);
+  if (!key || key.requestId !== input.requestId || key.reportHash !== input.reportHash.toLowerCase()) {
+    throw new Error("Broker returned an invalid detail key response.");
+  }
+  return {
+    ...result,
+    ...key
   };
 };

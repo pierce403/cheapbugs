@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable
 from uuid import uuid4
 
-from .models import PinnedBugBundle, SignalReactionEvent, SubmissionCommand, SubmissionRecord
+from .models import DetailUnlockQuote, PinnedBugBundle, SignalReactionEvent, SubmissionCommand, SubmissionRecord
 
 
 SCHEMA = """
@@ -70,6 +70,21 @@ CREATE TABLE IF NOT EXISTS signal_reactions (
   observed_at INTEGER NOT NULL,
   PRIMARY KEY (signal_group_id, target_sent_timestamp, reactor_id, emoji)
 );
+
+CREATE TABLE IF NOT EXISTS detail_unlock_quotes (
+  request_id TEXT PRIMARY KEY,
+  report_hash TEXT NOT NULL,
+  buyer_address TEXT NOT NULL,
+  price_wei TEXT NOT NULL,
+  days_remaining INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  paid_tx_hash TEXT,
+  fulfilled_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_detail_unlock_quotes_lookup
+  ON detail_unlock_quotes(report_hash, buyer_address, expires_at);
 """
 
 
@@ -206,6 +221,71 @@ class BrokerStore:
             ).fetchone()
         return _record_from_row(row) if row is not None else None
 
+    def find_submission_by_report_hash(self, report_hash: str) -> SubmissionRecord | None:
+        with self.session() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM submissions
+                WHERE lower(report_hash) = lower(?)
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (report_hash,),
+            ).fetchone()
+        return _record_from_row(row) if row is not None else None
+
+    def create_detail_unlock_quote(
+        self,
+        request_id: str,
+        report_hash: str,
+        buyer_address: str,
+        price_wei: int,
+        days_remaining: int,
+        expires_at: int,
+        now: int | None = None,
+    ) -> DetailUnlockQuote:
+        created_at = now or int(time.time())
+        with self.session() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO detail_unlock_quotes (
+                  request_id, report_hash, buyer_address, price_wei, days_remaining,
+                  expires_at, created_at, paid_tx_hash, fulfilled_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+                """,
+                (
+                    request_id,
+                    report_hash.lower(),
+                    buyer_address.lower(),
+                    str(price_wei),
+                    days_remaining,
+                    expires_at,
+                    created_at,
+                ),
+            )
+        quote = self.get_detail_unlock_quote(request_id)
+        if quote is None:
+            raise RuntimeError("Failed to load created detail unlock quote.")
+        return quote
+
+    def get_detail_unlock_quote(self, request_id: str) -> DetailUnlockQuote | None:
+        with self.session() as conn:
+            row = conn.execute("SELECT * FROM detail_unlock_quotes WHERE request_id = ?", (request_id,)).fetchone()
+        return _detail_unlock_quote_from_row(row) if row is not None else None
+
+    def mark_detail_unlock_fulfilled(self, request_id: str, tx_hash: str, now: int | None = None) -> None:
+        fulfilled_at = now or int(time.time())
+        with self.session() as conn:
+            conn.execute(
+                """
+                UPDATE detail_unlock_quotes
+                SET paid_tx_hash = ?, fulfilled_at = ?
+                WHERE request_id = ?
+                """,
+                (tx_hash.lower(), fulfilled_at, request_id),
+            )
+
     def upsert_reaction(self, event: SignalReactionEvent) -> None:
         with self.session() as conn:
             conn.execute(
@@ -327,6 +407,20 @@ def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
         index_tx_hash=str(row["index_tx_hash"]) if row["index_tx_hash"] is not None else None,
         index_published_at=int(row["index_published_at"]) if row["index_published_at"] is not None else None,
         error=str(row["error"]) if row["error"] is not None else None,
+    )
+
+
+def _detail_unlock_quote_from_row(row: sqlite3.Row) -> DetailUnlockQuote:
+    return DetailUnlockQuote(
+        request_id=str(row["request_id"]),
+        report_hash=str(row["report_hash"]),
+        buyer_address=str(row["buyer_address"]),
+        price_wei=int(str(row["price_wei"])),
+        days_remaining=int(row["days_remaining"]),
+        expires_at=int(row["expires_at"]),
+        created_at=int(row["created_at"]),
+        paid_tx_hash=str(row["paid_tx_hash"]) if row["paid_tx_hash"] is not None else None,
+        fulfilled_at=int(row["fulfilled_at"]) if row["fulfilled_at"] is not None else None,
     )
 
 
