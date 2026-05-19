@@ -2,7 +2,7 @@ import { getAddress, isAddress } from "ethers";
 
 import { loadAuthorDisplay } from "../lib/authors";
 import { loadRecentBundles } from "../lib/reports";
-import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
+import { reportDetailsUnlockText, reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { loadBugzAddressBalance } from "../lib/token";
 import { escapeHtml, formatDate, formatTokenAmount, normalizeAddress, shortHash } from "../lib/utils";
 
@@ -60,17 +60,16 @@ export const renderProfileView = async (context: AppViewContext): Promise<ViewRe
           const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
           return `
             <tr>
-              <td>
-                <a href="${href}" data-nav>${escapeHtml(reportDisplayTitle(bundle))}</a>
-                <div class="table-subline">${escapeHtml(reportDisplayTarget(bundle))}</div>
-              </td>
               <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
-              <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
+              <td><a href="${href}" data-nav>${escapeHtml(reportDisplayTitle(bundle))}</a></td>
+              <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
+              <td>${escapeHtml(primary)}</td>
+              <td>${escapeHtml(reportDetailsUnlockText(bundle))}</td>
             </tr>
           `;
         })
         .join("")
-    : `<tr><td colspan="3" class="muted-cell">No recent submissions found for this address.</td></tr>`;
+    : `<tr><td colspan="5" class="muted-cell">No recent submissions found for this address.</td></tr>`;
 
   return {
     title: primary,
@@ -100,9 +99,11 @@ export const renderProfileView = async (context: AppViewContext): Promise<ViewRe
         <table class="data-table">
           <thead>
             <tr>
-              <th>title</th>
               <th>date</th>
-              <th>description</th>
+              <th>title</th>
+              <th>target</th>
+              <th>author</th>
+              <th>details</th>
             </tr>
           </thead>
           <tbody>${submissionRows}</tbody>

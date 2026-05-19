@@ -1,9 +1,8 @@
 import { loadRecentBundles } from "../lib/reports";
 import { authorDisplayFromMap, loadAuthorDisplayMap } from "../lib/authors";
 import { getFeaturedReportHashes } from "../lib/eas";
-import { toGatewayUrl } from "../lib/ipfs";
-import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
-import { escapeHtml, formatDate, textOrDash } from "../lib/utils";
+import { reportDetailsUnlockText, reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
+import { escapeHtml, formatDate } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
 
@@ -14,46 +13,27 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
   const featuredBundles = featured.length ? featured : bundles.slice(0, 4);
   const authorDisplays = await loadAuthorDisplayMap(bundles.map((bundle) => bundle.publicSubmission.reporterAddress));
 
+  const renderBugListingRow = (bundle: (typeof bundles)[number]): string => {
+    const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
+    const author = authorDisplayFromMap(authorDisplays, bundle.publicSubmission.reporterAddress);
+    const profileHref = context.router.href(`/profile/${author.address}`);
+    return `
+      <tr>
+        <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
+        <td><a href="${href}" data-nav>${escapeHtml(reportDisplayTitle(bundle))}</a></td>
+        <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
+        <td><a href="${profileHref}" data-nav>${escapeHtml(author.label)}</a></td>
+        <td>${escapeHtml(reportDetailsUnlockText(bundle))}</td>
+      </tr>
+    `;
+  };
+
   const featuredRows = featuredBundles.length
-    ? featuredBundles
-        .map((bundle) => {
-          const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
-          const title = reportDisplayTitle(bundle);
-          return `
-            <tr>
-              <td><a href="${href}" data-nav>${escapeHtml(title)}</a></td>
-              <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
-              <td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td>
-              <td>${escapeHtml(textOrDash(bundle.publicSubmission.tags.join(", ")))}</td>
-              <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
-            </tr>
-          `;
-        })
-        .join("")
+    ? featuredBundles.map(renderBugListingRow).join("")
     : `<tr><td colspan="5" class="muted-cell">No featured items configured yet.</td></tr>`;
 
   const recentRows = bundles.length
-    ? bundles
-        .map((bundle) => {
-          const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
-          const author = authorDisplayFromMap(authorDisplays, bundle.publicSubmission.reporterAddress);
-          const profileHref = context.router.href(`/profile/${author.address}`);
-          const title = reportDisplayTitle(bundle);
-          const target = reportDisplayTarget(bundle);
-          return `
-            <tr>
-              <td>
-                <a href="${href}" data-nav>${escapeHtml(title)}</a>
-                <div class="table-subline">${escapeHtml(target)}</div>
-              </td>
-              <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
-              <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
-              <td><a href="${escapeHtml(toGatewayUrl(bundle.publicSubmission.encryptedPayloadCid))}" target="_blank" rel="noreferrer">bundle</a></td>
-              <td><a href="${profileHref}" data-nav>${escapeHtml(author.label)}</a></td>
-            </tr>
-          `;
-        })
-        .join("")
+    ? bundles.map(renderBugListingRow).join("")
     : `<tr><td colspan="5" class="muted-cell">No onchain bug reports resolved yet.</td></tr>`;
 
   return {
@@ -79,11 +59,11 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
         <table class="data-table">
           <thead>
             <tr>
+              <th>date</th>
               <th>title</th>
               <th>target</th>
-              <th>mode</th>
-              <th>tags</th>
-              <th>summary</th>
+              <th>author</th>
+              <th>details</th>
             </tr>
           </thead>
           <tbody>${featuredRows}</tbody>
@@ -95,11 +75,11 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
         <table class="data-table">
           <thead>
             <tr>
-              <th>title</th>
               <th>date</th>
-              <th>description</th>
-              <th>download</th>
+              <th>title</th>
+              <th>target</th>
               <th>author</th>
+              <th>details</th>
             </tr>
           </thead>
           <tbody>${recentRows}</tbody>

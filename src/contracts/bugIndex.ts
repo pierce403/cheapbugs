@@ -26,6 +26,8 @@ type ContractSubmission = {
   targetRefHash: `0x${string}`;
   tags: string;
   contentHash: `0x${string}`;
+  revealAfter: bigint;
+  detailsKeyRevealed: boolean;
 };
 
 const bugIndexAddress = (): `0x${string}` => {
@@ -40,7 +42,7 @@ export const isBugIndexConfigured = (): boolean => Boolean(chainConfig.bugIndexA
 
 const readProvider = createBaseReadProvider();
 const readCache = new RpcReadCache();
-const persistentCache = new QueryCache("cheapbugs.bugIndex.v1");
+const persistentCache = new QueryCache("cheapbugs.bugIndex.v2");
 const LATEST_REPORTS_TTL_MS = 15_000;
 const REPORT_TTL_MS = 60_000;
 const PERSISTENT_REPORT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -67,7 +69,9 @@ const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => 
   targetKind: indexToTargetKind(Number(entry.targetKind)),
   targetRefHash: entry.targetRefHash,
   tags: parseTags(entry.tags),
-  contentHash: entry.contentHash
+  contentHash: entry.contentHash,
+  revealAfter: new Date(Number(entry.revealAfter) * 1000).toISOString(),
+  detailsKeyRevealed: entry.detailsKeyRevealed
 });
 
 export const getBugReport = async (reportHash: `0x${string}`): Promise<SubmissionPublic | null> => {

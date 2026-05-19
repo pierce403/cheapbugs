@@ -14,6 +14,9 @@ const getReportSelector = bugIndexInterface.getFunction("getReport")?.selector;
 const reverseSelector = id("reverseWithGateways(bytes,uint256,string[])").slice(0, 10);
 const resolveSelector = id("resolveWithGateways(bytes,bytes,string[])").slice(0, 10);
 const zeroAddress = "0x0000000000000000000000000000000000000000";
+const revealDelayMs = 2 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000 + 30 * 60 * 1000;
+
+const revealAfterDate = () => new Date(Date.now() + revealDelayMs);
 
 type RpcRequest = {
   id: number | string | null;
@@ -30,6 +33,7 @@ type RpcResponse = {
 
 const reportTuple = () => {
   const createdAt = 1_779_120_000n;
+  const revealAfter = BigInt(Math.floor(revealAfterDate().getTime() / 1000));
   return [
     reportHash,
     "CB-LIVE-0001",
@@ -45,7 +49,7 @@ const reportTuple = () => {
     id("bug-bundle"),
     id("encrypted-details"),
     id("details-key"),
-    createdAt + 604_800n,
+    revealAfter,
     zeroBytes32,
     false,
     0,
@@ -66,7 +70,9 @@ const submissionPublic = () => ({
   targetKind: "protocol",
   targetRefHash: id("base-protocol"),
   tags: ["base", "parser"],
-  contentHash: id("public-content")
+  contentHash: id("public-content"),
+  revealAfter: revealAfterDate().toISOString(),
+  detailsKeyRevealed: false
 });
 
 const bugBundlePayload = () => ({
@@ -205,8 +211,8 @@ const seedExpiredReportCaches = async (page: Page): Promise<void> => {
           expiresAt: Date.now() - 1
         });
 
-      window.localStorage.setItem(`cheapbugs.bugIndex.v1:latest:${address}:12`, expiredRecord([report]));
-      window.localStorage.setItem(`cheapbugs.bugIndex.v1:report:${address}:${hash}`, expiredRecord(report));
+      window.localStorage.setItem(`cheapbugs.bugIndex.v2:latest:${address}:12`, expiredRecord([report]));
+      window.localStorage.setItem(`cheapbugs.bugIndex.v2:report:${address}:${hash}`, expiredRecord(report));
       window.localStorage.setItem("cheapbugs.ipfs:ipfs-gateway:ipfs://bafyrecentbug", expiredRecord(bundle));
     },
     {
@@ -233,14 +239,13 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await expect(page.getByText("static assets only")).toHaveCount(0);
 
   const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
+  await expect(recentReports.locator("thead th")).toHaveText(["date", "title", "target", "author", "details"]);
   const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
-  await expect(reportRow).toContainText("Fresh broker-published bug from chain.");
+  await expect(reportRow.locator("td").nth(0)).toContainText("May 18, 2026");
+  await expect(reportRow.locator("td").nth(1)).toContainText("Live parser exploit");
   await expect(reportRow).toContainText("Base protocol parser (protocol)");
   await expect(reportRow).toContainText("alice.eth");
-  await expect(reportRow.getByRole("link", { name: "bundle" })).toHaveAttribute(
-    "href",
-    "https://ipfs.io/ipfs/bafyrecentbug"
-  );
+  await expect(reportRow.locator("td").nth(4)).toHaveText("2d 4h");
   await expect(recentReports.getByText("No onchain bug reports resolved yet.")).toHaveCount(0);
 
   expect(counts.latest).toBeGreaterThan(0);
@@ -252,7 +257,8 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await page.getByRole("link", { name: "submit" }).click();
   await expect(page).toHaveURL(/\/submit$/);
   await page.getByRole("link", { name: "index" }).click();
-  await expect(reportRow).toContainText("Fresh broker-published bug from chain.");
+  await expect(reportRow.locator("td").nth(1)).toContainText("Live parser exploit");
+  await expect(reportRow.locator("td").nth(4)).toHaveText("2d 4h");
   expect(counts).toEqual(countsAfterFirstRender);
   expect(gateway.counts.bundle).toBe(gatewayCallsAfterFirstRender);
 
@@ -260,6 +266,7 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   const reloadedRecentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
   const reloadedReportRow = reloadedRecentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
   await expect(reloadedReportRow).toContainText("Base protocol parser (protocol)");
+  await expect(reloadedReportRow.locator("td").nth(4)).toHaveText("2d 4h");
   expect(counts).toEqual(countsAfterFirstRender);
   expect(gateway.counts.bundle).toBe(gatewayCallsAfterFirstRender);
 
@@ -268,7 +275,9 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await expect(page.locator(".profile-page-panel")).toContainText("alice.eth");
   await expect(page.locator(".profile-page-panel")).toContainText("420 BUGZ");
   const profileSubmissions = page.locator("section").filter({ hasText: "[ previous submissions ]" });
+  await expect(profileSubmissions.locator("thead th")).toHaveText(["date", "title", "target", "author", "details"]);
   await expect(profileSubmissions).toContainText("Live parser exploit");
+  await expect(profileSubmissions).toContainText("2d 4h");
 });
 
 test("renders stale cached report and BugBundle details when providers rate limit", async ({ page }) => {
@@ -298,8 +307,9 @@ test("renders stale cached report and BugBundle details when providers rate limi
 
   const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
   const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
-  await expect(reportRow).toContainText("Fresh broker-published bug from chain.");
+  await expect(reportRow.locator("td").nth(1)).toContainText("Live parser exploit");
   await expect(reportRow).toContainText("Base protocol parser (protocol)");
+  await expect(reportRow.locator("td").nth(4)).toHaveText("2d 4h");
   expect(baseCalls).toBeGreaterThan(0);
   expect(gatewayCalls).toBe(1);
 });

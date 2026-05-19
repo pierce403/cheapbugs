@@ -80,6 +80,8 @@ export type SubmissionPublic = {
   targetRefHash: HexString;
   tags: string[];
   contentHash: HexString;
+  revealAfter: string | null;
+  detailsKeyRevealed: boolean;
 };
 
 export type SubmissionPublicMetadata = {

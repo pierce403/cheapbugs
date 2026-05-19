@@ -4,7 +4,7 @@ import { chainConfig } from "../config/chains";
 import { authorDisplayFromMap, loadAuthorDisplayMap } from "../lib/authors";
 import { getSchemaCatalog } from "../lib/schema-overrides";
 import { loadReviewQueue } from "../lib/reports";
-import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
+import { reportDetailsUnlockText, reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
@@ -78,11 +78,11 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
           const profileHref = context.router.href(`/profile/${author.address}`);
           return `
             <tr>
-              <td><a href="${href}" data-nav>${escapeHtml(reportDisplayTitle(bundle))}</a></td>
               <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
+              <td><a href="${href}" data-nav>${escapeHtml(reportDisplayTitle(bundle))}</a></td>
               <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
-              <td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td>
               <td><a href="${profileHref}" data-nav>${escapeHtml(author.label)}</a></td>
+              <td>${escapeHtml(reportDetailsUnlockText(bundle))}</td>
               <td>${escapeHtml(reviewState.headline?.validity ?? "pending")}</td>
               <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
             </tr>
@@ -103,11 +103,11 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
         <table class="data-table">
           <thead>
             <tr>
-              <th>report</th>
-              <th>created</th>
+              <th>date</th>
+              <th>title</th>
               <th>target</th>
-              <th>mode</th>
               <th>author</th>
+              <th>details</th>
               <th>trusted state</th>
               <th>summary</th>
             </tr>
