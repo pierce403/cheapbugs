@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import re
+import time
 from typing import Any
 
 from .models import PinnedBugBundle, SubmissionCommand
@@ -56,6 +59,11 @@ BUG_INDEX_ABI = [
         "outputs": [],
     },
 ]
+REVERT_DATA_RE = re.compile(r"0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{64})+")
+INVALID_REVEAL_AFTER_SELECTOR = "0xe5ee267f"
+REVEAL_NOT_READY_SELECTOR = "0xaa4da484"
+SIGNATURE_EXPIRED_SELECTOR = "0xfcd4a11f"
+BUG_INDEX_JUDGMENT_PERIOD_SECONDS = 7 * 24 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -160,6 +168,8 @@ class BugIndexClient:
                 )
         except Exception as exc:
             raise BugIndexPublishError(f"Could not check whether report {report_hash} already exists on the bug index: {_rpc_error(exc)}") from exc
+
+        _preflight_reveal_after(bug_input)
 
         broker_address = self.web3.to_checksum_address(account.address)
         try:
@@ -280,6 +290,19 @@ def checksum_publish_bug_input(web3: Any, bug_input: tuple[Any, ...]) -> tuple[A
     return tuple(values)
 
 
+def _preflight_reveal_after(bug_input: tuple[Any, ...]) -> None:
+    reveal_after = int(bug_input[14])
+    minimum = int(time.time()) + BUG_INDEX_JUDGMENT_PERIOD_SECONDS
+    if reveal_after < minimum:
+        raise BugIndexPublishError(
+            "publishBug would revert with InvalidRevealAfter: "
+            f"revealAfter={reveal_after} ({_format_timestamp(reveal_after)}), "
+            f"minimum_now={minimum} ({_format_timestamp(minimum)}). "
+            "The index requires revealAfter to be at least 7 days after the onchain publish block; "
+            "resubmit from the updated frontend with a later reveal window."
+        )
+
+
 def _report_id(report_hash: str) -> str:
     return f"cb-{report_hash[2:10]}"
 
@@ -336,12 +359,73 @@ def _address(data: dict[str, Any], name: str) -> str:
 
 
 def _rpc_error(exc: Exception) -> str:
+    decoded = _decode_index_revert(exc)
+    if decoded:
+        return decoded
     if isinstance(exc, ValueError) and exc.args:
         payload = exc.args[0]
         if isinstance(payload, dict):
             message = payload.get("message") or payload.get("data") or payload
             return str(message)
     return str(exc)
+
+
+def _decode_index_revert(exc: Exception) -> str:
+    for data in _iter_revert_data(exc):
+        selector = data[:10].lower()
+        if selector in {INVALID_REVEAL_AFTER_SELECTOR, REVEAL_NOT_READY_SELECTOR, SIGNATURE_EXPIRED_SELECTOR}:
+            value = _decode_revert_uint(data)
+            if value is None:
+                continue
+            if selector == INVALID_REVEAL_AFTER_SELECTOR:
+                return (
+                    "CheapBugsBugIndex reverted with InvalidRevealAfter"
+                    f"(revealAfter={value}, {_format_timestamp(value)}). "
+                    "The index requires revealAfter to be at least 7 days after the onchain publish block; "
+                    "resubmit from the updated frontend with a later reveal window."
+                )
+            if selector == REVEAL_NOT_READY_SELECTOR:
+                return (
+                    "CheapBugsBugIndex reverted with RevealNotReady"
+                    f"(revealAfter={value}, {_format_timestamp(value)})."
+                )
+            return (
+                "CheapBugsBugIndex reverted with SignatureExpired"
+                f"(deadline={value}, {_format_timestamp(value)}). Resubmit to sign a fresh PublishBug authorization."
+            )
+    return ""
+
+
+def _iter_revert_data(value: Any):
+    if isinstance(value, BaseException):
+        for item in value.args:
+            yield from _iter_revert_data(item)
+        yield from _iter_revert_data(str(value))
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _iter_revert_data(item)
+        return
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            yield from _iter_revert_data(item)
+        return
+    if isinstance(value, str):
+        for match in REVERT_DATA_RE.finditer(value):
+            yield match.group(0)
+
+
+def _decode_revert_uint(data: str) -> int | None:
+    if len(data) < 74:
+        return None
+    try:
+        return int(data[10:74], 16)
+    except ValueError:
+        return None
+
+
+def _format_timestamp(timestamp: int) -> str:
+    return datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
 
 
 def _receipt_value(receipt: Any, key: str) -> Any:

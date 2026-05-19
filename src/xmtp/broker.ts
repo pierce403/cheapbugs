@@ -30,6 +30,7 @@ const BROKER_TERMINAL_FAILURE_PATTERN = new RegExp(
 );
 const BROKER_IPFS_CONFIRMATION_TIMEOUT_MS = 120 * 1000;
 const BUG_BUNDLE_REVEAL_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
+const BUG_BUNDLE_REVEAL_PUBLISH_BUFFER_MS = 60 * 60 * 1000;
 const PUBLISH_AUTHORIZATION_TTL_SECONDS = 24 * 60 * 60;
 const PUBLISH_BUG_TYPES = {
   PublishBug: [
@@ -289,7 +290,7 @@ const buildUnsignedBugBundleCore = async (
     chain_id: env.chainId,
     bug_index: optionalAddress(env.bugIndexAddress),
     created_at: createdAt.toISOString(),
-    reveal_after: isoAfter(createdAt, BUG_BUNDLE_REVEAL_DELAY_MS),
+    reveal_after: isoAfter(createdAt, BUG_BUNDLE_REVEAL_DELAY_MS + BUG_BUNDLE_REVEAL_PUBLISH_BUFFER_MS),
     submission
   };
   const aad = new TextEncoder().encode(stableStringify(aadObject));

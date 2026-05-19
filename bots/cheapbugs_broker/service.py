@@ -8,6 +8,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from .bugbundle import BugBundleError, VerifiedBugBundle, verify_authorized_bug_bundle
@@ -29,6 +30,8 @@ from .token import BugzTokenClient
 
 
 ReplyFn = Callable[[str], Awaitable[None]]
+BUG_INDEX_JUDGMENT_PERIOD_SECONDS = 7 * 24 * 60 * 60
+BUG_INDEX_REVEAL_PREFLIGHT_BUFFER_SECONDS = 60
 
 
 class BrokerBot:
@@ -226,6 +229,14 @@ class BrokerBot:
             "bugbundle_valid",
             "Publish authorization is valid and encrypted BugBundle details decrypt cleanly.",
         )
+        if not self.config.dry_run:
+            try:
+                self._validate_publish_reveal_window(verified_bundle)
+            except CommandError as exc:
+                self.logger.info("submission reveal window invalid message_id=%s reason=%s", message_id, exc)
+                await self._reply(reply, message_id, "bugbundle_invalid", f"BugBundle is invalid: {exc}")
+                self.store.mark_message_processed(message_id, "bugbundle_invalid")
+                return
 
         try:
             validate_submission_target(command)
@@ -520,6 +531,16 @@ class BrokerBot:
             "reputation checks passed"
         )
 
+    def _validate_publish_reveal_window(self, verified: VerifiedBugBundle) -> None:
+        reveal_after = _publish_authorization_uint(verified, "revealAfter")
+        minimum = int(time.time()) + BUG_INDEX_JUDGMENT_PERIOD_SECONDS + BUG_INDEX_REVEAL_PREFLIGHT_BUFFER_SECONDS
+        if reveal_after < minimum:
+            raise CommandError(
+                "revealAfter is too soon for live onchain publication: "
+                f"{_format_timestamp(reveal_after)}. CheapBugsBugIndex requires revealAfter to be at least 7 days "
+                "after the publish block, so resubmit from the updated frontend with a later reveal window."
+            )
+
     def sync_signal_once(self) -> int:
         if self.signal is None:
             self.logger.warning("Signal is not configured; skipping Signal reaction sync.")
@@ -594,6 +615,28 @@ def _publish_progress_message(result: BugIndexPublishResult) -> str:
         return f"Bug already exists onchain: report {result.report_hash}."
     block = f" block {result.block_number}" if result.block_number is not None else ""
     return f"Bug published onchain: report {result.report_hash} tx {result.tx_hash}{block}."
+
+
+def _publish_authorization_uint(verified: VerifiedBugBundle, name: str) -> int:
+    try:
+        value = verified.publish_authorization["message"][name]
+    except Exception as exc:
+        raise CommandError(f"Publish authorization is missing {name}.") from exc
+    if isinstance(value, bool):
+        raise CommandError(f"Publish authorization {name} must be an unsigned integer.")
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str) and value.isdigit():
+        parsed = int(value, 10)
+    else:
+        raise CommandError(f"Publish authorization {name} must be an unsigned integer.")
+    if parsed < 0:
+        raise CommandError(f"Publish authorization {name} must be an unsigned integer.")
+    return parsed
+
+
+def _format_timestamp(timestamp: int) -> str:
+    return datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
 
 
 def format_signal_submission(command: SubmissionCommand, bug_bundle: PinnedBugBundle | None = None) -> str:

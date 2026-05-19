@@ -381,10 +381,27 @@ class BugIndexPublishTest(unittest.TestCase):
         client._contract = contract
         client._account = FakeAccount(BROKER)
 
-        result = client.publish_bug(command, verified, pinned)
+        with patch("cheapbugs_broker.bug_index.time.time", return_value=1778976000):
+            result = client.publish_bug(command, verified, pinned)
 
         self.assertEqual(result.tx_hash, "0x" + "a" * 64)
         self.assertEqual(contract.publish_function.bug_input[2], "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3")
+
+    def test_publish_bug_decodes_invalid_reveal_after_revert(self) -> None:
+        command = parse_command(json.dumps(valid_submission_payload()))
+        self.assertIsInstance(command, SubmissionCommand)
+        verified = fake_verified_bundle()
+        bug_bundle = FakeIpfs().add_json(verified.payload, "bundle.json")
+        pinned = fake_pinned_bundle(bug_bundle)
+        revert_data = "0xe5ee267f" + f"{1779580800:064x}"
+        client = BugIndexClient("http://localhost:8545", WALLET, "0xabc", 8453)
+        client._web3 = FakePublishWeb3()
+        client._contract = FakeBugIndexContract(gas_error=ValueError((revert_data, revert_data)))
+        client._account = FakeAccount(BROKER)
+
+        with patch("cheapbugs_broker.bug_index.time.time", return_value=1778976000):
+            with self.assertRaisesRegex(BugIndexPublishError, "InvalidRevealAfter.*2026-05-24"):
+                client.publish_bug(command, verified, pinned)
 
 
 class BrokerServiceTest(unittest.TestCase):
@@ -557,6 +574,41 @@ class BrokerServiceTest(unittest.TestCase):
 
             self.assertIn("BugBundle is invalid", replies[-1])
             self.assertFalse(any("Encrypted BugBundle pinned" in reply for reply in replies))
+
+    def test_live_submission_stops_when_reveal_window_is_too_close(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            ipfs = FakeIpfs()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False, dry_run=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=2 * 10**18),
+                ipfs=ipfs,
+                bug_index=FakeBugIndex(),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch("cheapbugs_broker.service.verify_authorized_bug_bundle", return_value=fake_verified_bundle()):
+                with patch("cheapbugs_broker.service.time.time", return_value=1778976001):
+                    asyncio.run(
+                        bot.handle_xmtp_text(
+                            json.dumps(valid_submission_payload()),
+                            sender_address=WALLET,
+                            conversation_id="conversation",
+                            message_id="reveal-too-close",
+                            reply=reply,
+                        )
+                    )
+
+            self.assertIn("revealAfter is too soon", replies[-1])
+            self.assertFalse(any("Encrypted BugBundle pinned" in reply for reply in replies))
+            self.assertIsNone(ipfs.last_payload)
+            self.assertTrue(store.message_seen("reveal-too-close"))
 
     def test_submission_stops_when_credentials_fail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1081,7 +1133,7 @@ def real_signed_submission_payload(reporter: str, account: object, aesgcm_cls: o
     }
 
 
-def test_config(path: Path, signal_enabled: bool = True) -> BrokerConfig:
+def test_config(path: Path, signal_enabled: bool = True, dry_run: bool = True) -> BrokerConfig:
     return BrokerConfig(
         database_path=path,
         log_path=Path("broker.log"),
@@ -1107,7 +1159,7 @@ def test_config(path: Path, signal_enabled: bool = True) -> BrokerConfig:
         reward_max_tokens=Decimal("5000"),
         review_window_seconds=7,
         poll_seconds=30,
-        dry_run=True,
+        dry_run=dry_run,
         tx_receipt_timeout_seconds=120,
     )
 
@@ -1257,7 +1309,8 @@ class FakeAccount:
 
 
 class FakeBugIndexContract:
-    def __init__(self) -> None:
+    def __init__(self, gas_error: Exception | None = None) -> None:
+        self.gas_error = gas_error
         self.publish_function: FakePublishFunction | None = None
         self.functions = FakeBugIndexFunctions(self)
 
@@ -1273,7 +1326,13 @@ class FakeBugIndexFunctions:
         return FakeCall(True)
 
     def publishBug(self, bug_input: tuple[object, ...], nonce: int, deadline: int, signature: str) -> object:
-        self.contract.publish_function = FakePublishFunction(bug_input, nonce, deadline, signature)
+        self.contract.publish_function = FakePublishFunction(
+            bug_input,
+            nonce,
+            deadline,
+            signature,
+            gas_error=self.contract.gas_error,
+        )
         return self.contract.publish_function
 
 
@@ -1286,13 +1345,24 @@ class FakeCall:
 
 
 class FakePublishFunction:
-    def __init__(self, bug_input: tuple[object, ...], nonce: int, deadline: int, signature: str) -> None:
+    def __init__(
+        self,
+        bug_input: tuple[object, ...],
+        nonce: int,
+        deadline: int,
+        signature: str,
+        *,
+        gas_error: Exception | None = None,
+    ) -> None:
         self.bug_input = bug_input
         self.nonce = nonce
         self.deadline = deadline
         self.signature = signature
+        self.gas_error = gas_error
 
     def estimate_gas(self, tx: dict[str, object]) -> int:
+        if self.gas_error is not None:
+            raise self.gas_error
         if self.bug_input[2] != "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3":
             raise ValueError("reporter was not checksummed")
         return 100_000

@@ -26,7 +26,9 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - Launchers may deploy from `BROKER_KEY` when a separate deployer key is not set, but ownership transfers to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
 - The current broker XMTP payload includes `reporter_address`, `broker_address`, an encrypted `cheapbugs.bug_bundle.v1`, a reporter EIP-712 `publish_authorization`, and an out-of-bundle details key.
 - The browser generates the details key, encrypts details with AES-256-GCM, signs the `PublishBug` EIP-712 authorization over the bundle hash and commitments, and sends the bundle plus details key to the broker over XMTP.
+- The signed reveal time is 7 days plus a 1-hour publish buffer after browser creation. This buffer exists because the index enforces the 7-day window against the actual publication block, not the time the user signed the bundle.
 - The broker verifies the BugBundle and publish authorization before target validation, credential validation, or IPFS pinning. Invalid signatures, wrong reporter/broker/chain/index bindings, key-commitment mismatches, ciphertext-hash mismatches, AAD mismatches, and decryption failures stop the submission flow.
+- In live mode, the broker preflights the signed reveal time before IPFS pinning so a too-short, signature-bound `revealAfter` is rejected before creating another durable CID.
 - The browser sends broker submissions as XMTP DMs to the configured broker wallet.
 - The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, blocked reporters, and insufficient BUGZ balance.
 - The broker sends staged plain text XMTP status messages after successful validation stages.
