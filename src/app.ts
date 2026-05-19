@@ -15,6 +15,7 @@ import { renderTreasuryView } from "./views/treasury";
 import { renderTokenView } from "./views/token";
 import { loadContractOwnerAccess } from "./contracts/cheapbugsSuite";
 import { ENS_REGISTER_URL, ensProfileUrl } from "./lib/ens";
+import { downloadTextFile } from "./lib/download";
 import { appLog } from "./lib/logger";
 import { loadBugzHeaderBalance, type HeaderBugzBalance } from "./lib/token";
 import { escapeHtml, formatTokenAmount, shortHash } from "./lib/utils";
@@ -91,6 +92,7 @@ type BugzHeaderState =
   | { status: "loading"; address: `0x${string}`; requestId: number }
   | { status: "ready"; address: `0x${string}`; balance: HeaderBugzBalance }
   | { status: "error"; address: `0x${string}`; errorMessage: string };
+type WalletOnboardingMode = "walletconnect" | "embedded";
 
 const renderBugzStatus = (session: SessionState, tokenHref: string, state: BugzHeaderState): string => {
   if (!session.address) {
@@ -190,6 +192,10 @@ const renderProfileModal = (session: SessionState, bugzStatus: string): string =
     ? "CheapBugs reads this name and avatar from ENS. Profile edits happen in the ENS App."
     : "No ENS primary name was found for this wallet. Register one to show a name and avatar here.";
   const refreshDisabled = session.ensLookupStatus === "loading" ? "disabled" : "";
+  const embeddedKeyAction =
+    session.mode === "local"
+      ? `<button id="export-embedded-key" class="button secondary" type="button">export cheapbugs-key.json</button>`
+      : "";
 
   return `
     <div class="profile-modal-backdrop" data-profile-modal-close>
@@ -217,8 +223,68 @@ const renderProfileModal = (session: SessionState, bugzStatus: string): string =
         </table>
         <div class="button-row profile-actions">
           ${ensAction}
+          ${embeddedKeyAction}
           <button id="refresh-ens-profile" class="button secondary" type="button" ${refreshDisabled}>refresh ENS profile</button>
           <button class="button secondary" type="button" data-profile-modal-close>close</button>
+        </div>
+      </section>
+    </div>
+  `;
+};
+
+const renderWalletOnboardingModal = (mode: WalletOnboardingMode | null): string => {
+  if (!mode) {
+    return "";
+  }
+
+  if (mode === "walletconnect") {
+    return `
+      <div class="profile-modal-backdrop" data-wallet-onboarding-close>
+        <section class="profile-modal panel" role="dialog" aria-modal="true" aria-label="connect wallet">
+          <div class="profile-modal-header">
+            <div class="panel-title">[ connect wallet ]</div>
+            <button class="notice-close" type="button" aria-label="close wallet options" data-wallet-onboarding-close>x</button>
+          </div>
+          <div class="profile-summary">
+            <p class="helper-copy">
+              WalletConnect is for people who already have a crypto wallet. If you do not have one, create or import an
+              embedded CheapBugs wallet instead.
+            </p>
+          </div>
+          <div class="button-row profile-actions">
+            <button id="connect-walletconnect-modal" class="button" type="button">connect with WalletConnect</button>
+            <button id="open-embedded-wallet-modal" class="button secondary" type="button">I don't have a crypto wallet</button>
+            <button class="button secondary" type="button" data-wallet-onboarding-close>cancel</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  const hasEmbeddedWallet = authController.hasLocalIdentity();
+  return `
+    <div class="profile-modal-backdrop" data-wallet-onboarding-close>
+      <section class="profile-modal panel" role="dialog" aria-modal="true" aria-label="embedded wallet">
+        <div class="profile-modal-header">
+          <div class="panel-title">[ embedded wallet ]</div>
+          <button class="notice-close" type="button" aria-label="close embedded wallet" data-wallet-onboarding-close>x</button>
+        </div>
+        <div class="profile-summary">
+          <p class="helper-copy">
+            The embedded CheapBugs wallet is saved in this browser's localStorage. It signs smart contract transactions
+            and XMTP messages. Export <code>cheapbugs-key.json</code> and keep it private before relying on this wallet.
+          </p>
+        </div>
+        <div class="button-row profile-actions">
+          ${
+            hasEmbeddedWallet
+              ? `<button id="use-embedded-wallet-modal" class="button" type="button">use stored embedded wallet</button>
+                 <button id="export-embedded-key-modal" class="button secondary" type="button">export cheapbugs-key.json</button>`
+              : `<button id="generate-embedded-wallet-modal" class="button" type="button">generate embedded wallet</button>`
+          }
+          <button id="choose-embedded-key-modal" class="button secondary" type="button">import cheapbugs-key.json</button>
+          <input id="import-embedded-key-modal" type="file" accept="application/json,.json" style="display: none" />
+          <button class="button secondary" type="button" data-wallet-onboarding-close>cancel</button>
         </div>
       </section>
     </div>
@@ -234,6 +300,7 @@ export class CheapBugsApp {
   private bugzHeaderRequestId = 0;
   private ownerAccessState: ContractOwnerViewState = { status: "idle", address: null };
   private ownerAccessRequestId = 0;
+  private walletOnboardingMode: WalletOnboardingMode | null = null;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -265,6 +332,10 @@ export class CheapBugsApp {
       },
       dismissNotice: (id) => {
         this.notices = this.notices.filter((notice) => notice.id !== id);
+        void this.render();
+      },
+      openWalletOnboarding: (mode = "walletconnect") => {
+        this.walletOnboardingMode = mode;
         void this.render();
       },
       rerender: () => this.render()
@@ -375,6 +446,7 @@ export class CheapBugsApp {
     this.ensureOwnerAccessLoad(session);
     const bugzStatus = renderBugzStatus(session, context.router.href("/token"), this.bugzHeaderState);
     const profileModal = this.profileModalOpen ? renderProfileModal(session, bugzStatus) : "";
+    const walletOnboardingModal = renderWalletOnboardingModal(this.walletOnboardingMode);
     const notices = context.notices
       .map(
         (notice) => `
@@ -457,8 +529,35 @@ export class CheapBugsApp {
         <section class="notice-stack">${notices}</section>
         <main class="main-column" data-view-root>${view.html}</main>
         ${profileModal}
+        ${walletOnboardingModal}
       </div>
     `;
+  }
+
+  private exportEmbeddedKey(context: AppViewContext): void {
+    try {
+      downloadTextFile("cheapbugs-key.json", authController.exportLocalIdentityJson());
+      context.notify("success", "cheapbugs-key.json exported. Keep it private.");
+    } catch (error) {
+      appLog.error("embedded-wallet: export failed", error);
+      context.notify("error", error instanceof Error ? error.message : "Embedded wallet export failed.");
+    }
+  }
+
+  private async importEmbeddedKeyFile(file: File | undefined, context: AppViewContext): Promise<void> {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const identity = await authController.importLocalIdentityFromJson(await file.text());
+      this.walletOnboardingMode = null;
+      context.notify("success", `Imported embedded CheapBugs wallet ${identity.address}.`);
+      this.router.navigate("/");
+    } catch (error) {
+      appLog.error("embedded-wallet: import failed", error);
+      context.notify("error", error instanceof Error ? error.message : "Embedded wallet import failed.");
+    }
   }
 
   async render(): Promise<void> {
@@ -501,6 +600,7 @@ export class CheapBugsApp {
         if (href) {
           appLog.info("ui: navigation click", { href, label: anchor.textContent?.trim() ?? "" });
           this.profileModalOpen = false;
+          this.walletOnboardingMode = null;
           this.router.navigate(href.replace(/^#/, ""));
         }
       });
@@ -518,6 +618,16 @@ export class CheapBugsApp {
 
     this.root.querySelector<HTMLButtonElement>("#connect-wallet")?.addEventListener("click", async () => {
       appLog.info("ui: header login click");
+      if (!authController.isConfigured()) {
+        this.walletOnboardingMode = "embedded";
+        void this.render();
+        return;
+      }
+      if (authController.primaryUsesWalletConnect()) {
+        this.walletOnboardingMode = "walletconnect";
+        void this.render();
+        return;
+      }
       try {
         await authController.connectPrimary();
         context.notify("success", "Signed in with wallet.");
@@ -525,6 +635,74 @@ export class CheapBugsApp {
         appLog.error("ui: header login failed", error);
         context.notify("error", error instanceof Error ? error.message : "Wallet login failed.");
       }
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-wallet-onboarding-close]").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        if (event.currentTarget !== event.target && element.classList.contains("profile-modal-backdrop")) {
+          return;
+        }
+        appLog.info("ui: wallet onboarding modal close");
+        this.walletOnboardingMode = null;
+        void this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("#open-embedded-wallet-modal")?.addEventListener("click", () => {
+      appLog.info("ui: no crypto wallet click");
+      this.walletOnboardingMode = "embedded";
+      void this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("#connect-walletconnect-modal")?.addEventListener("click", async () => {
+      appLog.info("ui: WalletConnect modal connect click");
+      try {
+        await authController.connectExternal("walletConnect");
+        this.walletOnboardingMode = null;
+        context.notify("success", "Signed in with WalletConnect.");
+      } catch (error) {
+        appLog.error("ui: WalletConnect modal login failed", error);
+        context.notify("error", error instanceof Error ? error.message : "WalletConnect login failed.");
+      }
+    });
+
+    this.root.querySelector<HTMLButtonElement>("#generate-embedded-wallet-modal")?.addEventListener("click", async () => {
+      appLog.info("ui: generate embedded wallet click");
+      try {
+        const identity = await authController.createLocalIdentity();
+        this.walletOnboardingMode = null;
+        context.notify("success", `Embedded CheapBugs wallet created: ${identity.address}.`);
+      } catch (error) {
+        appLog.error("ui: generate embedded wallet failed", error);
+        context.notify("error", error instanceof Error ? error.message : "Failed to create embedded wallet.");
+      }
+    });
+
+    this.root.querySelector<HTMLButtonElement>("#use-embedded-wallet-modal")?.addEventListener("click", async () => {
+      appLog.info("ui: use embedded wallet click");
+      try {
+        const identity = await authController.useLocalIdentity();
+        this.walletOnboardingMode = null;
+        context.notify("success", `Using embedded CheapBugs wallet ${identity.address}.`);
+      } catch (error) {
+        appLog.error("ui: use embedded wallet failed", error);
+        context.notify("error", error instanceof Error ? error.message : "Failed to use embedded wallet.");
+      }
+    });
+
+    this.root.querySelector<HTMLButtonElement>("#export-embedded-key-modal")?.addEventListener("click", () => {
+      appLog.info("ui: export embedded key click");
+      this.exportEmbeddedKey(context);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("#choose-embedded-key-modal")?.addEventListener("click", () => {
+      this.root.querySelector<HTMLInputElement>("#import-embedded-key-modal")?.click();
+    });
+
+    this.root.querySelector<HTMLInputElement>("#import-embedded-key-modal")?.addEventListener("change", async (event) => {
+      const input = event.currentTarget as HTMLInputElement;
+      await this.importEmbeddedKeyFile(input.files?.[0], context);
+      input.value = "";
     });
 
     this.root.querySelector<HTMLButtonElement>("#profile-avatar-button")?.addEventListener("click", () => {
@@ -555,9 +733,15 @@ export class CheapBugsApp {
       }
     });
 
+    this.root.querySelector<HTMLButtonElement>("#export-embedded-key")?.addEventListener("click", () => {
+      appLog.info("ui: profile export embedded key click");
+      this.exportEmbeddedKey(context);
+    });
+
     this.root.querySelector<HTMLButtonElement>("#disconnect-wallet")?.addEventListener("click", async () => {
       appLog.info("ui: disconnect click");
       this.profileModalOpen = false;
+      this.walletOnboardingMode = null;
       await authController.disconnect();
       context.notify("info", "Wallet disconnected.");
       this.router.navigate("/");

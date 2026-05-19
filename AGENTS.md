@@ -42,7 +42,7 @@ Current architecture:
 - BUGZ bonds live in `CheapBugsBondVault`, and treasury/detail-key/reward flows live in `CheapBugsTreasuryVault`
 - private report details are encrypted in the browser and uploaded to IPFS
 - reviewer verdicts are written as EAS attestations on Base
-- auth and wallet connectivity use Thirdweb wallets with injected browser wallet and WalletConnect QR support
+- auth and wallet connectivity use Thirdweb external wallets plus a browser-stored embedded CheapBugs wallet fallback
 
 ## Verified Commands
 
@@ -85,9 +85,10 @@ npm run launch:bug-index
 - `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, connected-wallet balances, optional treasury stats, and patron scans
 - `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
-- `src/auth/thirdweb.ts`: Thirdweb wallet, WalletConnect QR, local SIWE proof, and signer adapter
+- `src/auth/thirdweb.ts`: Thirdweb external wallets, CheapBugs WalletConnect handoff, embedded-wallet import/export, local SIWE proof, and signer adapter
 - `src/app.ts`: site shell, top-level navigation, session chrome, and site-wide development banner
-- `src/auth/localIdentity.ts`: browser-stored generated XMTP wallet identity helper
+- `src/auth/localIdentity.ts`: browser-stored embedded wallet identity helper and `cheapbugs-key.json` parser/serializer
+- `src/lib/download.ts`: browser text-file download helper used for embedded wallet key export
 - `src/lib/authors.ts`: ENS-backed report-author display helper with a fail-open timeout
 - `src/lib/reportDisplay.ts`: title/target display fallbacks from BugBundle public metadata plus onchain fields
 - `src/lib/logger.ts`: namespaced browser console logging helper for click/auth/debug breadcrumbs
@@ -156,7 +157,9 @@ npm run launch:bug-index
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.
 - Only set `VITE_BASE_PATH` when deploying under a non-root subpath. For the production Pages custom domain, it must stay `/`.
-- The header login button calls `authController.connectPrimary()` directly instead of routing to `/login`. It prompts a Thirdweb installed-wallet SIWE first, then falls back to Thirdweb WalletConnect QR when browser login fails or no provider exists.
+- The header login button opens a CheapBugs wallet onboarding modal before any no-installed-wallet WalletConnect QR path. The modal offers `connect with WalletConnect` and `I don't have a crypto wallet`; the no-wallet path can generate or import an embedded CheapBugs wallet.
+- Embedded CheapBugs wallets are stored under `cheapbugs.localXmtpIdentity.v1`, can be imported/exported as `cheapbugs-key.json`, and are used for Base smart-contract transactions, `PublishBug` signing, and XMTP identity when active. Treat the exported JSON as private key material.
+- `src/auth/thirdweb.ts` still prompts a Thirdweb installed-wallet SIWE first when an injected provider exists, then falls back to Thirdweb WalletConnect QR when browser login fails.
 - Thirdweb auto-connect restores external wallet sessions after refresh. External wallet reconnect hints are stored locally in `cheapbugs.walletSession.v1`; SIWE proofs are stored in `cheapbugs.siweSession.v1` and restored without re-prompting when the wallet/domain/chain still match.
 - Headless Thirdweb `wallet.connect()` does not populate the manager keys that `autoConnect()` reads, so `src/auth/thirdweb.ts` deliberately writes the compatible `thirdweb:connected-wallet-ids`, `thirdweb:active-wallet-id`, `thirdweb:last-used-wallet-id`, and `thirdweb:active-chain` localStorage keys after successful external-wallet login.
 - Thirdweb wallet login uses `VITE_THIRDWEB_CLIENT_ID`; a public default client id is committed in `src/config/env.ts` for static deploys. Keep the root `thirdweb` dependency pinned to `5.119.4` unless deliberately testing a newer SDK, because `5.120.0` triggered npm peer-resolution conflicts in this repo.
@@ -167,7 +170,7 @@ npm run launch:bug-index
 - ENS avatars are read from the raw `avatar` text record with `ensClient.getEnsText({ key: "avatar" })`, then sanitized to HTTPS or an IPFS gateway URL with paths preserved. Do not switch this back to `getEnsAvatar`; viem's avatar parser HEAD-probes image URLs and can hide otherwise valid avatars when hosts reject HEAD/CORS.
 - Link previews use static OpenGraph/Twitter metadata in `index.html` with `https://cheapbugs.net/og-image.png`; current card copy is "report bugs, get paid" and "shitty bugs, competitive prices". Favicon and app icons are served from `public/`.
 - The site-wide development banner is rendered from `src/app.ts`; keep launch-date copy centralized there instead of duplicating it in route views. Its visual treatment should stay orange/warning-toned, not green/success-toned.
-- The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BROKER_XMTP_ADDRESS` overrides that broker. The browser uses `@xmtp/browser-sdk` with a Converge-style local generated wallet (`cheapbugs.localXmtpIdentity.v1`) or an existing wallet signer.
+- The submit route defaults to XMTP DM submission through broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; `VITE_BROKER_XMTP_ADDRESS` overrides that broker. The browser uses `@xmtp/browser-sdk` with the embedded CheapBugs wallet (`cheapbugs.localXmtpIdentity.v1`) or an external wallet signer.
 - Browser-to-broker bug submissions use strict JSON schema `cheapbugs.bug_submission.v1` from `src/xmtp/broker.ts`; the current submit form collects title, target reference, bug type (`0day`, `nday`, `web`, `web3`, `net`, `intel`), severity, target interest, public summary, and private details. The browser writes the target reference into the BugBundle target with kind `other`, generates the details key, encrypts details into `cheapbugs.bug_bundle.v1`, signs a `PublishBug` EIP-712 authorization over the bundle hash and commitments, and sends the bundle, `publish_authorization`, and out-of-bundle `details_key` to the broker over XMTP. Do not re-add repro/evidence/Signal/target kind/tags/review-access-key fields unless the product direction changes.
 - Frontend text validation should stay aligned with `bots/cheapbugs_broker/commands.py`: title 3-120 characters, target reference 2-160 characters in the browser, public summary 10-2,000 characters, and private details 10-12,000 characters after trimming. `src/types/submission.ts` owns the frontend constants and validator.
 - The bug-index contract does not store a separate title or target-reference string. The frontend reads title and human-readable target from the public core of the pinned BugBundle via `loadPublicBugBundleMetadata`, validates the shape, escapes rendered text, and falls back to onchain report id/target kind when IPFS is unavailable or malformed.
@@ -212,8 +215,8 @@ npm run launch:bug-index
 - `npm run build` currently succeeds but emits large-chunk warnings because of the WalletConnect/XMTP dependency graph.
 - GitHub Actions run pages show top-level status and annotations publicly, but step logs require GitHub sign-in.
 - ENS avatar URLs are untrusted input. Only render sanitized HTTPS URLs or a local fallback badge.
-- Local XMTP wallet keys are browser-stored recovery material. Users must copy the recovery key before relying on that wallet for BUGZ rewards.
-- Local XMTP wallets can also sign BUGZ trade transactions from the browser via their stored private key; they still need Base ETH for gas and buys.
+- Embedded CheapBugs wallet keys are browser-stored recovery material. Users must export and secure `cheapbugs-key.json` before relying on that wallet for BUGZ rewards.
+- Embedded CheapBugs wallets can sign contract transactions and BUGZ trades from the browser via their stored private key; they still need Base ETH for gas and buys.
 - BUGZ trading is Base-only and uses the Clanker-created Uniswap v4 WETH/BUGZ pool key configured in `src/config/env.ts`. Buys wrap ETH in Universal Router; sells require Permit2 approval before the router can pull BUGZ.
 - BUGZ buy/sell must not depend on `VITE_BUGZ_TREASURY_ADDRESS`; if a token read returns `missing revert data`, first check that the configured RPC is Base mainnet.
 - The header BUGZ status starts as `bugz: loading` for connected wallets, then renders the balance or `bugz: unavailable`. Header token reads log loud console errors under `[cheapbugs] token: header BUGZ status load ...` when balance loading fails, with RPC/token context. Check `/token` and the browser console for the actual balance-read failure reason.

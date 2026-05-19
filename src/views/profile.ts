@@ -1,10 +1,12 @@
 import { getAddress, isAddress } from "ethers";
 
 import { loadAuthorDisplay } from "../lib/authors";
+import { downloadTextFile } from "../lib/download";
 import { loadRecentBundles } from "../lib/reports";
 import { reportDetailsUnlockText, reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { loadBugzAddressBalance } from "../lib/token";
 import { escapeHtml, formatDate, formatTokenAmount, normalizeAddress, shortHash } from "../lib/utils";
+import { authController } from "../services";
 
 import type { AppViewContext, ViewResult } from "./types";
 
@@ -70,6 +72,21 @@ export const renderProfileView = async (context: AppViewContext): Promise<ViewRe
         })
         .join("")
     : `<tr><td colspan="5" class="muted-cell">No recent submissions found for this address.</td></tr>`;
+  const canExportEmbeddedKey = context.session.mode === "local" && context.session.address === normalizedAddress;
+  const embeddedWalletPanel = canExportEmbeddedKey
+    ? `
+      <section class="panel">
+        <div class="panel-title">[ embedded wallet ]</div>
+        <p class="helper-copy">
+          This browser is using the embedded wallet for smart contract and XMTP interactions. Export
+          <code>cheapbugs-key.json</code> and keep it private before relying on this address.
+        </p>
+        <div class="button-row">
+          <button id="profile-export-embedded-key" class="button" type="button">export cheapbugs-key.json</button>
+        </div>
+      </section>
+    `
+    : "";
 
   return {
     title: primary,
@@ -93,6 +110,8 @@ export const renderProfileView = async (context: AppViewContext): Promise<ViewRe
         </table>
       </section>
 
+      ${embeddedWalletPanel}
+
       <section class="panel">
         <div class="panel-title">[ previous submissions ]</div>
         <p class="helper-copy">showing matches from the latest 100 bug-index records</p>
@@ -109,6 +128,16 @@ export const renderProfileView = async (context: AppViewContext): Promise<ViewRe
           <tbody>${submissionRows}</tbody>
         </table>
       </section>
-    `
+    `,
+    afterRender: (root, appContext) => {
+      root.querySelector<HTMLButtonElement>("#profile-export-embedded-key")?.addEventListener("click", () => {
+        try {
+          downloadTextFile("cheapbugs-key.json", authController.exportLocalIdentityJson());
+          appContext.notify("success", "cheapbugs-key.json exported. Keep it private.");
+        } catch (error) {
+          appContext.notify("error", error instanceof Error ? error.message : "Embedded wallet export failed.");
+        }
+      });
+    }
   };
 };

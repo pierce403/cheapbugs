@@ -19,6 +19,7 @@ export type AppViewContext = {
   notices: AppNotice[];
   notify: (tone: AppNotice["tone"], message: string) => void;
   dismissNotice: (id: string) => void;
+  openWalletOnboarding: (mode?: "walletconnect" | "embedded") => void;
   rerender: () => Promise<void>;
 };
 

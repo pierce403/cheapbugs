@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { AbiCoder, id } from "ethers";
 
 const abiCoder = AbiCoder.defaultAbiCoder();
@@ -177,6 +178,83 @@ test("opens an ENS-backed profile modal from the avatar", async ({ page }) => {
     "href",
     "https://app.ens.domains/cheapbugs.eth"
   );
+});
+
+test("offers an embedded wallet when the user has no crypto wallet", async ({ page }) => {
+  await mockBaseRpc(page);
+  await mockEnsRpc(page, { ensName: null });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "login" }).click();
+
+  const connectDialog = page.getByRole("dialog", { name: "connect wallet" });
+  await expect(connectDialog).toBeVisible();
+  await expect(connectDialog).toContainText("WalletConnect is for people who already have a crypto wallet");
+  await connectDialog.getByRole("button", { name: "I don't have a crypto wallet" }).click();
+
+  const embeddedDialog = page.getByRole("dialog", { name: "embedded wallet" });
+  await expect(embeddedDialog).toBeVisible();
+  await expect(embeddedDialog).toContainText("smart contract transactions");
+  await expect(embeddedDialog).toContainText("XMTP messages");
+  await embeddedDialog.getByRole("button", { name: "generate embedded wallet" }).click();
+
+  await expect(embeddedDialog).toBeHidden();
+  await expect(page.locator(".auth-panel")).toContainText("no ENS name yet");
+  const stored = await page.evaluate(() => JSON.parse(window.localStorage.getItem("cheapbugs.localXmtpIdentity.v1") || "{}"));
+  expect(stored.address).toMatch(/^0x[0-9a-f]{40}$/);
+  expect(stored.privateKey).toMatch(/^0x[0-9a-f]{64}$/);
+});
+
+test("imports an embedded wallet from cheapbugs-key.json", async ({ page }) => {
+  await mockBaseRpc(page);
+  await mockEnsRpc(page, { ensName: null });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "login" }).click();
+  await page.getByRole("button", { name: "I don't have a crypto wallet" }).click();
+
+  const keyFile = {
+    schema: "cheapbugs-key.v1",
+    type: "embedded_wallet",
+    address: localIdentity.address,
+    privateKey: localIdentity.privateKey,
+    mnemonic: localIdentity.mnemonic,
+    derivationPath: localIdentity.derivationPath,
+    createdAt: localIdentity.createdAt,
+    exportedAt: "2026-05-18T00:00:00.000Z"
+  };
+  await page.locator("#import-embedded-key-modal").setInputFiles({
+    name: "cheapbugs-key.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(keyFile))
+  });
+
+  await expect(page.getByRole("dialog", { name: "embedded wallet" })).toBeHidden();
+  await expect(page.locator(".auth-panel")).toContainText("no ENS name yet");
+  const stored = await page.evaluate(() => JSON.parse(window.localStorage.getItem("cheapbugs.localXmtpIdentity.v1") || "{}"));
+  expect(stored.address).toBe(localIdentity.address);
+  expect(stored.privateKey).toBe(localIdentity.privateKey);
+});
+
+test("exports cheapbugs-key.json from the embedded wallet profile", async ({ page }) => {
+  await seedLocalIdentity(page);
+  await mockBaseRpc(page);
+  await mockEnsRpc(page, { ensName: null });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "open profile" }).click();
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "export cheapbugs-key.json" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("cheapbugs-key.json");
+  const path = await download.path();
+  expect(path).toBeTruthy();
+  const exported = JSON.parse(await readFile(path!, "utf8"));
+  expect(exported.schema).toBe("cheapbugs-key.v1");
+  expect(exported.type).toBe("embedded_wallet");
+  expect(exported.address).toBe(localIdentity.address);
+  expect(exported.privateKey).toBe(localIdentity.privateKey);
 });
 
 test("shows loading and logs a loud console error when header BUGZ balance fails", async ({ page }) => {

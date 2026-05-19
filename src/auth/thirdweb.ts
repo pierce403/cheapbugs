@@ -18,8 +18,10 @@ import type { BrowserXmtpIdentity } from "../xmtp/browser";
 import {
   clearLocalXmtpIdentity,
   createLocalXmtpIdentity,
+  importLocalXmtpIdentity,
   loadLocalXmtpIdentity,
   saveLocalXmtpIdentity,
+  serializeCheapBugsKeyFile,
   type LocalXmtpIdentity
 } from "./localIdentity";
 
@@ -416,7 +418,7 @@ const walletLabel = (walletId: string): string => {
     return "WalletConnect QR";
   }
   if (walletId === "local-xmtp") {
-    return "Local XMTP wallet";
+    return "Embedded CheapBugs wallet";
   }
   return walletId;
 };
@@ -540,6 +542,10 @@ export class ThirdwebAuthController {
     return getInstalledWallets().find((entry) => entry.id === walletId) ?? createWallet(walletId as never);
   }
 
+  primaryUsesWalletConnect(): boolean {
+    return Boolean(thirdwebClient) && getInstalledWallets().length === 0;
+  }
+
   private async setWallet(wallet: Wallet, mode: ExternalWalletMode): Promise<void> {
     this.activeWallet = wallet;
     this.localIdentity = null;
@@ -577,7 +583,7 @@ export class ThirdwebAuthController {
   }
 
   private setLocalIdentity(identity: LocalXmtpIdentity): void {
-    appLog.info("local-xmtp: activating stored browser identity", { address: shortHash(identity.address, 10, 6) });
+    appLog.info("embedded-wallet: activating stored browser identity", { address: shortHash(identity.address, 10, 6) });
     this.activeWallet = null;
     this.localIdentity = identity;
     clearSiweSession();
@@ -647,7 +653,7 @@ export class ThirdwebAuthController {
       throw new Error("Connect a wallet before signing in.");
     }
     if (this.session.mode === "local") {
-      throw new Error("Local XMTP identities do not use SIWE login.");
+      throw new Error("Embedded CheapBugs wallets do not use SIWE login.");
     }
 
     const account = this.activeWallet?.getAccount() as SignableThirdwebAccount | undefined;
@@ -915,28 +921,44 @@ export class ThirdwebAuthController {
   }
 
   async createLocalIdentity(): Promise<LocalXmtpIdentity> {
-    appLog.info("local-xmtp: create identity requested");
+    appLog.info("embedded-wallet: create identity requested");
     if (loadLocalXmtpIdentity()) {
-      appLog.warn("local-xmtp: create blocked because identity already exists");
-      throw new Error("A local XMTP wallet already exists in this browser. Use it or forget it before creating a new one.");
+      appLog.warn("embedded-wallet: create blocked because identity already exists");
+      throw new Error("An embedded CheapBugs wallet already exists in this browser. Use it, export it, or forget it before creating a new one.");
     }
     const identity = createLocalXmtpIdentity();
     this.setLocalIdentity(identity);
-    appLog.info("local-xmtp: identity created", { address: shortHash(identity.address, 10, 6) });
+    appLog.info("embedded-wallet: identity created", { address: shortHash(identity.address, 10, 6) });
     return identity;
   }
 
   async useLocalIdentity(): Promise<LocalXmtpIdentity> {
-    appLog.info("local-xmtp: use stored identity requested");
+    appLog.info("embedded-wallet: use stored identity requested");
     const identity = loadLocalXmtpIdentity() ?? createLocalXmtpIdentity();
     saveLocalXmtpIdentity(identity);
     this.setLocalIdentity(identity);
-    appLog.info("local-xmtp: identity active", { address: shortHash(identity.address, 10, 6) });
+    appLog.info("embedded-wallet: identity active", { address: shortHash(identity.address, 10, 6) });
     return identity;
   }
 
+  async importLocalIdentityFromJson(raw: string): Promise<LocalXmtpIdentity> {
+    appLog.info("embedded-wallet: import key file requested");
+    const identity = importLocalXmtpIdentity(raw);
+    this.setLocalIdentity(identity);
+    appLog.info("embedded-wallet: key file imported", { address: shortHash(identity.address, 10, 6) });
+    return identity;
+  }
+
+  exportLocalIdentityJson(): string {
+    const identity = this.getLocalIdentity();
+    if (!identity) {
+      throw new Error("No embedded CheapBugs wallet is stored in this browser.");
+    }
+    return serializeCheapBugsKeyFile(identity);
+  }
+
   forgetLocalIdentity(): void {
-    appLog.warn("local-xmtp: forgetting stored identity at user request");
+    appLog.warn("embedded-wallet: forgetting stored identity at user request");
     clearLocalXmtpIdentity();
     if (this.session.mode === "local") {
       this.ensLookupToken += 1;
@@ -948,10 +970,10 @@ export class ThirdwebAuthController {
 
   async getSigner(): Promise<Signer> {
     if (this.session.mode === "local") {
-      appLog.info("wallet: resolving signer from local XMTP wallet");
+      appLog.info("wallet: resolving signer from embedded wallet");
       const identity = this.getLocalIdentity();
       if (!identity) {
-        throw new Error("Stored local XMTP wallet is missing.");
+        throw new Error("Stored embedded CheapBugs wallet is missing.");
       }
       return new EthersWallet(identity.privateKey, BASE_RPC_PROVIDER);
     }

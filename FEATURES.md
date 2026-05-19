@@ -20,7 +20,7 @@ cheapbugs/
 ├── public/                 # Static assets and SPA hosting helpers
 ├── src/
 │   ├── attest/             # EAS write adapters
-│   ├── auth/               # Thirdweb and local XMTP identity helpers
+│   ├── auth/               # Thirdweb and embedded-wallet identity helpers
 │   ├── config/             # chain, env, reviewer, and integration config
 │   ├── contracts/          # frontend contract ABI, vault, price-feed, and adapter reads
 │   ├── lib/                # domain logic, crypto, IPFS, treasury, caching, utilities
@@ -73,19 +73,22 @@ cheapbugs/
   - [x] `npm run build` compiles the static app.
   - [x] `npm run test:e2e` covers the development banner text and orange status styling, GitHub brand icon, build metadata, mobile navigation layout, the about route, header BUGZ status states, owner-only manage navigation, and that ordinary routes do not trigger treasury dashboard reads.
 
-### Wallet Auth And Local XMTP Identity
+### Wallet Auth And Embedded Wallet Identity
 
 - **Stability**: in-progress
-- **Description**: Thirdweb wallet login with injected-wallet SIWE, WalletConnect QR fallback, session restore, ENS display, and site-generated local XMTP wallet identities.
+- **Description**: Thirdweb wallet login with injected-wallet SIWE, a CheapBugs WalletConnect handoff, session restore, ENS display, and site-generated embedded wallets that can sign both Base transactions and XMTP messages.
 - **Properties**:
   - `VITE_THIRDWEB_CLIENT_ID` has a committed public default for static deploys.
   - External wallet reconnect hints are stored in `cheapbugs.walletSession.v1`; SIWE proofs are stored in `cheapbugs.siweSession.v1`.
-  - Local XMTP identities are stored in `cheapbugs.localXmtpIdentity.v1` and can sign XMTP messages and Base transactions.
+  - Embedded CheapBugs wallets are stored in `cheapbugs.localXmtpIdentity.v1` and can sign XMTP messages, `PublishBug` authorizations, and Base smart-contract transactions.
+  - When login would otherwise open a WalletConnect QR path, the app first shows a CheapBugs modal with `connect with WalletConnect` and `I don't have a crypto wallet` options.
+  - The no-crypto-wallet path opens an embedded-wallet modal that can generate a new browser-stored wallet or import `cheapbugs-key.json`.
+  - Embedded-wallet profiles expose an `export cheapbugs-key.json` action. The exported JSON contains the embedded wallet address, private key, optional mnemonic, derivation path, and metadata, and must be treated as private key material.
   - ENS avatars are read from the raw `avatar` text record and sanitized to HTTPS or IPFS gateway URLs.
   - ENS profile results cache in `cheapbugs.ensProfileCache.v1` for 24 hours so page reloads do not re-query mainnet ENS, with a profile-modal refresh button for manual cache bypass.
   - Report author links route to `/profile/:address`, display ENS names and avatars when available, show BUGZ balance, and list recent submissions found through the current bug-index read path.
 - **Test Criteria**:
-  - [x] Playwright covers ENS-backed profile modal behavior, avatar URL handling, local ENS cache reuse, and manual ENS refresh.
+  - [x] Playwright covers ENS-backed profile modal behavior, avatar URL handling, local ENS cache reuse, manual ENS refresh, embedded-wallet creation, `cheapbugs-key.json` import, and embedded-wallet export from the profile surface.
   - [x] `npm run build` catches Thirdweb/XMTP integration type drift.
 
 ### CheapBugs Bond Vault

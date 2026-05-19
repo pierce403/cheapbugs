@@ -118,7 +118,7 @@ export const renderAboutView = async (_context: AppViewContext): Promise<ViewRes
       <table class="data-table compact-table">
         <tbody>
           <tr><th>frontend</th><td>Static Vite and TypeScript deployed as HTML, CSS, and JavaScript.</td></tr>
-          <tr><th>wallets</th><td>Thirdweb wallet flows with injected wallets, WalletConnect, SIWE session restore, and ENS display.</td></tr>
+          <tr><th>wallets</th><td>Thirdweb external wallets, WalletConnect, embedded CheapBugs wallets, SIWE session restore, and ENS display.</td></tr>
           <tr><th>comms</th><td>XMTP DMs carry structured broker submissions and broker status updates.</td></tr>
           <tr><th>storage</th><td>Encrypted BugBundles are pinned to IPFS; the app caches public bundle data locally to reduce gateway traffic.</td></tr>
           <tr><th>chain</th><td>${escapeHtml(chainConfig.name)} for BUGZ, bonding, treasury, bug index, and payout execution.</td></tr>

@@ -67,7 +67,8 @@ Current and required properties:
 - Wallet signatures are the source of identity authority, not form fields.
 - ENS names and avatars are presentation only. Author profile links and report attribution must continue to use the reporter address stored by the bug index.
 - Owner/manage UI visibility is presentation only. A hidden, stale, or manually opened `/manage` route must not be treated as authorization; contracts must enforce ownership.
-- Local XMTP identity keys are browser-stored recovery material. A compromised browser profile compromises that local wallet.
+- Embedded CheapBugs wallet keys are browser-stored recovery material. A compromised browser profile compromises that wallet and anything it can sign.
+- Embedded wallets can be exported and imported as `cheapbugs-key.json`. That file contains private key material and must be kept private; it is the recovery path for the embedded wallet address.
 - External wallets and WalletConnect devices must show signature prompts clearly enough for users to detect unexpected signing requests.
 
 ### XMTP

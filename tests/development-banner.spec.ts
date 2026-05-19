@@ -169,7 +169,7 @@ test("submit route gives inline XMTP feedback when submit is blocked", async ({ 
   await expect(page).toHaveURL(/\/submit$/);
   await expect(page.getByTestId("xmtp-status")).toContainText("xmtp: wallet required");
   await expect(page.getByTestId("xmtp-status")).toContainText(
-    "Connect a local XMTP wallet or compatible external wallet before submitting."
+    "Connect an embedded CheapBugs wallet or compatible external wallet before submitting."
   );
 });
 

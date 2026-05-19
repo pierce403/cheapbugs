@@ -115,14 +115,14 @@ const initialXmtpStatus = (): XmtpStatus => {
     return {
       tone: "blocked" as const,
       title: "xmtp: signer unavailable",
-      detail: "This wallet session cannot sign XMTP messages. Use a local XMTP wallet or a compatible external wallet."
+      detail: "This wallet session cannot sign XMTP messages. Use an embedded CheapBugs wallet or a compatible external wallet."
     };
   }
 
   return {
     tone: "blocked" as const,
     title: "xmtp: wallet required",
-    detail: "Connect a local XMTP wallet or compatible external wallet before submitting."
+    detail: "Connect an embedded CheapBugs wallet or compatible external wallet before submitting."
   };
 };
 
@@ -413,7 +413,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
 
       const address = authController.getSession().address;
       if (!address) {
-        setStatus("blocked", "xmtp: wallet required", "Connect a local XMTP wallet or compatible external wallet before submitting.");
+        setStatus("blocked", "xmtp: wallet required", "Connect an embedded CheapBugs wallet or compatible external wallet before submitting.");
         appLog.warn("submit: broker submit blocked without wallet");
         return;
       }
@@ -427,7 +427,7 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         const xmtpIdentity = authController.getXmtpIdentity();
         if (!xmtpIdentity) {
           setProcessing(false);
-          setStatus("blocked", "xmtp: signer unavailable", "Connect with a local XMTP wallet or a wallet that can sign XMTP messages.");
+          setStatus("blocked", "xmtp: signer unavailable", "Connect with an embedded CheapBugs wallet or a wallet that can sign XMTP messages.");
           appLog.warn("submit: broker submit blocked without XMTP signer");
           return;
         }

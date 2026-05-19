@@ -1,5 +1,6 @@
 import { authController } from "../services";
 import { appLog } from "../lib/logger";
+import { downloadTextFile } from "../lib/download";
 import { escapeHtml, formatDate, shortHash } from "../lib/utils";
 import { ENS_APP_URL } from "../lib/ens";
 
@@ -18,18 +19,21 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
   title: "Login",
   html: `
     <section class="panel">
-      <div class="panel-title">[ xmtp identity ]</div>
+      <div class="panel-title">[ embedded wallet ]</div>
       <p class="lede">
-        Use a site-generated XMTP wallet for submissions and BUGZ rewards, or keep using an existing wallet below.
+        Use a site-generated embedded wallet for submissions, BUGZ rewards, smart contract transactions, and XMTP messages.
+        Export <code>cheapbugs-key.json</code> and keep it private.
       </p>
       <div class="button-row">
         ${
           authController.hasLocalIdentity()
-            ? `<button id="use-local-identity" type="button" class="button">use stored xmtp wallet</button>
-               <button id="copy-local-recovery" type="button" class="button secondary">copy recovery key</button>
+            ? `<button id="use-local-identity" type="button" class="button">use stored embedded wallet</button>
+               <button id="export-local-key" type="button" class="button secondary">export cheapbugs-key.json</button>
                <button id="forget-local-identity" type="button" class="button secondary">forget stored wallet</button>`
-            : `<button id="create-local-identity" type="button" class="button">create local xmtp wallet</button>`
+            : `<button id="create-local-identity" type="button" class="button">generate embedded wallet</button>`
         }
+        <button id="choose-local-key" type="button" class="button secondary">import cheapbugs-key.json</button>
+        <input id="import-local-key" type="file" accept="application/json,.json" style="display: none" />
       </div>
     </section>
 
@@ -41,10 +45,12 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
           : `<p class="warning-copy">VITE_THIRDWEB_CLIENT_ID is unset, so Thirdweb wallet login is disabled.</p>`
       }
       <p class="lede">
-        Sign in through Thirdweb with the wallet built into this browser. If this browser has no web3 provider, use WalletConnect QR.
+        Sign in through Thirdweb with the wallet built into this browser. If this browser has no web3 provider, use
+        WalletConnect QR or the embedded wallet option above.
       </p>
       <div class="button-row">
         <button id="connect-primary-wallet" type="button" class="button" ${authController.isConfigured() ? "" : "disabled"}>sign in with wallet</button>
+        <button id="open-embedded-wallet-options" type="button" class="button secondary">I don't have a crypto wallet</button>
       </div>
     </section>
 
@@ -76,7 +82,7 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
           <tr><th>ens status</th><td>${escapeHtml(context.session.ensLookupStatus)}</td></tr>
           <tr><th>ens</th><td>${escapeHtml(context.session.ensName ?? "-")}</td></tr>
           <tr><th>avatar</th><td>${context.session.ensAvatarUrl ? `<a href="${escapeHtml(context.session.ensAvatarUrl)}" target="_blank" rel="noreferrer">loaded</a>` : "-"}</td></tr>
-          <tr><th>siwe</th><td>${escapeHtml(context.session.siweIssuedAt ? `signed ${formatDate(context.session.siweIssuedAt)}` : context.session.mode === "local" ? "not required for local xmtp" : "-")}</td></tr>
+          <tr><th>siwe</th><td>${escapeHtml(context.session.siweIssuedAt ? `signed ${formatDate(context.session.siweIssuedAt)}` : context.session.mode === "local" ? "not required for embedded wallet" : "-")}</td></tr>
           <tr><th>reviewer</th><td>${context.session.isReviewer ? "trusted" : "no"}</td></tr>
           <tr><th>error</th><td>${escapeHtml(context.session.lastError ?? "-")}</td></tr>
         </tbody>
@@ -86,64 +92,90 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
   afterRender: (root, appContext) => {
     const createLocalButton = root.querySelector<HTMLButtonElement>("#create-local-identity");
     const useLocalButton = root.querySelector<HTMLButtonElement>("#use-local-identity");
-    const copyLocalButton = root.querySelector<HTMLButtonElement>("#copy-local-recovery");
+    const exportLocalButton = root.querySelector<HTMLButtonElement>("#export-local-key");
     const forgetLocalButton = root.querySelector<HTMLButtonElement>("#forget-local-identity");
     const connectPrimaryButton = root.querySelector<HTMLButtonElement>("#connect-primary-wallet");
+    const chooseLocalKeyButton = root.querySelector<HTMLButtonElement>("#choose-local-key");
+    const importLocalKeyInput = root.querySelector<HTMLInputElement>("#import-local-key");
+    const embeddedWalletOptionsButton = root.querySelector<HTMLButtonElement>("#open-embedded-wallet-options");
 
     createLocalButton?.addEventListener("click", async () => {
-      appLog.info("ui: create local XMTP identity click");
+      appLog.info("ui: create embedded wallet click");
       try {
         const identity = await authController.createLocalIdentity();
-        appContext.notify("success", `Local XMTP wallet created: ${identity.address}.`);
+        appContext.notify("success", `Embedded CheapBugs wallet created: ${identity.address}.`);
         appContext.router.navigate("/submit");
       } catch (error) {
-        appLog.error("ui: create local XMTP identity failed", error);
-        appContext.notify("error", error instanceof Error ? error.message : "Failed to create local XMTP wallet.");
+        appLog.error("ui: create embedded wallet failed", error);
+        appContext.notify("error", error instanceof Error ? error.message : "Failed to create embedded wallet.");
       }
     });
 
     useLocalButton?.addEventListener("click", async () => {
-      appLog.info("ui: use local XMTP identity click");
+      appLog.info("ui: use embedded wallet click");
       try {
         const identity = await authController.useLocalIdentity();
-        appContext.notify("success", `Using local XMTP wallet ${identity.address}.`);
+        appContext.notify("success", `Using embedded CheapBugs wallet ${identity.address}.`);
         appContext.router.navigate("/submit");
       } catch (error) {
-        appLog.error("ui: use local XMTP identity failed", error);
-        appContext.notify("error", error instanceof Error ? error.message : "Failed to load local XMTP wallet.");
+        appLog.error("ui: use embedded wallet failed", error);
+        appContext.notify("error", error instanceof Error ? error.message : "Failed to load embedded wallet.");
       }
     });
 
-    copyLocalButton?.addEventListener("click", async () => {
-      appLog.info("ui: copy local XMTP recovery click");
-      const identity = authController.getLocalIdentity();
-      const recovery = identity?.mnemonic || identity?.privateKey;
-      if (!recovery) {
-        appContext.notify("error", "No local XMTP recovery key is stored in this browser.");
+    exportLocalButton?.addEventListener("click", () => {
+      appLog.info("ui: export embedded key click");
+      try {
+        downloadTextFile("cheapbugs-key.json", authController.exportLocalIdentityJson());
+        appContext.notify("success", "cheapbugs-key.json exported. Keep it private.");
+      } catch (error) {
+        appLog.error("ui: export embedded key failed", error);
+        appContext.notify("error", error instanceof Error ? error.message : "Embedded wallet export failed.");
+      }
+    });
+
+    chooseLocalKeyButton?.addEventListener("click", () => {
+      importLocalKeyInput?.click();
+    });
+
+    importLocalKeyInput?.addEventListener("change", async () => {
+      const file = importLocalKeyInput.files?.[0];
+      if (!file) {
         return;
       }
       try {
-        await navigator.clipboard.writeText(recovery);
-        appContext.notify("success", "Local XMTP recovery key copied.");
+        const identity = await authController.importLocalIdentityFromJson(await file.text());
+        appContext.notify("success", `Imported embedded CheapBugs wallet ${identity.address}.`);
+        appContext.router.navigate("/submit");
       } catch (error) {
-        appLog.error("ui: copy local XMTP recovery failed", error);
-        appContext.notify("error", "Clipboard write failed.");
+        appLog.error("ui: import embedded key failed", error);
+        appContext.notify("error", error instanceof Error ? error.message : "Embedded wallet import failed.");
+      } finally {
+        importLocalKeyInput.value = "";
       }
     });
 
     forgetLocalButton?.addEventListener("click", () => {
-      appLog.info("ui: forget local XMTP identity click");
-      if (!window.confirm("Forget the stored XMTP wallet from this browser? Funds at that address will require the recovery key.")) {
-        appLog.info("ui: forget local XMTP identity cancelled");
+      appLog.info("ui: forget embedded wallet click");
+      if (!window.confirm("Forget the embedded wallet from this browser? Funds at that address require cheapbugs-key.json.")) {
+        appLog.info("ui: forget embedded wallet cancelled");
         return;
       }
       authController.forgetLocalIdentity();
-      appContext.notify("success", "Stored XMTP wallet removed from this browser.");
+      appContext.notify("success", "Embedded wallet removed from this browser.");
       appContext.router.navigate("/login");
     });
 
     connectPrimaryButton?.addEventListener("click", async () => {
       appLog.info("ui: session view primary login click");
+      if (!authController.isConfigured()) {
+        appContext.openWalletOnboarding("embedded");
+        return;
+      }
+      if (authController.primaryUsesWalletConnect()) {
+        appContext.openWalletOnboarding("walletconnect");
+        return;
+      }
       try {
         await authController.connectPrimary();
         appContext.notify("success", "Signed in with wallet.");
@@ -162,6 +194,10 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
         }
 
         appLog.info("ui: external wallet button click", { walletId });
+        if (walletId === "walletConnect") {
+          appContext.openWalletOnboarding("walletconnect");
+          return;
+        }
         try {
           await authController.connectExternal(walletId);
           appContext.notify("success", `Signed in with ${authController.walletLabel(walletId)}.`);
@@ -171,6 +207,10 @@ export const renderLoginView = async (context: AppViewContext): Promise<ViewResu
           appContext.notify("error", error instanceof Error ? error.message : "Wallet connection failed.");
         }
       });
+    });
+
+    embeddedWalletOptionsButton?.addEventListener("click", () => {
+      appContext.openWalletOnboarding("embedded");
     });
   }
 });
