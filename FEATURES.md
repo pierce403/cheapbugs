@@ -64,10 +64,10 @@ cheapbugs/
   - Browser contract adapters dedupe in-flight Base RPC reads, cache successful reads briefly, and apply a short cooldown after rate-limit errors.
   - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows the bundle commit hash and formats build time in the viewer's local timezone.
-  - The development banner text is centralized in `src/app.ts`.
+  - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
-  - [x] `npm run test:e2e` covers the development banner, GitHub brand icon, build metadata, header BUGZ status states, and that ordinary routes do not trigger treasury dashboard reads.
+  - [x] `npm run test:e2e` covers the development banner text and orange status styling, GitHub brand icon, build metadata, header BUGZ status states, and that ordinary routes do not trigger treasury dashboard reads.
 
 ### Wallet Auth And Local XMTP Identity
 

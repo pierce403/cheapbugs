@@ -102,14 +102,14 @@ button:disabled,
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
-  border-color: rgba(160, 240, 140, 0.5);
+  border-color: rgba(255, 106, 0, 0.58);
   background:
-    linear-gradient(180deg, rgba(160, 240, 140, 0.08), transparent 18px),
-    linear-gradient(180deg, #10120d 0%, #080a07 100%);
+    linear-gradient(180deg, rgba(255, 106, 0, 0.12), transparent 18px),
+    linear-gradient(180deg, #120d0a 0%, #080604 100%);
 }
 
 .development-banner strong {
-  color: var(--success);
+  color: var(--warning);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;

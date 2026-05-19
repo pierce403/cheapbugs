@@ -15,6 +15,8 @@ test("shows the development banner across app routes", async ({ page }) => {
     for (const text of expectedBannerText) {
       await expect(banner).toContainText(text);
     }
+    await expect(banner.locator("strong")).toHaveCSS("color", "rgb(255, 154, 71)");
+    await expect(banner).toHaveCSS("border-top-color", "rgba(255, 106, 0, 0.58)");
   }
 });
 
