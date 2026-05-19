@@ -297,6 +297,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.ipfs_api_url, "http://127.0.0.1:5001")
         self.assertEqual(config.ipfs_gateway_url, "https://ipfs.io/ipfs")
         self.assertFalse(config.ipfs_prime_gateway)
+        self.assertEqual(config.submission_min_balance_tokens, Decimal("0"))
 
 
 class StoreTest(unittest.TestCase):
@@ -763,13 +764,13 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertIsNone(ipfs.last_payload)
             self.assertTrue(store.message_seen("reveal-too-close"))
 
-    def test_submission_stops_when_credentials_fail(self) -> None:
+    def test_submission_stops_when_configured_credentials_fail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")
             store.init()
             replies: list[str] = []
             bot = BrokerBot(
-                config=test_config(Path(tmp) / "broker.sqlite"),
+                config=test_config(Path(tmp) / "broker.sqlite", submission_min_balance_tokens=Decimal("1")),
                 store=store,
                 signal=FakeSignal(),
                 token=FakeToken(balance=0),
@@ -801,11 +802,12 @@ class BrokerServiceTest(unittest.TestCase):
             replies: list[str] = []
             config = test_config(Path(tmp) / "broker.sqlite", signal_enabled=False)
             ipfs = FakeIpfs()
+            token = FakeToken(balance=0)
             bot = BrokerBot(
                 config=config,
                 store=store,
                 signal=None,
-                token=FakeToken(balance=2 * 10**18),
+                token=token,
                 ipfs=ipfs,
                 bug_index=FakeBugIndex(),
             )
@@ -825,6 +827,8 @@ class BrokerServiceTest(unittest.TestCase):
                 )
 
             self.assertIn("Submission credentials are valid", replies[4])
+            self.assertIn("no BUGZ minimum configured", replies[4])
+            self.assertFalse(hasattr(token, "last_balance_address"))
             self.assertIn("Encrypted BugBundle pinned to IPFS", replies[5])
             self.assertIn("Bug published onchain", replies[6])
             self.assertIn("Signal is not configured", replies[7])
@@ -1286,7 +1290,12 @@ def real_signed_submission_payload(reporter: str, account: object, aesgcm_cls: o
     }
 
 
-def test_config(path: Path, signal_enabled: bool = True, dry_run: bool = True) -> BrokerConfig:
+def test_config(
+    path: Path,
+    signal_enabled: bool = True,
+    dry_run: bool = True,
+    submission_min_balance_tokens: Decimal = Decimal("0"),
+) -> BrokerConfig:
     return BrokerConfig(
         database_path=path,
         log_path=Path("broker.log"),
@@ -1305,7 +1314,7 @@ def test_config(path: Path, signal_enabled: bool = True, dry_run: bool = True) -
         ipfs_prime_gateway=False,
         ipfs_timeout_seconds=10,
         access_min_balance_tokens=Decimal("1"),
-        submission_min_balance_tokens=Decimal("1"),
+        submission_min_balance_tokens=submission_min_balance_tokens,
         reputation_blocklist=frozenset(),
         reward_base_tokens=Decimal("0"),
         reward_per_reaction_tokens=Decimal("100"),

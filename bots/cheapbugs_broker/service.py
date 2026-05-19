@@ -531,6 +531,13 @@ class BrokerBot:
             self.logger.info("reputation blocked reporter=%s", command.reporter_address)
             raise CommandError("reporter address is blocked by the local reputation list.")
 
+        if self.config.submission_min_balance_tokens <= Decimal("0"):
+            self.logger.info(
+                "submission credential check reporter=%s no_min_balance_configured=true",
+                command.reporter_address,
+            )
+            return "no BUGZ minimum configured; reputation checks passed"
+
         decimals = self.token.decimals()
         min_balance = tokens_to_wei(self.config.submission_min_balance_tokens, decimals)
         balance = self.token.balance_of(command.reporter_address)

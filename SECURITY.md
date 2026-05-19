@@ -31,7 +31,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The broker stores and pays only a verified submission reporter: the verified EIP-712 PublishBug reporter must match `reporter_address`, and when XMTP sender context is available it must also match the authenticated XMTP sender before credential checks, IPFS pinning, index publication, Signal relay, or payout persistence.
 - In live mode, the broker preflights the signed reveal time before IPFS pinning so a too-short, signature-bound `revealAfter` is rejected before creating another durable CID.
 - The browser sends broker submissions as XMTP DMs to the configured broker wallet.
-- The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, blocked reporters, and insufficient BUGZ balance.
+- The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, and blocked reporters. Submission BUGZ-balance gating is configurable and currently defaults to zero BUGZ for open submissions.
 - Signal bouncer access checks use the authenticated XMTP sender as the wallet identity. Optional `wallet` fields are accepted only when they match the sender; mismatches are rejected before BUGZ balance checks or Signal group invites.
 - The broker sends staged plain text XMTP status messages after successful validation stages.
 - The broker pins the verified encrypted BugBundle through local Kubo without adding broker status fields to the payload.

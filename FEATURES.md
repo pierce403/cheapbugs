@@ -229,7 +229,7 @@ cheapbugs/
   - If bug-index publication fails after IPFS pinning, the broker records an `index_failed` submission with the pinned CID and returns an XMTP error that includes the actionable publish failure. Known index custom errors such as `InvalidRevealAfter`, `RevealNotReady`, and `SignatureExpired` are decoded into timestamped guidance.
   - Broker status messages intentionally avoid XMTP reply-content encoding so the submission flow does not depend on nonessential reply-content codec behavior.
   - After sending the submission DM, the browser waits for broker plain text replies in the same XMTP conversation. `Submission complete: Bug published onchain...`, `Submission complete: Bug already exists onchain...`, or `Submission complete: Bug index dry-run complete...` is treated as terminal success; target, credential, JSON, IPFS, or bug-index publish failure replies are terminal errors.
-  - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
+  - Submission credential checks use `BROKER_REPUTATION_BLOCKLIST`; `BROKER_SUBMISSION_MIN_BUGZ` defaults to `0` for open submissions and can be raised later to require a BUGZ balance.
 - **Test Criteria**:
   - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, credential failure, authenticated XMTP sender/reporter mismatch rejection, live reveal-window preflight, bug-index publish call shaping, decoded publish failures, and dry-run handling.
   - [x] Python unit tests cover `hello.` liveness replies for unrecognized XMTP text and JSON flow types.

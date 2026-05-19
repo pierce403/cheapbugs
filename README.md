@@ -32,9 +32,9 @@ For contract development, the repo now also includes a Foundry workspace with a 
 
 ## XMTP Broker Flow
 
-The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BROKER_XMTP_ADDRESS` only when overriding that broker wallet. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create a site-local XMTP wallet; generated wallet keys are stored in this browser and can be copied from `/login` for recovery.
+The submit route defaults to XMTP DM submission through `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`; set `VITE_BROKER_XMTP_ADDRESS` only when overriding that broker wallet. Users can connect with an existing browser wallet, scan a WalletConnect QR code, or create an embedded CheapBugs wallet; generated wallet keys are stored in this browser and can be exported as `cheapbugs-key.json` for recovery.
 
-Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The site asks for bug type, severity, target interest, title, public summary, and private details; the browser encrypts the private details into a BugBundle, signs a `PublishBug` EIP-712 authorization, and sends the out-of-bundle details key to the broker. The broker rejects malformed JSON, missing core fields, invalid BugBundle signatures, invalid provided target references, or reporters that fail the configured submission credential checks. When the checks pass, it replies over XMTP through validation, IPFS pinning, and bug-index publication stages.
+Submissions are sent as a strict `cheapbugs.bug_submission.v1` JSON object. The site asks for bug type, severity, target interest, title, public summary, and private details; the browser encrypts the private details into a BugBundle, signs a `PublishBug` EIP-712 authorization, and sends the out-of-bundle details key to the broker. The broker rejects malformed JSON, missing core fields, invalid BugBundle signatures, invalid provided target references, blocked reporters, or reporters below a configured `BROKER_SUBMISSION_MIN_BUGZ` threshold. That threshold currently defaults to `0`, so users do not need BUGZ to submit. When checks pass, the broker replies over XMTP through validation, IPFS pinning, and bug-index publication stages.
 
 Bot setup:
 

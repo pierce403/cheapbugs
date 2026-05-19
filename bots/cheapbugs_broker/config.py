@@ -119,7 +119,7 @@ class BrokerConfig:
             ipfs_prime_gateway=_env_bool_any(("BROKER_IPFS_PRIME_GATEWAY",), False),
             ipfs_timeout_seconds=_env_int_any(("BROKER_IPFS_TIMEOUT_SECONDS",), 10),
             access_min_balance_tokens=_env_decimal_any(("BROKER_ACCESS_MIN_BUGZ",), "1"),
-            submission_min_balance_tokens=_env_decimal_any(("BROKER_SUBMISSION_MIN_BUGZ",), "1"),
+            submission_min_balance_tokens=_env_decimal_any(("BROKER_SUBMISSION_MIN_BUGZ",), "0"),
             reputation_blocklist=_env_address_set_any(("BROKER_REPUTATION_BLOCKLIST",)),
             reward_base_tokens=_env_decimal_any(("BROKER_BUGZ_BASE_REWARD",), "0"),
             reward_per_reaction_tokens=_env_decimal_any(("BROKER_BUGZ_PER_REACTION",), "100"),
