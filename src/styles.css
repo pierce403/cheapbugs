@@ -634,6 +634,21 @@ button:disabled,
   font-weight: 600;
 }
 
+.bug-listing-table .score-column {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.bug-listing-table .title-column {
+  width: 100%;
+  min-width: 240px;
+}
+
+.bug-listing-table .date-column,
+.bug-listing-table .unlock-column {
+  white-space: nowrap;
+}
+
 .bug-title-cell {
   display: flex;
   align-items: center;
@@ -695,6 +710,31 @@ button:disabled,
 .vote-level-modal {
   width: min(420px, 100%);
   grid-template-columns: minmax(0, 1fr);
+}
+
+.unlock-cell-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.unlock-lock-button {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255, 106, 0, 0.34);
+  background: #0c0c0c;
+  color: var(--warning);
+  padding: 0;
+  cursor: pointer;
+}
+
+.unlock-lock-button:hover,
+.unlock-lock-button:focus-visible {
+  border-color: rgba(255, 106, 0, 0.7);
+  background: rgba(255, 106, 0, 0.12);
 }
 
 .compact-table th,

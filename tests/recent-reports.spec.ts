@@ -340,18 +340,26 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await expect(page.getByText("static assets only")).toHaveCount(0);
 
   const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
-  await expect(recentReports.locator("thead th")).toHaveText(["date", "title", "target", "author", "details"]);
+  await expect(recentReports.locator("thead th")).toHaveText(["score", "title", "author", "date", "unlock"]);
   const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
-  await expect(reportRow.locator("td").nth(0)).toContainText("May 18, 2026");
+  await expect(reportRow.locator("td").nth(0).locator(".bug-vote-score")).toHaveText("0");
   await expect(reportRow.locator("td").nth(1)).toContainText("Live parser exploit");
-  await expect(reportRow).toContainText("Base protocol parser (protocol)");
-  await expect(reportRow).toContainText("alice.eth");
+  await expect(reportRow.locator("td").nth(2)).toContainText("alice.eth");
+  await expect(reportRow.locator("td").nth(3)).toContainText("May 18, 2026");
   await expect(reportRow.locator("td").nth(4)).toHaveText("2d 4h");
+  await expect(reportRow.getByRole("button", { name: "buy early access to Live parser exploit" })).toBeVisible();
   await expect(recentReports.getByText("No onchain bug reports resolved yet.")).toHaveCount(0);
 
   expect(counts.latest).toBeGreaterThan(0);
   expect(counts.getReport).toBeGreaterThan(0);
   expect(gateway.counts.bundle).toBe(1);
+
+  await reportRow.getByRole("button", { name: "buy early access to Live parser exploit" }).click();
+  const unlockDialog = page.getByRole("dialog", { name: "detail unlock" });
+  await expect(unlockDialog).toBeVisible();
+  await expect(unlockDialog).toContainText("Connect a wallet before buying detail access.");
+  await unlockDialog.getByRole("button", { name: "close" }).click();
+  await expect(unlockDialog).toBeHidden();
 
   const countsAfterFirstRender = { ...counts };
   const gatewayCallsAfterFirstRender = gateway.counts.bundle;
@@ -366,7 +374,6 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await page.reload();
   const reloadedRecentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
   const reloadedReportRow = reloadedRecentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
-  await expect(reloadedReportRow).toContainText("Base protocol parser (protocol)");
   await expect(reloadedReportRow.locator("td").nth(4)).toHaveText("2d 4h");
   expect(counts).toEqual(countsAfterFirstRender);
   expect(gateway.counts.bundle).toBe(gatewayCallsAfterFirstRender);
@@ -446,7 +453,6 @@ test("renders stale cached report and BugBundle details when providers rate limi
   const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
   const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
   await expect(reportRow.locator("td").nth(1)).toContainText("Live parser exploit");
-  await expect(reportRow).toContainText("Base protocol parser (protocol)");
   await expect(reportRow.locator("td").nth(4)).toHaveText("2d 4h");
   expect(baseCalls).toBeGreaterThan(0);
   expect(gatewayCalls).toBe(1);

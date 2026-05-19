@@ -39,6 +39,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The pinned bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
 - The browser stores a purchased details key only after the broker returns it over XMTP, then decrypts the already pinned encrypted BugBundle locally. Decrypted private details are not written to the BugBundle/IPFS cache.
 - The browser detail-unlock payment path verifies the transaction signer matches the connected buyer session before approval or treasury payment. The broker still treats the onchain transaction sender and treasury purchase ledger as the authority before releasing a key.
+- Home/index lock icons and report-page early-access buttons share the same browser detail-unlock flow; the listing UI does not add a separate payment or key-release trust path.
 - The frontend may fetch the pinned BugBundle public core to display title and target metadata, but that gateway content is untrusted display data and must not override onchain attribution, commitments, payout state, or authorization checks.
 - The frontend owner console reads contract ownership and exposes owner transaction forms only as a convenience layer. `onlyOwner` checks in the contracts remain the authority for all management calls.
 - The frontend staking route helps users approve, bond, request withdrawal, and withdraw BUGZ, but bond accounting, withdrawal delays, and slashing guarantees are enforced only by `CheapBugsBondVault`.

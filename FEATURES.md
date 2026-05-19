@@ -159,7 +159,7 @@ cheapbugs/
 - **Stability**: in-progress
 - **Description**: During the reveal delay, buyers can request an offchain broker quote, pay the treasury vault onchain, and receive the report's details key over XMTP after broker verification.
 - **Properties**:
-  - The report page shows a lock-button early-access path while the report is still unrevealed and the browser does not already have a stored key.
+  - The report page and locked home/index rows show lock-button early-access paths while the report is still unrevealed and the browser does not already have a stored key.
   - Quote requests use strict JSON schema `cheapbugs.detail_unlock.v1`, type `detail_unlock_quote`, and include request id, buyer, broker, chain id, bug index, treasury vault, and report hash.
   - The broker binds the buyer to the authenticated XMTP sender; message-supplied `buyer_address` values that do not match sender identity are rejected before pricing or key release.
   - The broker computes the default quote as `CheapBugsTreasuryVault.calculateRewardAmount(1) * ceil(days remaining until the 7-day reveal window)`, stores the quote by request id for 15 minutes, and returns price wei, days remaining, and expiry over XMTP.
@@ -193,8 +193,9 @@ cheapbugs/
   - Direct browser-to-index submission is disabled; the only browser-to-index write helper is bonded voting through `submitBondVote`.
   - The frontend defaults to the verified Base contract suite, so new broker-published bugs can be read into index/recent-report views without requiring `VITE_BUG_INDEX_ADDRESS` in local env.
   - Recent-report reads use in-memory caching, localStorage-backed public bug-index detail caches, in-flight request reuse, and fail-open public metadata/ENS lookups so route changes and reloads do not repeatedly call `latestReportHashes`/`getReport` or block the shell on optional display data.
-  - Public bug-listing tables show date, title, target, author, and details-unlock countdown in that order. The countdown renders days, hours, or minutes until `revealAfter`, then falls back to `unlockable` or `unlocked` after reveal.
-  - Public bug-listing title cells include bonded vote controls in the form up arrow, net vote weight, down arrow. Hover titles expose total up/down weights, the connected user's current direction lights up, and level-0 vote attempts show a stake-required modal with a route to `/stake`.
+  - Home/index bug-listing tables show score, title, author, date, and unlock columns in that order. The target column is intentionally omitted from this compact archive view so long titles get the widest column.
+  - Home/index score cells include bonded vote controls in the form up arrow, net vote weight, down arrow. Hover titles expose total up/down weights, the connected user's current direction lights up, and level-0 vote attempts show a stake-required modal with a route to `/stake`.
+  - The unlock column renders days, hours, or minutes until `revealAfter`, then falls back to `unlockable` or `unlocked` after reveal. Locked rows show a small lock icon next to the countdown that opens the shared detail-unlock quote/payment modal.
   - Launcher scripts refresh frontend ABI files after compilation, deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together, check the deployed wiring, and verify all three contracts on Etherscan/BaseScan by default for real deployments.
   - The Node launcher writes tracked deployment manifests and generated contract artifacts under `deployments/base-8453/`, including compiler/tool versions, optimizer and `via_ir` settings, source/package hashes, constructor arguments, transaction logs for broadcasts, verification command inputs, and generated ABI/bytecode artifacts.
   - Launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set; otherwise they deploy from `BROKER_KEY`, seed that broker as the initial broker when no broker list is provided, and transfer ownership to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
@@ -206,7 +207,7 @@ cheapbugs/
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
   - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
-  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the date/title/target/author/details order, caching those reads across route changes and reloads, resolving the author ENS name, routing to the author profile page, displaying bonded vote totals/current direction, and routing level-0 voters to staking.
+  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the score/title/author/date/unlock order, caching those reads across route changes and reloads, resolving the author ENS name, routing to the author profile page, displaying bonded vote totals/current direction, opening the detail-unlock modal from locked rows, and routing level-0 voters to staking.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 
 ### Removed Direct Submission Path

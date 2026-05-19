@@ -1,4 +1,4 @@
-import { loadRecentBundles } from "../lib/reports";
+import { getStoredAccessKey, loadRecentBundles } from "../lib/reports";
 import { authorDisplayFromMap, loadAuthorDisplayMap } from "../lib/authors";
 import {
   loadBugVoteStates,
@@ -7,9 +7,10 @@ import {
   type BugVoteState
 } from "../contracts/bugIndex";
 import { getFeaturedReportHashes } from "../lib/eas";
-import { reportDetailsUnlockText, reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
+import { reportDetailsUnlockText, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate } from "../lib/utils";
 
+import { bindDetailUnlockFlow, renderDetailUnlockModal } from "./detailUnlock";
 import type { AppViewContext, ViewResult } from "./types";
 
 export const renderHomeView = async (context: AppViewContext): Promise<ViewResult> => {
@@ -53,6 +54,36 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
     `;
   };
 
+  const renderUnlockCell = (bundle: (typeof bundles)[number], title: string): string => {
+    const revealAt = bundle.publicSubmission.revealAfter ? Date.parse(bundle.publicSubmission.revealAfter) : null;
+    const isLocked =
+      !getStoredAccessKey(bundle.publicSubmission.reportHash) &&
+      !bundle.publicSubmission.detailsKeyRevealed &&
+      revealAt !== null &&
+      !Number.isNaN(revealAt) &&
+      revealAt > Date.now();
+    const lockButton = isLocked
+      ? `
+        <button
+          class="unlock-lock-button"
+          type="button"
+          data-detail-unlock-report="${bundle.publicSubmission.reportHash}"
+          title="buy early access"
+          aria-label="buy early access to ${escapeHtml(title)}"
+        >
+          <span class="lock-icon" aria-hidden="true"></span>
+        </button>
+      `
+      : "";
+
+    return `
+      <span class="unlock-cell-inner">
+        <span>${escapeHtml(reportDetailsUnlockText(bundle))}</span>
+        ${lockButton}
+      </span>
+    `;
+  };
+
   const renderBugListingRow = (bundle: (typeof bundles)[number]): string => {
     const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
     const author = authorDisplayFromMap(authorDisplays, bundle.publicSubmission.reporterAddress);
@@ -74,16 +105,13 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
 
     return `
       <tr>
-        <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
-        <td>
-          <div class="bug-title-cell">
-            ${renderVoteControl(voteState, voteClosed, title)}
-            <a href="${href}" data-nav>${escapeHtml(title)}</a>
-          </div>
+        <td class="score-column">${renderVoteControl(voteState, voteClosed, title)}</td>
+        <td class="title-column">
+          <a href="${href}" data-nav>${escapeHtml(title)}</a>
         </td>
-        <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
         <td><a href="${profileHref}" data-nav>${escapeHtml(author.label)}</a></td>
-        <td>${escapeHtml(reportDetailsUnlockText(bundle))}</td>
+        <td class="date-column">${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
+        <td class="unlock-column">${renderUnlockCell(bundle, title)}</td>
       </tr>
     `;
   };
@@ -116,14 +144,14 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
 
       <section class="panel">
         <div class="panel-title">[ featured items ]</div>
-        <table class="data-table">
+        <table class="data-table bug-listing-table">
           <thead>
             <tr>
-              <th>date</th>
+              <th>score</th>
               <th>title</th>
-              <th>target</th>
               <th>author</th>
-              <th>details</th>
+              <th>date</th>
+              <th>unlock</th>
             </tr>
           </thead>
           <tbody>${featuredRows}</tbody>
@@ -132,14 +160,14 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
 
       <section class="panel">
         <div class="panel-title">[ recent reports ]</div>
-        <table class="data-table">
+        <table class="data-table bug-listing-table">
           <thead>
             <tr>
-              <th>date</th>
+              <th>score</th>
               <th>title</th>
-              <th>target</th>
               <th>author</th>
-              <th>details</th>
+              <th>date</th>
+              <th>unlock</th>
             </tr>
           </thead>
           <tbody>${recentRows}</tbody>
@@ -157,6 +185,7 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
           </div>
         </div>
       </div>
+      ${renderDetailUnlockModal()}
     `,
     afterRender: (root, viewContext) => {
       const levelModal = root.querySelector<HTMLDivElement>("#vote-level-modal");
@@ -218,6 +247,7 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
           }
         });
       });
+      bindDetailUnlockFlow(root, viewContext);
     }
   };
 };
