@@ -48,6 +48,7 @@ const signatureWaitDetail =
   "Approve the XMTP registration signature in your wallet app or browser extension. This does not send a transaction.";
 const submissionFieldNames: Record<SubmissionTextField, string> = {
   title: "title",
+  targetRef: "targetRef",
   publicSummary: "publicSummary",
   details: "details"
 };
@@ -235,14 +236,20 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
 
     <form id="submit-form" class="panel stack-form" novalidate>
       <div class="panel-title">[ report fields ]</div>
-      <label>title<input name="title" required minlength="${SUBMISSION_TEXT_LIMITS.title.min}" maxlength="${SUBMISSION_TEXT_LIMITS.title.max}" placeholder="Heap corruption in parser" /></label>
+      <div class="two-column">
+        <label>title<input name="title" required minlength="${SUBMISSION_TEXT_LIMITS.title.min}" maxlength="${SUBMISSION_TEXT_LIMITS.title.max}" placeholder="Heap corruption in parser" /></label>
+        <label>target<input name="targetRef" required minlength="${SUBMISSION_TEXT_LIMITS.targetRef.min}" maxlength="${SUBMISSION_TEXT_LIMITS.targetRef.max}" placeholder="project, domain, repo, contract, or protocol" /></label>
+      </div>
       <label>bug type<select name="bugType" required>${bugTypeOptionsMarkup()}</select></label>
       <div class="two-column slider-grid">
         ${sliderMarkup("severity", "severity")}
         ${sliderMarkup("targetInterest", "target interest")}
       </div>
       <label>public summary<textarea name="publicSummary" rows="3" required minlength="${SUBMISSION_TEXT_LIMITS.publicSummary.min}" maxlength="${SUBMISSION_TEXT_LIMITS.publicSummary.max}" placeholder="Redacted public-safe summary for browsing and indexing."></textarea></label>
-      <label>details<textarea name="details" rows="7" required minlength="${SUBMISSION_TEXT_LIMITS.details.min}" maxlength="${SUBMISSION_TEXT_LIMITS.details.max}" placeholder="Private details only."></textarea></label>
+      <label>private details<textarea name="details" aria-label="private details" rows="7" required minlength="${SUBMISSION_TEXT_LIMITS.details.min}" maxlength="${SUBMISSION_TEXT_LIMITS.details.max}" placeholder="Private details only."></textarea></label>
+      <p class="warning-copy field-warning">
+        Private details must include full step-by-step instructions and/or PoC demonstrating impact, or the broker may mark the report invalid.
+      </p>
       <button id="submit-to-broker" class="button" type="submit">
         submit to broker
       </button>
@@ -382,13 +389,13 @@ export const renderSubmitView = async (context: AppViewContext): Promise<ViewRes
         severity: ratingFromFormValue(formData.get("severityIndex")),
         targetInterest: ratingFromFormValue(formData.get("targetInterestIndex")),
         title: String(formData.get("title") || ""),
+        targetRef: String(formData.get("targetRef") || ""),
         publicSummary: String(formData.get("publicSummary") || ""),
         details: String(formData.get("details") || ""),
         reproSteps: "",
         evidence: "",
         contactHints: "",
         targetKind: "other" as never,
-        targetRef: "",
         tags: "",
         disclosureMode: "private" as never
       };

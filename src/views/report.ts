@@ -1,8 +1,10 @@
 import { getSchemaCatalog } from "../lib/schema-overrides";
+import { loadAuthorDisplay } from "../lib/authors";
 import { computeReviewDisplayState } from "../lib/eas";
 import { decryptPrivateSubmission, getStoredAccessKey, loadReviewVerdicts, loadSubmissionBundle, submitReviewVerdict } from "../lib/reports";
 import { saveReportAccessKey } from "../lib/report-access";
 import { toGatewayUrl } from "../lib/ipfs";
+import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { chainConfig } from "../config/chains";
 import { escapeHtml, formatDate, newlineToBreaks, shortHash, textOrDash } from "../lib/utils";
 
@@ -24,6 +26,10 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
     };
   }
 
+  const title = reportDisplayTitle(bundle);
+  const target = reportDisplayTarget(bundle);
+  const author = await loadAuthorDisplay(bundle.publicSubmission.reporterAddress);
+  const authorHref = context.router.href(`/profile/${author.address}`);
   const reviews = await loadReviewVerdicts(reportHash);
   const reviewState = computeReviewDisplayState(reviews);
   const accessKey = getStoredAccessKey(reportHash);
@@ -39,7 +45,7 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
             <tr><th>severity</th><td>${escapeHtml(textOrDash(privateSubmission.severity))}</td></tr>
             <tr><th>target interest</th><td>${escapeHtml(textOrDash(privateSubmission.targetInterest))}</td></tr>
             <tr><th>title</th><td>${escapeHtml(privateSubmission.title)}</td></tr>
-            <tr><th>details</th><td>${newlineToBreaks(privateSubmission.details)}</td></tr>
+            <tr><th>private details</th><td>${newlineToBreaks(privateSubmission.details)}</td></tr>
             <tr><th>repro</th><td>${newlineToBreaks(privateSubmission.reproSteps)}</td></tr>
             <tr><th>evidence</th><td>${newlineToBreaks(textOrDash(privateSubmission.evidence))}</td></tr>
             <tr><th>contact hints</th><td>${newlineToBreaks(textOrDash(privateSubmission.contactHints))}</td></tr>
@@ -77,25 +83,28 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
     : "";
 
   return {
-    title: bundle.publicSubmission.reportId,
+    title,
     html: `
       <section class="panel">
-        <div class="panel-title">[ ${escapeHtml(bundle.publicSubmission.reportId)} ]</div>
+        <div class="panel-title">[ ${escapeHtml(title)} ]</div>
         ${bugIndexWarning}
         ${schemaWarning}
         <table class="data-table">
           <tbody>
+            <tr><th>title</th><td>${escapeHtml(title)}</td></tr>
+            <tr><th>date</th><td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td></tr>
+            <tr><th>description</th><td>${newlineToBreaks(bundle.publicSubmission.publicSummary)}</td></tr>
+            <tr><th>download</th><td><a href="${escapeHtml(
+              toGatewayUrl(bundle.publicSubmission.encryptedPayloadCid)
+            )}" target="_blank" rel="noreferrer">BugBundle</a></td></tr>
+            <tr><th>author</th><td><a href="${authorHref}" data-nav>${escapeHtml(author.label)}</a></td></tr>
             <tr><th>report hash</th><td>${escapeHtml(bundle.publicSubmission.reportHash)}</td></tr>
-            <tr><th>created</th><td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td></tr>
-            <tr><th>reporter</th><td>${escapeHtml(bundle.publicSubmission.reporterAddress)}</td></tr>
+            <tr><th>report id</th><td>${escapeHtml(bundle.publicSubmission.reportId)}</td></tr>
+            <tr><th>reporter address</th><td>${escapeHtml(bundle.publicSubmission.reporterAddress)}</td></tr>
             <tr><th>mode</th><td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td></tr>
-            <tr><th>target</th><td>${escapeHtml(bundle.publicSubmission.targetKind)}</td></tr>
+            <tr><th>target</th><td>${escapeHtml(target)}</td></tr>
             <tr><th>target ref hash</th><td>${escapeHtml(bundle.publicSubmission.targetRefHash)}</td></tr>
             <tr><th>content hash</th><td>${escapeHtml(bundle.publicSubmission.contentHash)}</td></tr>
-            <tr><th>encrypted payload</th><td><a href="${escapeHtml(
-              toGatewayUrl(bundle.publicSubmission.encryptedPayloadCid)
-            )}" target="_blank" rel="noreferrer">ipfs blob</a></td></tr>
-            <tr><th>summary</th><td>${newlineToBreaks(bundle.publicSubmission.publicSummary)}</td></tr>
             <tr><th>tags</th><td>${escapeHtml(textOrDash(bundle.publicSubmission.tags.join(", ")))}</td></tr>
             <tr><th>bug index</th><td>${escapeHtml(chainConfig.bugIndexAddress || "unset")}</td></tr>
             <tr><th>bond vault</th><td>${escapeHtml(chainConfig.bugBondVaultAddress)}</td></tr>

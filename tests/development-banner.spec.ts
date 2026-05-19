@@ -50,13 +50,17 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
   await expect(page.getByTestId("xmtp-status")).toContainText("xmtp: wallet required");
   await expect(page.getByRole("button", { name: "submit to broker" })).toBeEnabled();
   await expect(page.locator("#submit-form label").nth(0)).toContainText("title");
-  await expect(page.locator("#submit-form label").nth(1)).toContainText("bug type");
+  await expect(page.locator("#submit-form label").nth(1)).toContainText("target");
+  await expect(page.locator("#submit-form label").nth(2)).toContainText("bug type");
   await expect(page.getByLabel("title")).toHaveAttribute("minlength", "3");
   await expect(page.getByLabel("title")).toHaveAttribute("maxlength", "120");
+  await expect(page.getByRole("textbox", { name: "target" })).toHaveAttribute("minlength", "2");
+  await expect(page.getByRole("textbox", { name: "target" })).toHaveAttribute("maxlength", "160");
   await expect(page.getByLabel("public summary")).toHaveAttribute("minlength", "10");
   await expect(page.getByLabel("public summary")).toHaveAttribute("maxlength", "2000");
-  await expect(page.getByLabel("details")).toHaveAttribute("minlength", "10");
-  await expect(page.getByLabel("details")).toHaveAttribute("maxlength", "12000");
+  await expect(page.getByLabel("private details")).toHaveAttribute("minlength", "10");
+  await expect(page.getByLabel("private details")).toHaveAttribute("maxlength", "12000");
+  await expect(page.getByText("must include full step-by-step instructions and/or PoC")).toBeVisible();
   await expect(page.getByLabel("bug type")).toHaveValue("0day");
   await expect(page.getByLabel("bug type").locator('option[value="web3"]')).toHaveText(
     "web3 : bug in smart contracts, wallets, dapps, or onchain protocols"
@@ -78,7 +82,6 @@ test("submit route defaults to the broker XMTP path", async ({ page }) => {
     "contact hints",
     "target kind",
     "disclosure mode",
-    "target reference",
     "tags",
     "review access key",
     "regen"
@@ -91,8 +94,9 @@ test("submit route validates broker field sizes before wallet checks", async ({ 
   await page.goto("/submit");
 
   await page.getByLabel("title").fill("Parser overflow");
+  await page.getByRole("textbox", { name: "target" }).fill("base parser");
   await page.getByLabel("public summary").fill("short");
-  await page.getByLabel("details").fill("Private details for the broker only.");
+  await page.getByLabel("private details").fill("Private details for the broker only.");
   await page.getByRole("button", { name: "submit to broker" }).click();
 
   await expect(page.getByTestId("xmtp-status")).toContainText("form: check fields");
@@ -102,19 +106,22 @@ test("submit route validates broker field sizes before wallet checks", async ({ 
   await expect(page.getByRole("dialog", { name: "processing submission" })).toBeHidden();
 
   await page.getByLabel("public summary").fill("Public safe summary for reviewers.");
-  await page.getByLabel("details").fill("tiny");
+  await page.getByLabel("private details").fill("tiny");
   await page.getByRole("button", { name: "submit to broker" }).click();
 
   await expect(page.getByTestId("xmtp-status")).toContainText("form: check fields");
-  await expect(page.getByTestId("xmtp-status")).toContainText("Details must be at least 10 characters after trimming.");
+  await expect(page.getByTestId("xmtp-status")).toContainText(
+    "Private details must be at least 10 characters after trimming."
+  );
 });
 
 test("submit route gives inline XMTP feedback when submit is blocked", async ({ page }) => {
   await page.goto("/submit");
 
   await page.getByLabel("title").fill("Parser overflow");
+  await page.getByRole("textbox", { name: "target" }).fill("base parser");
   await page.getByLabel("public summary").fill("Public safe summary for reviewers.");
-  await page.getByLabel("details").fill("Private details for the broker only.");
+  await page.getByLabel("private details").fill("Private details for the broker only.");
   await page.getByRole("button", { name: "submit to broker" }).click();
 
   await expect(page).toHaveURL(/\/submit$/);

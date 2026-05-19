@@ -4,6 +4,7 @@ import { AppRouter } from "./router";
 import { renderHomeView } from "./views/home";
 import { renderLoginView } from "./views/login";
 import { renderPatronsView } from "./views/patrons";
+import { renderProfileView } from "./views/profile";
 import { renderReportView } from "./views/report";
 import { renderReviewView } from "./views/review";
 import { renderSubmitView } from "./views/submit";
@@ -268,6 +269,8 @@ export class CheapBugsApp {
         return renderSubmitView(context);
       case "report":
         return renderReportView(context);
+      case "profile":
+        return renderProfileView(context);
       case "review":
         return renderReviewView(context);
       case "token":

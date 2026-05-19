@@ -34,6 +34,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The broker sends staged plain text XMTP status messages after successful validation stages.
 - The broker pins the verified encrypted BugBundle through local Kubo without adding broker status fields to the payload.
 - The pinned bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
+- The frontend may fetch the pinned BugBundle public core to display title and target metadata, but that gateway content is untrusted display data and must not override onchain attribution, commitments, payout state, or authorization checks.
 - After IPFS pinning, the broker publishes the signed report to `CheapBugsBugIndex.publishBug`, checks the broker role and gas funding before broadcast, waits for a receipt, and records the report hash and transaction hash in SQLite. `BROKER_DRY_RUN=1` skips the broadcast and Signal relay while still exercising validation and IPFS pinning.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
@@ -60,6 +61,7 @@ Current and required properties:
 
 - The browser is trusted to display the correct signing intent only if the loaded static assets are authentic.
 - Wallet signatures are the source of identity authority, not form fields.
+- ENS names and avatars are presentation only. Author profile links and report attribution must continue to use the reporter address stored by the bug index.
 - Local XMTP identity keys are browser-stored recovery material. A compromised browser profile compromises that local wallet.
 - External wallets and WalletConnect devices must show signature prompts clearly enough for users to detect unexpected signing requests.
 
@@ -90,7 +92,7 @@ Current and required properties:
 - In the current broker flow, IPFS stores a single BugBundle JSON object whose `details` section is encrypted ciphertext.
 - Details keys must not be included in IPFS bundles. They are held by the broker during the judgment period and later published through the bug index after the reveal window opens.
 - Public gateway priming is best-effort and does not guarantee persistence. It can also reveal a CID to a third-party gateway before the onchain index references it, so it is disabled by default.
-- IPFS CIDs and gateway responses are untrusted input. Rendering code must sanitize and validate fetched content.
+- IPFS CIDs and gateway responses are untrusted input. Rendering code must sanitize and validate fetched content, including the public BugBundle title and target fields used in archive tables.
 - Pinata credentials must stay out of browser code.
 
 ### EAS

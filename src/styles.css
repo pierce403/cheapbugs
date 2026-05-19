@@ -476,6 +476,36 @@ button:disabled,
   justify-content: flex-end;
 }
 
+.profile-page-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-page-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.profile-page-avatar {
+  width: 96px;
+  height: 96px;
+  border: 1px solid var(--line-soft);
+  object-fit: cover;
+  background: #050505;
+}
+
+.profile-page-name {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.profile-page-address {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .nav-row {
   display: flex;
   gap: 8px;
@@ -544,6 +574,7 @@ button:disabled,
   border: 1px solid rgba(255, 106, 0, 0.22);
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .data-table thead th {
@@ -646,6 +677,16 @@ button:disabled,
   color: var(--warning);
 }
 
+.field-warning {
+  margin: 0;
+}
+
+.table-subline {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .lede {
   margin: 0;
 }
@@ -711,6 +752,7 @@ button:disabled,
   .banner,
   .development-banner,
   .intro-panel,
+  .profile-page-header,
   .two-column,
   .trade-grid,
   .auth-grid,

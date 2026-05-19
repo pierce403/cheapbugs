@@ -1,6 +1,6 @@
 import type { AppNotice } from "./domain";
 
-export type RouteName = "home" | "submit" | "report" | "review" | "token" | "patrons" | "login";
+export type RouteName = "home" | "submit" | "report" | "profile" | "review" | "token" | "patrons" | "login";
 
 export type RouteMatch = {
   name: RouteName;

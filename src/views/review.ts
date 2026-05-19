@@ -1,8 +1,10 @@
 import { authController } from "../services";
 import { registerSchema } from "../attest/eas";
 import { chainConfig } from "../config/chains";
+import { authorDisplayFromMap, loadAuthorDisplayMap } from "../lib/authors";
 import { getSchemaCatalog } from "../lib/schema-overrides";
 import { loadReviewQueue } from "../lib/reports";
+import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
@@ -67,23 +69,27 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
   }
 
   const queue = await loadReviewQueue(15);
+  const authorDisplays = await loadAuthorDisplayMap(queue.map(({ bundle }) => bundle.publicSubmission.reporterAddress));
   const queueRows = queue.length
     ? queue
         .map(({ bundle, reviewState }) => {
           const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
+          const author = authorDisplayFromMap(authorDisplays, bundle.publicSubmission.reporterAddress);
+          const profileHref = context.router.href(`/profile/${author.address}`);
           return `
             <tr>
-              <td><a href="${href}" data-nav>${escapeHtml(bundle.publicSubmission.reportId)}</a></td>
+              <td><a href="${href}" data-nav>${escapeHtml(reportDisplayTitle(bundle))}</a></td>
               <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
-              <td>${escapeHtml(bundle.publicSubmission.targetKind)}</td>
+              <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
               <td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td>
+              <td><a href="${profileHref}" data-nav>${escapeHtml(author.label)}</a></td>
               <td>${escapeHtml(reviewState.headline?.validity ?? "pending")}</td>
               <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
             </tr>
           `;
         })
         .join("")
-    : `<tr><td colspan="6" class="muted-cell">No report queue items resolved yet.</td></tr>`;
+    : `<tr><td colspan="7" class="muted-cell">No report queue items resolved yet.</td></tr>`;
 
   return {
     title: "Review Queue",
@@ -101,6 +107,7 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
               <th>created</th>
               <th>target</th>
               <th>mode</th>
+              <th>author</th>
               <th>trusted state</th>
               <th>summary</th>
             </tr>

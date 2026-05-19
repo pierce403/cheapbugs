@@ -73,7 +73,7 @@ type BugBundleCore = {
     public_summary: string;
     target: {
       kind: "other";
-      reference: "broker triage";
+      reference: string;
     };
     disclosure_mode: "private";
     tags: string[];
@@ -269,6 +269,7 @@ const buildUnsignedBugBundleCore = async (
 ): Promise<{ core: BugBundleCore; detailsKeyB64: string }> => {
   const detailsKey = randomBytes(32);
   const iv = randomBytes(12);
+  const targetReference = input.targetRef.trim();
   const submission = {
     bug_type: input.bugType,
     severity: input.severity,
@@ -277,7 +278,7 @@ const buildUnsignedBugBundleCore = async (
     public_summary: input.publicSummary.trim(),
     target: {
       kind: "other" as const,
-      reference: "broker triage" as const
+      reference: targetReference
     },
     disclosure_mode: "private" as const,
     tags: []
@@ -445,7 +446,7 @@ export const buildBrokerSubmissionMessage = async (
     public_summary: input.publicSummary.trim(),
     target: {
       kind: "other",
-      reference: "broker triage"
+      reference: input.targetRef.trim()
     },
     disclosure_mode: "private",
     tags: [],

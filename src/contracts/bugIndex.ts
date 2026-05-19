@@ -41,8 +41,16 @@ const readProvider = createBaseReadProvider();
 const readCache = new RpcReadCache();
 const LATEST_REPORTS_TTL_MS = 15_000;
 const REPORT_TTL_MS = 60_000;
+const BUG_INDEX_READ_TIMEOUT_MS = 4_000;
 
 const readContract = () => new Contract(bugIndexAddress(), bugIndexAbi, readProvider);
+
+const withReadTimeout = async <T>(read: Promise<T>, label: string): Promise<T> => {
+  const timeout = new Promise<never>((_resolve, reject) => {
+    globalThis.setTimeout(() => reject(new Error(`${label} timed out.`)), BUG_INDEX_READ_TIMEOUT_MS);
+  });
+  return Promise.race([read, timeout]);
+};
 
 const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => ({
   reportId: entry.reportId,
@@ -67,7 +75,10 @@ export const getBugReport = async (reportHash: `0x${string}`): Promise<Submissio
 
   try {
     return await readCache.getOrLoad(key, REPORT_TTL_MS, async () => {
-      const record = (await readContract().getReport(reportHash)) as ContractSubmission;
+      const record = (await withReadTimeout(
+        readContract().getReport(reportHash) as Promise<ContractSubmission>,
+        "Bug index getReport"
+      )) as ContractSubmission;
       return fromContractSubmission(record);
     });
   } catch {
@@ -84,7 +95,10 @@ export const getLatestBugReports = async (limit: number): Promise<SubmissionPubl
 
   try {
     return await readCache.getOrLoad(key, LATEST_REPORTS_TTL_MS, async () => {
-      const hashes = (await readContract().latestReportHashes(BigInt(limit))) as `0x${string}`[];
+      const hashes = await withReadTimeout(
+        readContract().latestReportHashes(BigInt(limit)) as Promise<`0x${string}`[]>,
+        "Bug index latestReportHashes"
+      );
       const reports = await Promise.all(hashes.map((hash) => getBugReport(hash)));
       return reports.filter((entry): entry is SubmissionPublic => entry !== null);
     });

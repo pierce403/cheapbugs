@@ -20,6 +20,7 @@ type DashboardRead<T> = {
 };
 
 export type HeaderBugzBalance = Pick<TokenDashboard, "connectedBalance" | "decimals" | "symbol" | "errorMessage">;
+export type BugzAddressBalance = HeaderBugzBalance;
 
 const shortenError = (message: string): string => (message.length > 220 ? `${message.slice(0, 217)}...` : message);
 
@@ -85,7 +86,7 @@ const readDashboardValue = async <T>(label: string, read: () => Promise<T | null
   };
 };
 
-export const loadBugzHeaderBalance = async (connectedAddress: `0x${string}`): Promise<HeaderBugzBalance> => {
+export const loadBugzAddressBalance = async (address: `0x${string}`): Promise<BugzAddressBalance> => {
   if (!isBugzTokenConfigured()) {
     return {
       connectedBalance: null,
@@ -96,7 +97,7 @@ export const loadBugzHeaderBalance = async (connectedAddress: `0x${string}`): Pr
   }
 
   const metadata = getCachedBugzTokenMetadata();
-  const balanceRead = await readDashboardValue("BUGZ balance read", () => getBugzTokenBalance(connectedAddress));
+  const balanceRead = await readDashboardValue("BUGZ balance read", () => getBugzTokenBalance(address));
 
   return {
     connectedBalance: balanceRead.value,
@@ -105,6 +106,9 @@ export const loadBugzHeaderBalance = async (connectedAddress: `0x${string}`): Pr
     errorMessage: balanceRead.errorMessage
   };
 };
+
+export const loadBugzHeaderBalance = async (connectedAddress: `0x${string}`): Promise<HeaderBugzBalance> =>
+  loadBugzAddressBalance(connectedAddress);
 
 export const loadTokenDashboard = async (
   connectedAddress: `0x${string}` | null,

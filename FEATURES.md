@@ -55,13 +55,14 @@ cheapbugs/
 ### Static Web App Shell
 
 - **Stability**: stable
-- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `token`, and `patrons`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
+- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `token`, and `patrons`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
 - **Properties**:
   - The first screen is the usable app, not a landing page.
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
   - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete and logs a high-visibility console error if the read resolves unavailable.
   - Header BUGZ status only reads the connected wallet BUGZ balance; it must not load token metadata, treasury BUGZ, or treasury native ETH on ordinary route changes.
   - Browser contract adapters dedupe in-flight Base RPC reads, cache successful reads briefly, and apply a short cooldown after rate-limit errors.
+  - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows the bundle commit hash and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`.
 - **Test Criteria**:
@@ -78,6 +79,7 @@ cheapbugs/
   - Local XMTP identities are stored in `cheapbugs.localXmtpIdentity.v1` and can sign XMTP messages and Base transactions.
   - ENS avatars are read from the raw `avatar` text record and sanitized to HTTPS or IPFS gateway URLs.
   - ENS profile results cache in `cheapbugs.ensProfileCache.v1` for 24 hours so page reloads do not re-query mainnet ENS, with a profile-modal refresh button for manual cache bypass.
+  - Report author links route to `/profile/:address`, display ENS names and avatars when available, show BUGZ balance, and list recent submissions found through the current bug-index read path.
 - **Test Criteria**:
   - [x] Playwright covers ENS-backed profile modal behavior, avatar URL handling, local ENS cache reuse, and manual ENS refresh.
   - [x] `npm run build` catches Thirdweb/XMTP integration type drift.
@@ -128,6 +130,7 @@ cheapbugs/
   - The index requires `revealAfter` to be at least 7 days after onchain publication.
   - Submitter-built BugBundles sign a reveal time 7 days plus a 1-hour publish buffer after browser creation so broker validation, IPFS pinning, and transaction mining do not make the signed reveal window too short.
   - Public records include report hash, report id, reporter, created time, disclosure mode, public summary, BugBundle CID, target kind, target hash, tags, content hash, BugBundle hash, encrypted details hash, details-key commitment, reveal status, admin status, and payout state.
+  - Report titles and human-readable target references are not separate onchain fields; the frontend reads them from the public core of the pinned `cheapbugs.bug_bundle.v1` payload and falls back to onchain report id/target kind if the public IPFS read fails or is malformed.
   - The stored details-key commitment is SHA-256 over the raw 32-byte key. Brokers reveal the raw `bytes32` key after the 7-day window.
   - Owner-managed admins can flag bugs as `Valid`, `Invalid`, or `Spam`; payout completion requires an admin status.
   - Bonded users can vote up or down before the reveal window closes. Vote weight is snapshotted at vote time from `CheapBugsBondVault.getLevel(voter)`.
@@ -136,7 +139,7 @@ cheapbugs/
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
   - Direct browser-to-index submission is disabled; `src/contracts/bugIndex.ts` keeps read helpers and exposes no direct write helper.
   - The frontend defaults to the verified Base contract suite, so new broker-published bugs can be read into index/recent-report views without requiring `VITE_BUG_INDEX_ADDRESS` in local env.
-  - Recent-report reads use short in-memory caching and in-flight request reuse so route changes do not repeatedly call `latestReportHashes`/`getReport`.
+  - Recent-report reads use short in-memory caching, in-flight request reuse, and fail-open public metadata/ENS lookups so route changes do not repeatedly call `latestReportHashes`/`getReport` or block the shell on optional display data.
   - Launcher scripts refresh frontend ABI files after compilation, deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together, check the deployed wiring, and verify all three contracts on Etherscan/BaseScan by default for real deployments.
   - The Node launcher writes tracked deployment manifests and generated contract artifacts under `deployments/base-8453/`, including compiler/tool versions, optimizer and `via_ir` settings, source/package hashes, constructor arguments, transaction logs for broadcasts, verification command inputs, and generated ABI/bytecode artifacts.
   - Launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set; otherwise they deploy from `BROKER_KEY`, seed that broker as the initial broker when no broker list is provided, and transfer ownership to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
@@ -148,7 +151,7 @@ cheapbugs/
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
   - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
-  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index and rendering newly indexed bugs in `[ recent reports ]`.
+  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, resolving the author ENS name, and routing to the author profile page.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 
 ### Removed Direct Submission Path
@@ -168,11 +171,12 @@ cheapbugs/
 - **Description**: The submit route sends bug submissions as strict JSON XMTP DMs to the default broker wallet `0xea6995fc3674e1e94736766f5eeefb0506e4ef32`.
 - **Properties**:
   - `VITE_BROKER_XMTP_ADDRESS` overrides the default broker wallet only when a different broker is needed.
-  - The frontend form collects bug type, severity, target interest, title, public summary, and private details. Repro steps, evidence, Signal recipient, contact hints, target kind/reference fields, tags, and review access keys are intentionally not user-facing.
+  - The frontend form collects title, target reference, bug type, severity, target interest, public summary, and private details. Repro steps, evidence, Signal recipient, contact hints, target kind, tags, and review access keys are intentionally not user-facing.
   - Bug type is a malleable broker-triage hint with current values `0day`, `nday`, `web`, `web3`, `net`, and `intel`.
   - Severity and target interest are malleable broker-triage hints with current slider values `low`, `medium`, `high`, and `critical`.
-  - The submit route validates broker text-field limits before wallet, XMTP, or PublishBug signing work starts: title 3-120 characters, public summary 10-2,000 characters, and private details 10-12,000 characters after trimming.
-  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, broker-triage target defaults, client metadata, an encrypted `bug_bundle`, a reporter EIP-712 `publish_authorization`, and an out-of-bundle `details_key`.
+  - The submit route validates broker text-field limits before wallet, XMTP, or PublishBug signing work starts: title 3-120 characters, target reference 2-160 characters, public summary 10-2,000 characters, and private details 10-12,000 characters after trimming.
+  - The private details field warns submitters that it must include full step-by-step instructions and/or PoC demonstrating impact or the broker may mark the report invalid.
+  - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, the form target reference with target kind `other`, client metadata, an encrypted `bug_bundle`, a reporter EIP-712 `publish_authorization`, and an out-of-bundle `details_key`.
   - The frontend generates the random details key, encrypts details into the BugBundle with AES-256-GCM, hashes the canonical BugBundle core, and signs the `PublishBug` EIP-712 message that the index verifies. The signed `revealAfter` is 7 days plus a 1-hour publish buffer after bundle creation.
   - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
   - The submit route shows a processing-submission modal while broker XMTP submission work is in progress, keeps it open across broker status replies, treats IPFS pinning as progress, and only marks the submission complete after the broker confirms live onchain publication or an explicit broker dry run.
@@ -193,7 +197,7 @@ cheapbugs/
 - **Test Criteria**:
   - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, credential failure, live reveal-window preflight, bug-index publish call shaping, decoded publish failures, and dry-run handling.
   - [x] Python unit tests cover `hello.` liveness replies for unrecognized XMTP text and JSON flow types.
-  - [x] Playwright covers the default broker wallet, inline XMTP status, broker field-size validation before wallet checks, disconnected submit feedback, field ordering, PublishBug-signature wait modal, and structured XMTP submit UI including IPFS-progress and onchain-completion modal states.
+  - [x] Playwright covers the default broker wallet, inline XMTP status, broker field-size validation before wallet checks, disconnected submit feedback, title/target field ordering, private-details warning copy, PublishBug-signature wait modal, and structured XMTP submit UI including IPFS-progress and onchain-completion modal states.
   - [x] Browser and broker code create and verify the EIP-712 `PublishBug` envelope required by the bug index.
   - [ ] End-to-end live XMTP inbox testing is still manual because it requires registered XMTP wallets.
 
@@ -203,7 +207,7 @@ cheapbugs/
 - **Description**: A submitted bug becomes one versioned `BugBundle` JSON object pinned to IPFS, with public metadata, broker-triage guidance, and encrypted details. The reporter's EIP-712 publish authorization travels in the XMTP command and is verified before pinning.
 - **Properties**:
   - The bundle schema is `cheapbugs.bug_bundle.v1`.
-  - The bundle includes public fields such as reporter, broker, chain id, reveal timing, title, public summary, `bug_type`, `severity`, and `target_interest`.
+  - The bundle includes public fields such as reporter, broker, chain id, reveal timing, title, public summary, target reference, `bug_type`, `severity`, and `target_interest`.
   - The bundle includes the encrypted `details` ciphertext and encryption metadata, but never the details key.
   - Current implementation has the submitter generate the random details key, encrypt the details, sign the `PublishBug` authorization over the bundle hash and commitments, and send the bundle plus out-of-bundle details key to the broker over XMTP.
   - The broker verifies the EIP-712 authorization, verifies the supplied key commitment, decrypts the details for objective well-formedness checks, live-preflights the reveal window before pinning, pins the encrypted bundle payload to IPFS without adding broker status fields, then publishes the signed report commitment to the bug index unless `BROKER_DRY_RUN=1`.
@@ -212,6 +216,7 @@ cheapbugs/
   - `BROKER_IPFS_GATEWAY_URL` defaults to the frontend's current `https://ipfs.io/ipfs` gateway. `BROKER_IPFS_PRIME_GATEWAY=1` performs a best-effort gateway fetch after pinning, but gateway caching is not durable and can fail when the local node is not publicly reachable through the IPFS swarm.
   - The broker stores the out-of-bundle details key and bundle metadata in SQLite for later reveal work.
   - The bug index stores the bundle CID, bundle/content commitments, encrypted details hash, reveal time, and details-key commitment.
+  - The frontend treats gateway-fetched BugBundle public metadata as untrusted display data: it validates shape and string fields, sanitizes rendered text, and falls back to onchain fields on timeout or malformed content.
   - After the 7-day judgment period, a broker adds the raw 32-byte details key to the bug index. The index verifies `sha256(rawKey) == detailsKeyCommitment`; browsers can then fetch the bundle from IPFS, read the key from the index, decrypt details locally, and render the bug as ordinary readable content.
 - **Test Criteria**:
   - [x] Broker tests cover EIP-712-authorized encrypted BugBundle verification and pinning without plaintext details in the pinned JSON.

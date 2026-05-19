@@ -34,8 +34,9 @@ export type SubmissionRating = (typeof SUBMISSION_RATING_VALUES)[number];
 
 export const SUBMISSION_TEXT_LIMITS = {
   title: { label: "Title", min: 3, max: 120 },
+  targetRef: { label: "Target", min: 2, max: 160 },
   publicSummary: { label: "Public summary", min: 10, max: 2_000 },
-  details: { label: "Details", min: 10, max: 12_000 }
+  details: { label: "Private details", min: 10, max: 12_000 }
 } as const;
 
 export type SubmissionTextField = keyof typeof SUBMISSION_TEXT_LIMITS;
@@ -81,6 +82,13 @@ export type SubmissionPublic = {
   contentHash: HexString;
 };
 
+export type SubmissionPublicMetadata = {
+  title: string | null;
+  targetKind: TargetKind | null;
+  targetReference: string | null;
+  errorMessage: string | null;
+};
+
 export type SubmissionPrivate = {
   bugType: BugType;
   title: string;
@@ -95,4 +103,5 @@ export type SubmissionPrivate = {
 
 export type SubmissionBundle = {
   publicSubmission: SubmissionPublic;
+  publicMetadata: SubmissionPublicMetadata;
 };

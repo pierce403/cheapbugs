@@ -1,7 +1,10 @@
 import { loadRecentBundles } from "../lib/reports";
 import { loadPatronLeaderboard } from "../lib/token";
 import { chainConfig } from "../config/chains";
+import { authorDisplayFromMap, loadAuthorDisplayMap } from "../lib/authors";
 import { getFeaturedReportHashes } from "../lib/eas";
+import { toGatewayUrl } from "../lib/ipfs";
+import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate, formatTokenAmount, shortHash, textOrDash } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
@@ -12,15 +15,17 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
   const featuredHashes = new Set(getFeaturedReportHashes());
   const featured = bundles.filter((bundle) => featuredHashes.has(bundle.publicSubmission.reportHash));
   const featuredBundles = featured.length ? featured : bundles.slice(0, 4);
+  const authorDisplays = await loadAuthorDisplayMap(bundles.map((bundle) => bundle.publicSubmission.reporterAddress));
 
   const featuredRows = featuredBundles.length
     ? featuredBundles
         .map((bundle) => {
           const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
+          const title = reportDisplayTitle(bundle);
           return `
             <tr>
-              <td><a href="${href}" data-nav>${escapeHtml(bundle.publicSubmission.reportId)}</a></td>
-              <td>${escapeHtml(bundle.publicSubmission.targetKind)}</td>
+              <td><a href="${href}" data-nav>${escapeHtml(title)}</a></td>
+              <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
               <td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td>
               <td>${escapeHtml(textOrDash(bundle.publicSubmission.tags.join(", ")))}</td>
               <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
@@ -34,19 +39,25 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
     ? bundles
         .map((bundle) => {
           const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
+          const author = authorDisplayFromMap(authorDisplays, bundle.publicSubmission.reporterAddress);
+          const profileHref = context.router.href(`/profile/${author.address}`);
+          const title = reportDisplayTitle(bundle);
+          const target = reportDisplayTarget(bundle);
           return `
             <tr>
-              <td><a href="${href}" data-nav>${escapeHtml(bundle.publicSubmission.reportId)}</a></td>
-              <td>${escapeHtml(shortHash(bundle.publicSubmission.reporterAddress))}</td>
+              <td>
+                <a href="${href}" data-nav>${escapeHtml(title)}</a>
+                <div class="table-subline">${escapeHtml(target)}</div>
+              </td>
               <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
-              <td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td>
-              <td>${escapeHtml(bundle.publicSubmission.targetKind)}</td>
               <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
+              <td><a href="${escapeHtml(toGatewayUrl(bundle.publicSubmission.encryptedPayloadCid))}" target="_blank" rel="noreferrer">bundle</a></td>
+              <td><a href="${profileHref}" data-nav>${escapeHtml(author.label)}</a></td>
             </tr>
           `;
         })
         .join("")
-    : `<tr><td colspan="6" class="muted-cell">No onchain bug reports resolved yet.</td></tr>`;
+    : `<tr><td colspan="5" class="muted-cell">No onchain bug reports resolved yet.</td></tr>`;
 
   const patronRows = patronPreview.entries.length
     ? patronPreview.entries
@@ -93,7 +104,7 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
         <table class="data-table">
           <thead>
             <tr>
-              <th>report</th>
+              <th>title</th>
               <th>target</th>
               <th>mode</th>
               <th>tags</th>
@@ -109,12 +120,11 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
         <table class="data-table">
           <thead>
             <tr>
-              <th>id</th>
-              <th>reporter</th>
-              <th>created</th>
-              <th>mode</th>
-              <th>target</th>
-              <th>public summary</th>
+              <th>title</th>
+              <th>date</th>
+              <th>description</th>
+              <th>download</th>
+              <th>author</th>
             </tr>
           </thead>
           <tbody>${recentRows}</tbody>

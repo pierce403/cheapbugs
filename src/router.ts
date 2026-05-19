@@ -47,6 +47,17 @@ const matchRoute = (path: string): RouteMatch => {
     };
   }
 
+  const profileMatch = normalized.match(/^\/profile\/([^/]+)$/);
+  if (profileMatch) {
+    return {
+      name: "profile",
+      path: normalized,
+      params: {
+        address: decodeURIComponent(profileMatch[1] ?? "")
+      }
+    };
+  }
+
   return { name: "home", path: "/", params: {} };
 };
 
