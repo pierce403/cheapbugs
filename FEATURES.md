@@ -213,6 +213,7 @@ cheapbugs/
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
   - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.
   - The broker verifies the BugBundle and publish authorization before pinning: schema, fields, reporter/broker/chain/index binding, EIP-712 signature recovery, key commitment, encrypted details hash, AAD, and successful details decryption.
+  - Accepted submission records use the verified PublishBug reporter. If the verified EIP-712 reporter differs from `reporter_address`, or an available authenticated XMTP sender differs from the verified reporter, the broker rejects the message before credential checks, IPFS pinning, index publication, Signal relay, or payout persistence.
   - In live mode, the broker preflights `revealAfter` before IPFS pinning and rejects bundles that can no longer satisfy the index's 7-day-from-publication minimum.
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid or missing publish authorizations, invalid provided target references, and invalid reporter credentials.
   - The broker sends plain text XMTP status messages after each successful validation stage: JSON valid, fields well formed, publish authorization/details valid, target valid, credentials valid, IPFS pinned, and bug-index published or dry-run complete.
@@ -223,7 +224,7 @@ cheapbugs/
   - After sending the submission DM, the browser waits for broker plain text replies in the same XMTP conversation. `Submission complete: Bug published onchain...`, `Submission complete: Bug already exists onchain...`, or `Submission complete: Bug index dry-run complete...` is treated as terminal success; target, credential, JSON, IPFS, or bug-index publish failure replies are terminal errors.
   - Submission credential checks use `BROKER_SUBMISSION_MIN_BUGZ` and `BROKER_REPUTATION_BLOCKLIST`.
 - **Test Criteria**:
-  - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, credential failure, live reveal-window preflight, bug-index publish call shaping, decoded publish failures, and dry-run handling.
+  - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, credential failure, authenticated XMTP sender/reporter mismatch rejection, live reveal-window preflight, bug-index publish call shaping, decoded publish failures, and dry-run handling.
   - [x] Python unit tests cover `hello.` liveness replies for unrecognized XMTP text and JSON flow types.
   - [x] Playwright covers the default broker wallet, inline XMTP status, broker field-size validation before wallet checks, disconnected submit feedback, title/target field ordering, private-details warning copy, PublishBug-signature wait modal, and structured XMTP submit UI including IPFS-progress and onchain-completion modal states.
   - [x] Browser and broker code create and verify the EIP-712 `PublishBug` envelope required by the bug index.
@@ -309,10 +310,10 @@ cheapbugs/
   - `BROKER_DRY_RUN` defaults to `1` in `run-broker.sh`; while enabled, accepted submissions verify and pin but skip the `publishBug` transaction and Signal relay. Set it to `0` only when the broker wallet is intentionally funded for live index publishing and payouts.
   - Broker verification may normalize EVM addresses to lowercase internally, but `bots/cheapbugs_broker/bug_index.py` converts ABI `address` arguments to checksum form before calling web3.py contract functions.
   - SQLite tracks processed XMTP message IDs, relayed submissions, BugBundle CIDs and details keys, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
-  - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ`.
+  - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ` for the authenticated XMTP sender wallet. Optional `wallet` fields must match that sender, and spoofed wallet claims are rejected before BUGZ balance checks or Signal invites.
   - Live payouts spend from the broker wallet and should run only from an intentionally funded wallet.
 - **Test Criteria**:
-  - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, SQLite maturity, reaction parsing, and reward math.
+  - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, access wallet/sender binding, SQLite maturity, reaction parsing, and reward math.
   - [x] Broker tests cover XMTP installation pruning, inactive local installation detection, and maxed-installation recovery.
   - [x] `python3 -m compileall bots scripts/broker-bot.py` checks Python syntax.
   - [x] `bash -n run-broker.sh` checks the root launcher syntax.

@@ -530,6 +530,28 @@ def plain_text_status_sender(ctx):
     return send_status
 
 
+async def handle_text_event(ctx: Any, bot: BrokerBot, logger: logging.Logger | None = None) -> None:
+    """Extract authenticated XMTP sender context and hand plain text to the broker service."""
+
+    resolved_logger = logger or logging.getLogger(__name__)
+    sender_address = await ctx.get_sender_address()
+    conversation_id = ctx.message.conversation_id.hex()
+    message_id = ctx.message.id.hex()
+    resolved_logger.info(
+        "xmtp text event conversation_id=%s message_id=%s sender=%s",
+        conversation_id,
+        message_id,
+        sender_address or "unknown",
+    )
+    await bot.handle_xmtp_text(
+        text=str(ctx.message.content),
+        sender_address=sender_address,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        reply=plain_text_status_sender(ctx),
+    )
+
+
 async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
     logger = logging.getLogger(__name__)
     try:
@@ -577,20 +599,7 @@ async def run_xmtp_broker(config: BrokerConfig, bot: BrokerBot) -> None:
 
     @agent.on("text")
     async def on_text(ctx) -> None:
-        sender_address = await ctx.get_sender_address()
-        logger.info(
-            "xmtp text event conversation_id=%s message_id=%s sender=%s",
-            ctx.message.conversation_id.hex(),
-            ctx.message.id.hex(),
-            sender_address or "unknown",
-        )
-        await bot.handle_xmtp_text(
-            text=str(ctx.message.content),
-            sender_address=sender_address,
-            conversation_id=ctx.message.conversation_id.hex(),
-            message_id=ctx.message.id.hex(),
-            reply=plain_text_status_sender(ctx),
-        )
+        await handle_text_event(ctx, bot, logger)
 
     logger.info("starting xmtp broker agent env=%s", config.xmtp_env)
     await agent.start()

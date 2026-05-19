@@ -10,6 +10,7 @@ from cheapbugs_broker.xmtp_runner import (
     _installation_ids_for_revocation,
     _snapshot_includes_current_installation,
     _sign_signature_request,
+    handle_text_event,
     patch_xmtp_agent_stream_stop,
     patch_xmtp_backend_connector,
     patch_xmtp_client_factory,
@@ -29,6 +30,19 @@ class PlainTextStatusSenderTest(unittest.TestCase):
         self.assertEqual(ctx.sent_text, ["Submission JSON is valid."])
         self.assertFalse(ctx.used_reply_content_type)
 
+    def test_text_event_passes_authenticated_sender_to_broker(self) -> None:
+        ctx = FakeTextEventContext()
+        bot = FakeBrokerBot()
+
+        asyncio.run(handle_text_event(ctx, bot, quiet_logger()))
+
+        self.assertEqual(bot.last_text, "hello broker")
+        self.assertEqual(bot.last_sender_address, "0x1111111111111111111111111111111111111111")
+        self.assertEqual(bot.last_conversation_id, "0102")
+        self.assertEqual(bot.last_message_id, "0304")
+        asyncio.run(bot.last_reply("ok"))
+        self.assertEqual(ctx.sent_text, ["ok"])
+
 
 class FakeContext:
     def __init__(self) -> None:
@@ -41,6 +55,32 @@ class FakeContext:
     async def send_text_reply(self, text: str) -> None:
         self.used_reply_content_type = True
         raise AssertionError(f"unexpected reply-content send: {text}")
+
+
+class FakeTextEventContext(FakeContext):
+    def __init__(self) -> None:
+        super().__init__()
+        self.message = type(
+            "FakeMessage",
+            (),
+            {
+                "conversation_id": bytes.fromhex("0102"),
+                "id": bytes.fromhex("0304"),
+                "content": "hello broker",
+            },
+        )()
+
+    async def get_sender_address(self) -> str:
+        return "0x1111111111111111111111111111111111111111"
+
+
+class FakeBrokerBot:
+    async def handle_xmtp_text(self, text, sender_address, conversation_id, message_id, reply) -> None:
+        self.last_text = text
+        self.last_sender_address = sender_address
+        self.last_conversation_id = conversation_id
+        self.last_message_id = message_id
+        self.last_reply = reply
 
 
 class BackendConnectorCompatTest(unittest.TestCase):

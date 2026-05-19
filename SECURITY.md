@@ -28,9 +28,11 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The browser generates the details key, encrypts details with AES-256-GCM, signs the `PublishBug` EIP-712 authorization over the bundle hash and commitments, and sends the bundle plus details key to the broker over XMTP.
 - The signed reveal time is 7 days plus a 1-hour publish buffer after browser creation. This buffer exists because the index enforces the 7-day window against the actual publication block, not the time the user signed the bundle.
 - The broker verifies the BugBundle and publish authorization before target validation, credential validation, or IPFS pinning. Invalid signatures, wrong reporter/broker/chain/index bindings, key-commitment mismatches, ciphertext-hash mismatches, AAD mismatches, and decryption failures stop the submission flow.
+- The broker stores and pays only a verified submission reporter: the verified EIP-712 PublishBug reporter must match `reporter_address`, and when XMTP sender context is available it must also match the authenticated XMTP sender before credential checks, IPFS pinning, index publication, Signal relay, or payout persistence.
 - In live mode, the broker preflights the signed reveal time before IPFS pinning so a too-short, signature-bound `revealAfter` is rejected before creating another durable CID.
 - The browser sends broker submissions as XMTP DMs to the configured broker wallet.
 - The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, blocked reporters, and insufficient BUGZ balance.
+- Signal bouncer access checks use the authenticated XMTP sender as the wallet identity. Optional `wallet` fields are accepted only when they match the sender; mismatches are rejected before BUGZ balance checks or Signal group invites.
 - The broker sends staged plain text XMTP status messages after successful validation stages.
 - The broker pins the verified encrypted BugBundle through local Kubo without adding broker status fields to the payload.
 - The pinned bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
@@ -73,6 +75,7 @@ Current and required properties:
 - XMTP provides private message transport and sender context for the broker workflow.
 - XMTP sender identity is useful evidence for broker-side checks, but it is not sufficient for smart-contract-level attribution.
 - The broker must treat all XMTP message content as untrusted until parsed and verified.
+- Bouncer access requests must not authorize from message-supplied wallet fields. The authenticated XMTP sender address is the eligibility wallet unless a future flow adds an explicit signature proof.
 
 ### Broker
 

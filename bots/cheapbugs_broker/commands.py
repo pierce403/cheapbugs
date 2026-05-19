@@ -187,6 +187,18 @@ def _strict_details_key(data: dict[str, Any]) -> str:
     return value
 
 
+def _access_wallet_from_sender(claimed_wallet: str, fallback_sender_address: str | None) -> str:
+    if not fallback_sender_address:
+        raise CommandError("Access requests require an authenticated XMTP sender address.")
+
+    sender_wallet = normalize_address(fallback_sender_address)
+    if claimed_wallet:
+        claimed = normalize_address(claimed_wallet)
+        if claimed != sender_wallet:
+            raise CommandError("Access request wallet must match the authenticated XMTP sender address.")
+    return sender_wallet
+
+
 def _parse_json_command(text: str, fallback_sender_address: str | None) -> IncomingCommand | None:
     stripped = text.strip()
     if not stripped.startswith("{"):
@@ -201,11 +213,12 @@ def _parse_json_command(text: str, fallback_sender_address: str | None) -> Incom
 
     command_type = _coerce_type(_string_field(data, "type", "command"))
     if command_type == "access":
-        wallet = _string_field(data, "wallet", "wallet_address", required=False) or fallback_sender_address
-        if not wallet:
-            raise CommandError("Missing wallet address.")
+        wallet = _access_wallet_from_sender(
+            _string_field(data, "wallet", "wallet_address", required=False),
+            fallback_sender_address,
+        )
         return AccessCommand(
-            wallet_address=normalize_address(wallet),
+            wallet_address=wallet,
             signal_recipient=_string_field(data, "signal", "signal_recipient", "phone", "username"),
         )
 
@@ -308,13 +321,14 @@ def parse_command(text: str, fallback_sender_address: str | None = None) -> Inco
     if command_type == "submission":
         raise CommandError("Bug submissions must use the strict CheapBugs JSON schema.")
 
-    wallet = fields.get("wallet") or fields.get("wallet_address") or fallback_sender_address
-    if not wallet:
-        raise CommandError("Missing wallet address.")
+    wallet = _access_wallet_from_sender(
+        fields.get("wallet") or fields.get("wallet_address") or "",
+        fallback_sender_address,
+    )
     signal = fields.get("signal") or fields.get("signal_recipient") or fields.get("phone") or fields.get("username")
     if not signal:
         raise CommandError("Missing Signal recipient.")
-    return AccessCommand(wallet_address=normalize_address(wallet), signal_recipient=signal)
+    return AccessCommand(wallet_address=wallet, signal_recipient=signal)
 
 
 def validate_submission_target(command: SubmissionCommand) -> None:
@@ -372,5 +386,6 @@ def command_help() -> str:
         '  "details_key": "base64url 32-byte key"\n'
         "}\n\n"
         "The broker verifies the encrypted BugBundle and reporter EIP-712 publish authorization before pinning it. "
-        "Signal access requests may still use !access with wallet and signal fields."
+        "Signal access requests may still use !access with a signal field; any wallet field must match the "
+        "authenticated XMTP sender."
     )

@@ -30,7 +30,7 @@ from cheapbugs_broker.bug_index import (
 from cheapbugs_broker.commands import CommandError, parse_command, validate_submission_target
 from cheapbugs_broker.config import BrokerConfig
 from cheapbugs_broker.ipfs import IpfsAddResult
-from cheapbugs_broker.models import SignalReactionEvent, SubmissionCommand
+from cheapbugs_broker.models import AccessCommand, SignalReactionEvent, SubmissionCommand
 from cheapbugs_broker.rewards import reward_tokens, tokens_to_wei
 from cheapbugs_broker.service import BrokerBot
 from cheapbugs_broker.signal_cli import extract_reaction_events, parse_signal_timestamp
@@ -187,8 +187,40 @@ Private details go here.""",
     def test_parse_json_access_uses_sender_wallet(self) -> None:
         command = parse_command('{"type":"access","signal":"u:alice.01"}', fallback_sender_address=WALLET)
 
+        self.assertIsInstance(command, AccessCommand)
         self.assertEqual(command.wallet_address, WALLET)
         self.assertEqual(command.signal_recipient, "u:alice.01")
+
+    def test_parse_access_rejects_spoofed_json_wallet(self) -> None:
+        with self.assertRaisesRegex(CommandError, "authenticated XMTP sender"):
+            parse_command(
+                f'{{"type":"access","wallet":"{BROKER}","signal":"u:alice.01"}}',
+                fallback_sender_address=WALLET,
+            )
+
+    def test_parse_access_rejects_spoofed_keyed_wallet(self) -> None:
+        with self.assertRaisesRegex(CommandError, "authenticated XMTP sender"):
+            parse_command(
+                f"""!access
+wallet: {BROKER}
+signal: u:alice.01
+""",
+                fallback_sender_address=WALLET,
+            )
+
+    def test_parse_access_requires_authenticated_sender(self) -> None:
+        with self.assertRaisesRegex(CommandError, "authenticated XMTP sender"):
+            parse_command(f'{{"type":"access","wallet":"{WALLET}","signal":"u:alice.01"}}')
+
+    def test_parse_access_accepts_matching_claimed_wallet(self) -> None:
+        mixed_case_wallet = WALLET[:2] + WALLET[2:].upper()
+        command = parse_command(
+            f'{{"type":"access","wallet":"{mixed_case_wallet}","signal":"u:alice.01"}}',
+            fallback_sender_address=WALLET,
+        )
+
+        self.assertIsInstance(command, AccessCommand)
+        self.assertEqual(command.wallet_address, WALLET)
 
 
 class RewardTest(unittest.TestCase):
@@ -465,6 +497,40 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertEqual(replies, ["hello."])
             self.assertTrue(store.message_seen("json-hello-message"))
 
+    def test_access_rejects_spoofed_wallet_before_balance_or_invite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            token = FakeToken(balance=2 * 10**18)
+            signal = FakeSignal()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=signal,
+                token=token,
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            asyncio.run(
+                bot.handle_xmtp_text(
+                    f'{{"type":"access","wallet":"{BROKER}","signal":"+15551234567"}}',
+                    sender_address=WALLET,
+                    conversation_id="conversation",
+                    message_id="spoofed-access",
+                    reply=reply,
+                )
+            )
+
+            self.assertIn("Access request wallet must match", replies[0])
+            self.assertFalse(hasattr(token, "last_balance_address"))
+            self.assertFalse(hasattr(signal, "last_member"))
+            self.assertTrue(store.message_seen("spoofed-access"))
+
     def test_submission_logs_broker_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")
@@ -500,6 +566,90 @@ class BrokerServiceTest(unittest.TestCase):
         self.assertIn("submission command parsed", output)
         self.assertIn("submission recorded", output)
         self.assertIn("bug_bundle", output)
+
+    def test_submission_rejects_reporter_that_differs_from_xmtp_sender(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            token = FakeToken(balance=2 * 10**18)
+            ipfs = FakeIpfs()
+            bug_index = FakeBugIndex()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=token,
+                ipfs=ipfs,
+                bug_index=bug_index,
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch("cheapbugs_broker.service.verify_authorized_bug_bundle", return_value=fake_verified_bundle()):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=BROKER,
+                        conversation_id="conversation",
+                        message_id="spoofed-submission",
+                        reply=reply,
+                    )
+                )
+
+            self.assertIn("BugBundle is invalid", replies[-1])
+            self.assertIn("authenticated XMTP sender", replies[-1])
+            self.assertFalse(hasattr(token, "last_balance_address"))
+            self.assertIsNone(ipfs.last_payload)
+            self.assertIsNone(bug_index.last_command)
+            self.assertTrue(store.message_seen("spoofed-submission"))
+
+    def test_submission_rejects_verified_reporter_mismatch_before_payout_identity_persists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            replies: list[str] = []
+            token = FakeToken(balance=2 * 10**18)
+            ipfs = FakeIpfs()
+            bug_index = FakeBugIndex()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=token,
+                ipfs=ipfs,
+                bug_index=bug_index,
+            )
+            mismatched_bundle = fake_bug_bundle(reporter=BROKER)
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch(
+                "cheapbugs_broker.service.verify_authorized_bug_bundle",
+                return_value=fake_verified_bundle(mismatched_bundle),
+            ):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(valid_submission_payload()),
+                        sender_address=None,
+                        conversation_id="conversation",
+                        message_id="verified-reporter-mismatch",
+                        reply=reply,
+                    )
+                )
+
+            self.assertIn("verified PublishBug reporter", replies[-1])
+            self.assertFalse(hasattr(token, "last_balance_address"))
+            self.assertIsNone(ipfs.last_payload)
+            self.assertIsNone(bug_index.last_command)
+            with store.session() as conn:
+                row = conn.execute(
+                    "SELECT * FROM submissions WHERE xmtp_message_id = ?",
+                    ("verified-reporter-mismatch",),
+                ).fetchone()
+            self.assertIsNone(row)
 
     def test_submission_replies_with_validation_stages_before_relay(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

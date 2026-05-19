@@ -18,6 +18,7 @@ from .commands import (
     SUBMISSION_SCHEMA,
     UnknownCommandError,
     command_help,
+    normalize_address,
     parse_command,
     validate_submission_target,
 )
@@ -118,7 +119,7 @@ class BrokerBot:
             command.target_ref,
             "present" if command.bug_bundle else "missing",
         )
-        await self._handle_submission(command, conversation_id, message_id, reply)
+        await self._handle_submission(command, conversation_id, message_id, reply, sender_address)
 
     async def _handle_access(self, command: AccessCommand, message_id: str, reply: ReplyFn) -> None:
         if self.signal is None:
@@ -173,6 +174,7 @@ class BrokerBot:
         conversation_id: str,
         message_id: str,
         reply: ReplyFn,
+        sender_address: str | None,
     ) -> None:
         await self._reply(
             reply,
@@ -215,8 +217,26 @@ class BrokerBot:
             await self._reply(reply, message_id, "bugbundle_invalid", f"BugBundle is invalid: {exc}")
             self.store.mark_message_processed(message_id, "bugbundle_invalid")
             return
+        try:
+            verified_reporter = _verified_reporter_address(verified_bundle)
+            if verified_reporter != command.reporter_address:
+                raise CommandError("verified PublishBug reporter does not match reporter_address.")
+            if sender_address and verified_reporter != normalize_address(sender_address):
+                raise CommandError("reporter_address must match the authenticated XMTP sender address.")
+        except CommandError as exc:
+            self.logger.info(
+                "submission identity invalid message_id=%s reporter=%s sender=%s reason=%s",
+                message_id,
+                command.reporter_address,
+                sender_address or "unknown",
+                exc,
+            )
+            await self._reply(reply, message_id, "bugbundle_invalid", f"BugBundle is invalid: {exc}")
+            self.store.mark_message_processed(message_id, "bugbundle_invalid")
+            return
         command = replace(
             command,
+            reporter_address=verified_reporter,
             details=verified_bundle.details,
             repro_steps=verified_bundle.repro_steps,
             evidence=verified_bundle.evidence,
@@ -633,6 +653,14 @@ def _publish_authorization_uint(verified: VerifiedBugBundle, name: str) -> int:
     if parsed < 0:
         raise CommandError(f"Publish authorization {name} must be an unsigned integer.")
     return parsed
+
+
+def _verified_reporter_address(verified: VerifiedBugBundle) -> str:
+    try:
+        reporter = verified.publish_authorization["message"]["reporter"]
+    except Exception as exc:
+        raise CommandError("verified PublishBug authorization is missing reporter.") from exc
+    return normalize_address(str(reporter))
 
 
 def _format_timestamp(timestamp: int) -> str:
