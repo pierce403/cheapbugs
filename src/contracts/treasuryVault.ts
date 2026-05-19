@@ -1,4 +1,4 @@
-import { Contract } from "ethers";
+import { Contract, type ContractRunner } from "ethers";
 
 import { chainConfig } from "../config/chains";
 import { authController } from "../services";
@@ -21,7 +21,11 @@ const treasuryVaultAbi = [
   "function standardPayoutDivisor() view returns (uint256)",
   "function calculateRewardAmount(uint8 multiplier) view returns (uint256)",
   "function detailKeyPayments(bytes32 reportHash,address buyer) view returns (uint256)",
-  "function purchaseDetailKey(bytes32 reportHash,uint256 amount)"
+  "function purchaseDetailKey(bytes32 reportHash,uint256 amount)",
+  "error InvalidAmount()",
+  "error SafeERC20FailedOperation(address token)",
+  "error ERC20InsufficientAllowance(address spender,uint256 allowance,uint256 needed)",
+  "error ERC20InsufficientBalance(address sender,uint256 balance,uint256 needed)"
 ];
 
 const TTL_MS = 30_000;
@@ -44,28 +48,52 @@ const tokenAddress = (): HexString => {
 
 const readVault = () => new Contract(treasuryVaultAddress(), treasuryVaultAbi, readProvider);
 
-const readToken = () => new Contract(tokenAddress(), bugzTokenAbi, readProvider);
-
-const writeVault = async () => new Contract(treasuryVaultAddress(), treasuryVaultAbi, await authController.getSigner());
-
-const writeToken = async () => new Contract(tokenAddress(), bugzTokenAbi, await authController.getSigner());
+const readToken = (runner: ContractRunner | null = readProvider) => new Contract(tokenAddress(), bugzTokenAbi, runner);
 
 const txHash = (value: string | null | undefined): HexString => (value ?? "0x").toLowerCase() as HexString;
 
 const shortenError = (message: string): string => (message.length > 240 ? `${message.slice(0, 237)}...` : message);
 
+const errorText = (error: unknown): string => {
+  const parts: string[] = [];
+  const visit = (value: unknown): void => {
+    if (!value) {
+      return;
+    }
+    if (typeof value === "string") {
+      parts.push(value);
+      return;
+    }
+    if (value instanceof Error) {
+      parts.push(value.message);
+    }
+    if (typeof value !== "object") {
+      parts.push(String(value));
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    for (const key of ["shortMessage", "reason", "data", "error", "info", "revert", "cause"]) {
+      if (record[key] !== value) {
+        visit(record[key]);
+      }
+    }
+  };
+  visit(error);
+  return parts.filter(Boolean).join(" ");
+};
+
 const detailPaymentError = (label: string, error: unknown): Error => {
-  const raw = error instanceof Error ? error.message : String(error);
+  const raw = errorText(error);
   if (/user rejected|denied transaction|rejected the request/i.test(raw)) {
     return new Error(`${label} was rejected in the wallet.`);
   }
   if (/insufficient funds|insufficient.*gas/i.test(raw)) {
     return new Error(`${label} needs more Base ETH for gas.`);
   }
-  if (/allowance|transfer amount exceeds allowance|ERC20InsufficientAllowance/i.test(raw)) {
+  if (/allowance|transfer amount exceeds allowance|ERC20InsufficientAllowance|0xfb8f41b2/i.test(raw)) {
     return new Error(`${label} needs a larger BUGZ approval for the treasury vault.`);
   }
-  if (/balance|ERC20InsufficientBalance/i.test(raw)) {
+  if (/balance|ERC20InsufficientBalance|0xe450d38c/i.test(raw)) {
     return new Error(`${label} needs more BUGZ.`);
   }
   return new Error(`${label} failed: ${shortenError(raw)}`);
@@ -78,6 +106,21 @@ const connectedAccount = (): HexString => {
   }
   return account;
 };
+
+const connectedSigner = async (): Promise<{ signer: Awaited<ReturnType<typeof authController.getSigner>>; account: HexString }> => {
+  const account = connectedAccount();
+  const signer = await authController.getSigner();
+  const signerAddress = normalizeAddress(await signer.getAddress());
+  if (signerAddress !== account) {
+    throw new Error("Connected wallet and transaction signer do not match. Reconnect the wallet and try again.");
+  }
+  return { signer, account };
+};
+
+const readTreasuryAllowance = async (account: HexString, runner: ContractRunner | null = readProvider): Promise<bigint> =>
+  scheduleBaseRpcRead("treasury BUGZ allowance", () =>
+    readToken(runner).allowance(account, treasuryVaultAddress()) as Promise<bigint>
+  );
 
 const sendTx = async (
   label: string,
@@ -140,11 +183,9 @@ export const getDetailKeyPayment = async (reportHash: HexString, buyer: HexStrin
 export const approveTreasuryForDetailKeyPayment = async (
   amount: bigint
 ): Promise<{ txHash: HexString | null; skipped?: boolean }> => {
-  const account = connectedAccount();
+  const { signer, account } = await connectedSigner();
   const treasuryAddress = treasuryVaultAddress();
-  const currentAllowance = await scheduleBaseRpcRead("treasury BUGZ allowance", () =>
-    readToken().allowance(account, treasuryAddress) as Promise<bigint>
-  );
+  const currentAllowance = await readTreasuryAllowance(account, signer);
   if (currentAllowance >= amount) {
     return {
       txHash: null,
@@ -152,7 +193,7 @@ export const approveTreasuryForDetailKeyPayment = async (
     };
   }
 
-  const token = await writeToken();
+  const token = new Contract(tokenAddress(), bugzTokenAbi, signer);
   return sendTx("Treasury detail-key approval", token.approve(treasuryAddress, amount));
 };
 
@@ -160,7 +201,7 @@ export const purchaseDetailKey = async (
   reportHash: HexString,
   amount: bigint
 ): Promise<{ txHash: HexString }> => {
-  connectedAccount();
+  const { signer, account } = await connectedSigner();
   if (!/^0x[a-fA-F0-9]{64}$/.test(reportHash)) {
     throw new Error("Detail-key payment needs a valid report hash.");
   }
@@ -168,6 +209,11 @@ export const purchaseDetailKey = async (
     throw new Error("Detail-key payment amount must be greater than zero.");
   }
 
-  const vault = await writeVault();
+  const currentAllowance = await readTreasuryAllowance(account, signer);
+  if (currentAllowance < amount) {
+    throw new Error("Detail-key payment needs a larger BUGZ approval for the treasury vault.");
+  }
+
+  const vault = new Contract(treasuryVaultAddress(), treasuryVaultAbi, signer);
   return sendTx("Detail-key payment", vault.purchaseDetailKey(reportHash, amount));
 };
