@@ -190,10 +190,11 @@ cheapbugs/
   - Bug payouts must be completed in report order. Only an authorized broker can complete payout, and invalid or spam bugs require a zero multiplier.
   - On payout completion, the index reveals the details key if needed, calls `CheapBugsTreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
-  - Direct browser-to-index submission is disabled; `src/contracts/bugIndex.ts` keeps read helpers and exposes no direct write helper.
+  - Direct browser-to-index submission is disabled; the only browser-to-index write helper is bonded voting through `submitBondVote`.
   - The frontend defaults to the verified Base contract suite, so new broker-published bugs can be read into index/recent-report views without requiring `VITE_BUG_INDEX_ADDRESS` in local env.
   - Recent-report reads use in-memory caching, localStorage-backed public bug-index detail caches, in-flight request reuse, and fail-open public metadata/ENS lookups so route changes and reloads do not repeatedly call `latestReportHashes`/`getReport` or block the shell on optional display data.
   - Public bug-listing tables show date, title, target, author, and details-unlock countdown in that order. The countdown renders days, hours, or minutes until `revealAfter`, then falls back to `unlockable` or `unlocked` after reveal.
+  - Public bug-listing title cells include bonded vote controls in the form up arrow, net vote weight, down arrow. Hover titles expose total up/down weights, the connected user's current direction lights up, and level-0 vote attempts show a stake-required modal with a route to `/stake`.
   - Launcher scripts refresh frontend ABI files after compilation, deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together, check the deployed wiring, and verify all three contracts on Etherscan/BaseScan by default for real deployments.
   - The Node launcher writes tracked deployment manifests and generated contract artifacts under `deployments/base-8453/`, including compiler/tool versions, optimizer and `via_ir` settings, source/package hashes, constructor arguments, transaction logs for broadcasts, verification command inputs, and generated ABI/bytecode artifacts.
   - Launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set; otherwise they deploy from `BROKER_KEY`, seed that broker as the initial broker when no broker list is provided, and transfer ownership to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
@@ -205,7 +206,7 @@ cheapbugs/
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
   - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
-  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the date/title/target/author/details order, caching those reads across route changes and reloads, resolving the author ENS name, and routing to the author profile page.
+  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the date/title/target/author/details order, caching those reads across route changes and reloads, resolving the author ENS name, routing to the author profile page, displaying bonded vote totals/current direction, and routing level-0 voters to staking.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 
 ### Removed Direct Submission Path
@@ -213,7 +214,7 @@ cheapbugs/
 - **Stability**: removed
 - **Description**: The old browser path that encrypted private dossier JSON, uploaded it directly, and attempted a browser-to-index write has been removed from the active API surface.
 - **Properties**:
-  - Direct browser-to-index writes are not exposed from `src/contracts/bugIndex.ts`.
+  - Direct browser-to-index submission writes are not exposed from `src/contracts/bugIndex.ts`; bonded vote writes are the separate active onchain interaction.
   - New submissions must go through the XMTP broker flow with a reporter EIP-712 `PublishBug` authorization.
   - Storage helpers remain for reading existing encrypted content and writing review notes, but not for direct bug-index submission.
 - **Test Criteria**:

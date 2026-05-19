@@ -42,6 +42,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The frontend may fetch the pinned BugBundle public core to display title and target metadata, but that gateway content is untrusted display data and must not override onchain attribution, commitments, payout state, or authorization checks.
 - The frontend owner console reads contract ownership and exposes owner transaction forms only as a convenience layer. `onlyOwner` checks in the contracts remain the authority for all management calls.
 - The frontend staking route helps users approve, bond, request withdrawal, and withdraw BUGZ, but bond accounting, withdrawal delays, and slashing guarantees are enforced only by `CheapBugsBondVault`.
+- The frontend index vote controls are a convenience layer over `CheapBugsBugIndex.submitBondVote`. Browser level checks only avoid predictable failed transactions; the index and bond vault remain the authority for vote eligibility and snapshotted weight.
 - After IPFS pinning, the broker publishes the signed report to `CheapBugsBugIndex.publishBug`, checks the broker role and gas funding before broadcast, waits for a receipt, and records the report hash and transaction hash in SQLite. `BROKER_DRY_RUN=1` skips the broadcast and Signal relay while still exercising validation and IPFS pinning.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
@@ -129,6 +130,7 @@ Current and required properties:
 - Active and pending-withdrawal bonds are both slashable.
 - Only active bond contributes to `getLevel` and bonded bug vote weight.
 - Vote weights are snapshotted in the index at vote time, so later withdrawals or slashes do not alter already-cast vote totals.
+- The browser displays vote totals and connected-user vote direction from chain reads, but those displays are not governance authority and can be stale until the next refresh.
 - The owner controls slashers, so slasher compromise can transfer bonded BUGZ to the treasury.
 - The `/stake` frontend must present pending withdrawals as still slashable and must not imply the countdown protects funds from slashing.
 

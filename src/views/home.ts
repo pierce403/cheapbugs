@@ -1,5 +1,11 @@
 import { loadRecentBundles } from "../lib/reports";
 import { authorDisplayFromMap, loadAuthorDisplayMap } from "../lib/authors";
+import {
+  loadBugVoteStates,
+  NoBondVotingPowerError,
+  submitBugBondVote,
+  type BugVoteState
+} from "../contracts/bugIndex";
 import { getFeaturedReportHashes } from "../lib/eas";
 import { reportDetailsUnlockText, reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate } from "../lib/utils";
@@ -12,15 +18,69 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
   const featured = bundles.filter((bundle) => featuredHashes.has(bundle.publicSubmission.reportHash));
   const featuredBundles = featured.length ? featured : bundles.slice(0, 4);
   const authorDisplays = await loadAuthorDisplayMap(bundles.map((bundle) => bundle.publicSubmission.reporterAddress));
+  const reportHashes = bundles.map((bundle) => bundle.publicSubmission.reportHash);
+  const voteStates = await loadBugVoteStates(reportHashes, context.session.address);
+
+  const renderVoteControl = (voteState: BugVoteState, voteClosed: boolean, label: string): string => {
+    const upSelected = voteState.voterSupport === true ? " is-selected" : "";
+    const downSelected = voteState.voterSupport === false ? " is-selected" : "";
+    const disabled = voteClosed ? " disabled" : "";
+    const closedTitle = voteClosed ? " Voting is closed for this report." : "";
+    const escapedLabel = escapeHtml(label);
+
+    return `
+      <span class="bug-vote-control" data-report-vote-control="${voteState.reportHash}" aria-label="bonded votes for ${escapedLabel}">
+        <button
+          class="bug-vote-button bug-vote-up${upSelected}"
+          type="button"
+          data-report-vote="${voteState.reportHash}"
+          data-vote-support="true"
+          title="total upvote weight: ${voteState.upWeight.toString()}${closedTitle}"
+          aria-label="upvote ${escapedLabel}; total upvote weight ${voteState.upWeight.toString()}"
+          ${disabled}
+        >▲</button>
+        <span class="bug-vote-score" title="net bonded vote weight">${voteState.score.toString()}</span>
+        <button
+          class="bug-vote-button bug-vote-down${downSelected}"
+          type="button"
+          data-report-vote="${voteState.reportHash}"
+          data-vote-support="false"
+          title="total downvote weight: ${voteState.downWeight.toString()}${closedTitle}"
+          aria-label="downvote ${escapedLabel}; total downvote weight ${voteState.downWeight.toString()}"
+          ${disabled}
+        >▼</button>
+      </span>
+    `;
+  };
 
   const renderBugListingRow = (bundle: (typeof bundles)[number]): string => {
     const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
     const author = authorDisplayFromMap(authorDisplays, bundle.publicSubmission.reporterAddress);
     const profileHref = context.router.href(`/profile/${author.address}`);
+    const title = reportDisplayTitle(bundle);
+    const voteState =
+      voteStates.get(bundle.publicSubmission.reportHash) ??
+      ({
+        reportHash: bundle.publicSubmission.reportHash,
+        upWeight: 0n,
+        downWeight: 0n,
+        score: 0n,
+        voterSupport: null,
+        voterWeight: 0
+      } satisfies BugVoteState);
+    const revealAt = bundle.publicSubmission.revealAfter ? Date.parse(bundle.publicSubmission.revealAfter) : null;
+    const voteClosed =
+      bundle.publicSubmission.detailsKeyRevealed || (revealAt !== null && !Number.isNaN(revealAt) && revealAt <= Date.now());
+
     return `
       <tr>
         <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
-        <td><a href="${href}" data-nav>${escapeHtml(reportDisplayTitle(bundle))}</a></td>
+        <td>
+          <div class="bug-title-cell">
+            ${renderVoteControl(voteState, voteClosed, title)}
+            <a href="${href}" data-nav>${escapeHtml(title)}</a>
+          </div>
+        </td>
         <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
         <td><a href="${profileHref}" data-nav>${escapeHtml(author.label)}</a></td>
         <td>${escapeHtml(reportDetailsUnlockText(bundle))}</td>
@@ -85,6 +145,79 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
           <tbody>${recentRows}</tbody>
         </table>
       </section>
-    `
+      <div id="vote-level-modal" class="processing-modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="vote-level-title">
+        <div class="panel processing-modal is-complete vote-level-modal">
+          <div class="signature-modal-copy">
+            <strong id="vote-level-title">stake required</strong>
+            <p>Voting requires staked BUGZ. Stake BUGZ to level up before voting on bug reports.</p>
+            <div class="modal-actions">
+              <button id="vote-level-stake" class="button" type="button">go to stake</button>
+              <button id="vote-level-close" class="button secondary" type="button">close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+    afterRender: (root, viewContext) => {
+      const levelModal = root.querySelector<HTMLDivElement>("#vote-level-modal");
+      const closeLevelModal = () => {
+        if (levelModal) {
+          levelModal.hidden = true;
+        }
+      };
+      const showLevelModal = () => {
+        if (levelModal) {
+          levelModal.hidden = false;
+        }
+      };
+
+      root.querySelector<HTMLButtonElement>("#vote-level-close")?.addEventListener("click", closeLevelModal);
+      levelModal?.addEventListener("click", (event) => {
+        if (event.target === levelModal) {
+          closeLevelModal();
+        }
+      });
+      root.querySelector<HTMLButtonElement>("#vote-level-stake")?.addEventListener("click", () => {
+        closeLevelModal();
+        viewContext.router.navigate("/stake");
+      });
+
+      root.querySelectorAll<HTMLButtonElement>("[data-report-vote]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const reportHash = button.dataset.reportVote as `0x${string}` | undefined;
+          const support = button.dataset.voteSupport === "true";
+          if (!reportHash) {
+            return;
+          }
+
+          if (!viewContext.session.address) {
+            viewContext.notify("info", "Connect a wallet before voting.");
+            viewContext.openWalletOnboarding();
+            return;
+          }
+
+          const siblingButtons = root.querySelectorAll<HTMLButtonElement>(`[data-report-vote="${reportHash}"]`);
+          siblingButtons.forEach((entry) => {
+            entry.disabled = true;
+          });
+
+          try {
+            await submitBugBondVote(reportHash, support);
+            viewContext.notify("success", support ? "Upvote recorded." : "Downvote recorded.");
+            await viewContext.rerender();
+          } catch (error) {
+            if (error instanceof NoBondVotingPowerError) {
+              showLevelModal();
+            } else {
+              const message = error instanceof Error ? error.message : String(error);
+              viewContext.notify("error", message);
+            }
+            siblingButtons.forEach((entry) => {
+              entry.disabled = false;
+            });
+          }
+        });
+      });
+    }
   };
 };

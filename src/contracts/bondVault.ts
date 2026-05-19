@@ -182,6 +182,23 @@ export const isBondVaultConfigured = (): boolean =>
 
 export const getBondVaultAddress = (): HexString => bondVaultAddress();
 
+export const getBondVotingLevel = async (account: HexString): Promise<number> => {
+  const normalizedAccount = normalizeAddress(account);
+  if (!isBondVaultConfigured()) {
+    return 0;
+  }
+
+  const key = `bond-voting-level:${bondVaultAddress()}:${normalizedAccount}`;
+  return readCache.getOrLoad(key, READ_TTL_MS, async () => {
+    const accountTuple = await scheduleBaseRpcRead(
+      "Bond vault voting account",
+      () => readVault().accountOf(normalizedAccount) as Promise<BondAccountTuple>
+    );
+    const active = accountTuple.active ?? accountTuple[0];
+    return bondLevelFromActive(active, 18);
+  });
+};
+
 export const loadBondVaultDashboard = async (account: HexString): Promise<BondVaultDashboard> => {
   const normalizedAccount = normalizeAddress(account);
   if (!isBondVaultConfigured() || !isBugzTokenConfigured()) {

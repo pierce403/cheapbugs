@@ -634,6 +634,69 @@ button:disabled,
   font-weight: 600;
 }
 
+.bug-title-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bug-title-cell a {
+  min-width: 0;
+}
+
+.bug-vote-control {
+  display: inline-grid;
+  grid-template-columns: 22px minmax(26px, auto) 22px;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.bug-vote-button {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255, 106, 0, 0.3);
+  background: #0c0c0c;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.bug-vote-button:hover,
+.bug-vote-button:focus-visible {
+  color: var(--warning);
+  border-color: rgba(255, 106, 0, 0.66);
+}
+
+.bug-vote-button.is-selected {
+  background: rgba(255, 106, 0, 0.18);
+  border-color: var(--warning);
+  color: #ffb15f;
+}
+
+.bug-vote-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.bug-vote-score {
+  min-width: 26px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.vote-level-modal {
+  width: min(420px, 100%);
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .compact-table th,
 .compact-table td {
   padding: 4px 6px;

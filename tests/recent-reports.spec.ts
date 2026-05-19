@@ -4,17 +4,45 @@ import { AbiCoder, Interface, id } from "ethers";
 import { bugIndexAbi } from "../src/contracts/bugIndexAbi";
 
 const bugIndexAddress = "0x515FDbc9876aC26870794E26605c7DD04c18679b";
+const bondVaultAddress = "0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3";
+const multicallAddress = "0xcA11bde05977b3631167028862bE2a173976CA11";
 const reporterAddress = "0x1234567890123456789012345678901234567890";
 const reportHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const zeroBytes32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
 const abiCoder = AbiCoder.defaultAbiCoder();
 const bugIndexInterface = new Interface(bugIndexAbi);
+const bondVaultInterface = new Interface([
+  "function accountOf(address accountAddress) view returns (tuple(uint256 active,uint256 pendingWithdrawal,uint64 withdrawAvailableAt))"
+]);
+const multicallInterface = new Interface([
+  "function aggregate3(tuple(address target,bool allowFailure,bytes callData)[] calls) view returns (tuple(bool success,bytes returnData)[] returnData)"
+]);
 const latestReportHashesSelector = bugIndexInterface.getFunction("latestReportHashes")?.selector;
 const getReportSelector = bugIndexInterface.getFunction("getReport")?.selector;
+const upVoteWeightSelector = bugIndexInterface.getFunction("upVoteWeight")?.selector;
+const downVoteWeightSelector = bugIndexInterface.getFunction("downVoteWeight")?.selector;
+const getBondVoteSelector = bugIndexInterface.getFunction("getBondVote")?.selector;
+const accountOfSelector = bondVaultInterface.getFunction("accountOf")?.selector;
+const aggregate3Selector = multicallInterface.getFunction("aggregate3")?.selector;
 const reverseSelector = id("reverseWithGateways(bytes,uint256,string[])").slice(0, 10);
 const resolveSelector = id("resolveWithGateways(bytes,bytes,string[])").slice(0, 10);
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 const revealDelayMs = 2 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000 + 30 * 60 * 1000;
+const localIdentity = {
+  address: "0x47e727b6fd24efd9cc74eb5d9153e94c82681d3c",
+  privateKey: "0x59c6995e998f97a5a0044966f0945383e9dade06e38b2b0b020a74d5cc78a4f3",
+  mnemonic: "test test test test test test test test test test test junk",
+  derivationPath: "m/44'/60'/0'/0/0",
+  createdAt: "2026-05-17T00:00:00.000Z"
+};
+
+type MockBaseRpcOptions = {
+  upVoteWeight?: bigint;
+  downVoteWeight?: bigint;
+  voterSupport?: boolean | null;
+  voterWeight?: bigint;
+  bondActive?: bigint;
+};
 
 const revealAfterDate = () => new Date(Date.now() + revealDelayMs);
 
@@ -92,8 +120,39 @@ const bugBundlePayload = () => ({
   }
 });
 
-const mockBaseRpc = async (page: Page): Promise<{ counts: { latest: number; getReport: number } }> => {
+const seedLocalIdentity = async (page: Page): Promise<void> => {
+  await page.addInitScript((identity) => {
+    window.localStorage.setItem("cheapbugs.localXmtpIdentity.v1", JSON.stringify(identity));
+  }, localIdentity);
+};
+
+const mockBaseRpc = async (
+  page: Page,
+  options: MockBaseRpcOptions = {}
+): Promise<{ counts: { latest: number; getReport: number } }> => {
   const counts = { latest: 0, getReport: 0 };
+  const upVoteWeight = options.upVoteWeight ?? 0n;
+  const downVoteWeight = options.downVoteWeight ?? 0n;
+  const voterSupport = options.voterSupport ?? null;
+  const voterWeight = options.voterWeight ?? 0n;
+  const bondActive = options.bondActive ?? 0n;
+
+  const voteResultFor = (selector: string | undefined): string | null => {
+    if (selector === upVoteWeightSelector) {
+      return bugIndexInterface.encodeFunctionResult("upVoteWeight", [upVoteWeight]);
+    }
+    if (selector === downVoteWeightSelector) {
+      return bugIndexInterface.encodeFunctionResult("downVoteWeight", [downVoteWeight]);
+    }
+    if (selector === getBondVoteSelector) {
+      return bugIndexInterface.encodeFunctionResult("getBondVote", [
+        voterSupport === null
+          ? [zeroBytes32, zeroAddress, 0n, false, 0n]
+          : [reportHash, localIdentity.address, 1n, voterSupport, voterWeight]
+      ]);
+    }
+    return null;
+  };
 
   await page.route("https://mainnet.base.org/**", async (route: Route) => {
     const payload = JSON.parse(route.request().postData() || "{}") as RpcRequest | RpcRequest[];
@@ -113,6 +172,28 @@ const mockBaseRpc = async (page: Page): Promise<{ counts: { latest: number; getR
         const selector = call.data?.slice(0, 10).toLowerCase();
         const target = call.to?.toLowerCase();
 
+        if (target === multicallAddress.toLowerCase() && selector === aggregate3Selector) {
+          const [calls] = multicallInterface.decodeFunctionData("aggregate3", call.data ?? "0x") as [
+            Array<{ target: string; callData: string; 0: string; 2: string }>
+          ];
+          const returnData = calls.map((entry) => {
+            const nestedTarget = String(entry.target ?? entry[0]).toLowerCase();
+            const nestedCallData = String(entry.callData ?? entry[2]);
+            const nestedSelector = nestedCallData.slice(0, 10).toLowerCase();
+            const voteResult =
+              nestedTarget === bugIndexAddress.toLowerCase() ? voteResultFor(nestedSelector) : null;
+            return {
+              success: voteResult !== null,
+              returnData: voteResult ?? "0x"
+            };
+          });
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            result: multicallInterface.encodeFunctionResult("aggregate3", [returnData])
+          };
+        }
+
         if (target === bugIndexAddress.toLowerCase() && selector === latestReportHashesSelector) {
           counts.latest += 1;
           return {
@@ -128,6 +209,23 @@ const mockBaseRpc = async (page: Page): Promise<{ counts: { latest: number; getR
             id: request.id,
             jsonrpc: "2.0",
             result: bugIndexInterface.encodeFunctionResult("getReport", [reportTuple()])
+          };
+        }
+
+        const voteResult = target === bugIndexAddress.toLowerCase() ? voteResultFor(selector) : null;
+        if (voteResult) {
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            result: voteResult
+          };
+        }
+
+        if (target === bondVaultAddress.toLowerCase() && selector === accountOfSelector) {
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            result: bondVaultInterface.encodeFunctionResult("accountOf", [[bondActive, 0n, 0n]])
           };
         }
 
@@ -281,6 +379,43 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await expect(profileSubmissions.locator("thead th")).toHaveText(["date", "title", "target", "author", "details"]);
   await expect(profileSubmissions).toContainText("Live parser exploit");
   await expect(profileSubmissions).toContainText("2d 4h");
+});
+
+test("shows bonded vote totals and sends level-zero voters to staking", async ({ page }) => {
+  await seedLocalIdentity(page);
+  await mockBaseRpc(page, {
+    upVoteWeight: 7n,
+    downVoteWeight: 2n,
+    voterSupport: true,
+    voterWeight: 3n,
+    bondActive: 0n
+  });
+  await mockEnsRpc(page);
+  await mockBugBundleGateway(page);
+
+  await page.goto("/");
+
+  const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
+  const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
+  const voteControl = reportRow.locator(".bug-vote-control");
+
+  await expect(voteControl.locator(".bug-vote-score")).toHaveText("5");
+
+  const upvote = voteControl.getByRole("button", { name: /upvote Live parser exploit/i });
+  const downvote = voteControl.getByRole("button", { name: /downvote Live parser exploit/i });
+  await expect(upvote).toHaveAttribute("title", "total upvote weight: 7");
+  await expect(downvote).toHaveAttribute("title", "total downvote weight: 2");
+  await expect(upvote).toHaveClass(/is-selected/);
+  await expect(downvote).not.toHaveClass(/is-selected/);
+
+  await downvote.click();
+
+  const dialog = page.getByRole("dialog", { name: "stake required" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Voting requires staked BUGZ");
+
+  await dialog.getByRole("button", { name: "go to stake" }).click();
+  await expect(page).toHaveURL(/\/stake$/);
 });
 
 test("renders stale cached report and BugBundle details when providers rate limit", async ({ page }) => {
