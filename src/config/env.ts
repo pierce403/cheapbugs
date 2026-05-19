@@ -21,6 +21,8 @@ const defaultBugzV4PoolId = "0x4c360c12ee8063e7170c344eba74f28ab0d3879c797ed4626
 const defaultBugzV4PairedToken = "0x4200000000000000000000000000000000000006";
 const defaultBugzV4PoolFee = 0x800000;
 const defaultBugzV4TickSpacing = 200;
+const defaultBaseEthUsdFeedAddress = "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70";
+const defaultBaseEthUsdFeedUrl = "https://data.chain.link/feeds/base/mainnet/eth-usd";
 const defaultBrokerXmtpAddress = "0xea6995fc3674e1e94736766f5eeefb0506e4ef32";
 const configuredBugzTokenAddress =
   (import.meta.env.VITE_BUGZ_TOKEN_ADDRESS as `0x${string}` | undefined) || defaultBugzTokenAddress;
@@ -90,6 +92,10 @@ export const env = {
     import.meta.env.VITE_BUGZ_V4_TICK_SPACING,
     usesDefaultBugzToken ? defaultBugzV4TickSpacing : 0
   ),
+  ethUsdFeedAddress:
+    (import.meta.env.VITE_CHAINLINK_ETH_USD_FEED_ADDRESS as `0x${string}` | undefined) ||
+    (Number(import.meta.env.VITE_CHAIN_ID || 8453) === 8453 ? defaultBaseEthUsdFeedAddress : ""),
+  ethUsdFeedUrl: import.meta.env.VITE_CHAINLINK_ETH_USD_FEED_URL || defaultBaseEthUsdFeedUrl,
   brokerXmtpAddress: configuredBrokerXmtpAddress,
   routerMode: import.meta.env.VITE_ROUTER_MODE === "hash" ? "hash" : "history",
   storageProvider: import.meta.env.VITE_STORAGE_PROVIDER === "pinata" ? "pinata" : "ipfs-gateway",

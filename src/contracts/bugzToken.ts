@@ -23,6 +23,11 @@ type TreasurySnapshot = {
   nativeBalance: bigint;
 };
 
+type TreasuryTokenSnapshot = {
+  address: `0x${string}`;
+  tokenBalance: bigint;
+};
+
 type HolderBalance = {
   address: `0x${string}`;
   balance: bigint;
@@ -143,6 +148,19 @@ export const getBugzTreasurySnapshot = async (): Promise<TreasurySnapshot | null
       nativeBalance
     };
   });
+};
+
+export const getBugzTreasuryTokenBalance = async (): Promise<TreasuryTokenSnapshot | null> => {
+  if (!isBugzTokenConfigured() || !chainConfig.bugzTreasuryAddress) {
+    return null;
+  }
+
+  const treasuryAddress = chainConfig.bugzTreasuryAddress;
+  const key = `treasury-token:${bugzTokenAddress()}:${treasuryAddress}`;
+  return readCache.getOrLoad(key, TTL_MS, async () => ({
+    address: treasuryAddress,
+    tokenBalance: (await readContract().balanceOf(treasuryAddress)) as bigint
+  }));
 };
 
 export const getCachedBugzTokenMetadata = (): TokenMetadata | null => {

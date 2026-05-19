@@ -128,6 +128,7 @@ Current and required properties:
 - Rewards can only be paid by the configured index and only for brokers also authorized by the treasury.
 - A bad treasury/index configuration can block payouts or pay from an unintended treasury. The launcher checks the deployed wiring, and operators should still record the verified addresses before funding the treasury.
 - Browser owner controls for vault/index wiring, role lists, payout divisor, and ownership transfer are operational convenience only. Operators should still verify transaction prompts and resulting contract state before funding or relying on a new configuration.
+- The `/treasury` frontend display is informational only. Treasury value and USD payout estimates come from BUGZ balance reads, treasury reward calculation reads, a Uniswap v4 BUGZ/WETH quote, and the Chainlink Base ETH/USD feed; contract payout authority remains only `CheapBugsTreasuryVault` called by the configured index.
 - Deployment manifests under `deployments/` are public reproducibility records. They include deployer and role addresses, constructor arguments, bytecode hashes, generated artifacts, and transaction hashes, but must not include private keys, explorer API keys, or unredacted RPC URLs.
 
 ### BUGZ Credentials And Reputation

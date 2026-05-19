@@ -32,6 +32,10 @@ const matchRoute = (path: string): RouteMatch => {
     return { name: "manage", path: normalized, params: {} };
   }
 
+  if (normalized === "/treasury") {
+    return { name: "treasury", path: normalized, params: {} };
+  }
+
   if (normalized === "/token") {
     return { name: "token", path: normalized, params: {} };
   }

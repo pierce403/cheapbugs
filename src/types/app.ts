@@ -8,6 +8,7 @@ export type RouteName =
   | "review"
   | "stake"
   | "manage"
+  | "treasury"
   | "token"
   | "patrons"
   | "login";

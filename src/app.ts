@@ -10,6 +10,7 @@ import { renderReportView } from "./views/report";
 import { renderReviewView } from "./views/review";
 import { renderStakeView } from "./views/stake";
 import { renderSubmitView } from "./views/submit";
+import { renderTreasuryView } from "./views/treasury";
 import { renderTokenView } from "./views/token";
 import { loadContractOwnerAccess } from "./contracts/cheapbugsSuite";
 import { ENS_REGISTER_URL, ensProfileUrl } from "./lib/ens";
@@ -283,6 +284,8 @@ export class CheapBugsApp {
         return renderStakeView(context);
       case "manage":
         return renderManageView(context);
+      case "treasury":
+        return renderTreasuryView(context);
       case "token":
         return renderTokenView(context);
       case "patrons":
@@ -385,6 +388,7 @@ export class CheapBugsApp {
       ["/submit", "submit"],
       ["/review", "review"],
       ["/stake", "stake"],
+      ["/treasury", "treasury"],
       ["/token", "token"],
       ["/patrons", "patrons"]
     ];

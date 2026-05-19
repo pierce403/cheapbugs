@@ -22,8 +22,8 @@ cheapbugs/
 │   ├── attest/             # EAS write adapters
 │   ├── auth/               # Thirdweb and local XMTP identity helpers
 │   ├── config/             # chain, env, reviewer, and integration config
-│   ├── contracts/          # frontend contract ABI and adapters
-│   ├── lib/                # domain logic, crypto, IPFS, caching, utilities
+│   ├── contracts/          # frontend contract ABI, vault, price-feed, and adapter reads
+│   ├── lib/                # domain logic, crypto, IPFS, treasury, caching, utilities
 │   ├── storage/            # storage-provider implementations
 │   ├── types/              # domain and integration types
 │   ├── xmtp/               # browser XMTP identity and broker DM helpers
@@ -55,7 +55,7 @@ cheapbugs/
 ### Static Web App Shell
 
 - **Stability**: stable
-- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `stake`, `manage`, `token`, and `patrons`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
+- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `stake`, `treasury`, `manage`, `token`, and `patrons`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
 - **Properties**:
   - The first screen is the usable app, not a landing page.
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
@@ -65,7 +65,7 @@ cheapbugs/
   - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows the bundle commit hash and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
-  - The `stake` navigation item is always available; the `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
+  - The `stake` and `treasury` navigation items are always available; the `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
   - [x] `npm run test:e2e` covers the development banner text and orange status styling, GitHub brand icon, build metadata, header BUGZ status states, owner-only manage navigation, and that ordinary routes do not trigger treasury dashboard reads.
@@ -137,9 +137,13 @@ cheapbugs/
   - `payRewardFromIndex` also verifies the broker is authorized by the treasury, so payout authority requires both the index and treasury to trust the broker.
   - Standard payout is `BUGZ balance / standardPayoutDivisor`, defaulting to 1000. The owner can adjust the divisor to any nonzero value.
   - Broker multipliers are capped at 10. A multiplier of 0 records a zero-payout completion.
+  - The `/treasury` route encourages users to fund the treasury, exposes a copyable treasury address, and shows the current treasury BUGZ balance.
+  - The `/treasury` route shows the current base payout range per valid bug by reading `calculateRewardAmount(1)` through `calculateRewardAmount(10)`, which is normally 0.1% to 1% of treasury funds.
+  - Treasury USD estimates use a BUGZ/WETH Uniswap v4 quote plus the Chainlink Base mainnet ETH/USD standard feed, defaulting to `0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70`. If pricing fails, the route keeps BUGZ-denominated values visible and shows an informative warning.
 - **Test Criteria**:
   - [x] Forge unit tests cover deposits, detail-key purchase accounting, broker list management, index-only payouts, treasury broker checks, divisor changes, multiplier caps, and reward transfers.
   - [x] Forge fuzz tests cover payout math across balances, divisors, and multipliers.
+  - [x] Playwright covers the treasury route's current value, 0.1%-1% payout range, USD conversion, copy-address action presence, and fail-open price-read warning.
 
 ### Onchain Bug Index
 

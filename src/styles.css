@@ -849,7 +849,8 @@ button:disabled,
 }
 
 .metric-grid span,
-.metric-grid strong {
+.metric-grid strong,
+.metric-grid small {
   display: block;
   overflow-wrap: anywhere;
 }
@@ -857,6 +858,22 @@ button:disabled,
 .metric-grid span {
   color: var(--muted);
   margin-bottom: 4px;
+}
+
+.metric-grid small {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.treasury-page-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.treasury-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .stake-withdraw-actions {
