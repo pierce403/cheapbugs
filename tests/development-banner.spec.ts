@@ -62,9 +62,13 @@ test("mobile header keeps navigation as stable tap targets", async ({ page }) =>
     expect(box.height).toBeGreaterThanOrEqual(34);
   }
 
+  const firstRow = rows.get(boxes[0].top) ?? [];
+  expect(firstRow).toHaveLength(1);
+  expect(boxes[0].text).toBe("index");
+  expect(boxes[0].width).toBeGreaterThan(boxes[1].width * 1.8);
   expect(Math.max(...Array.from(rows.values()).map((row) => row.length))).toBeLessThanOrEqual(2);
   expect(boxes.at(-1)?.text).toBe("patrons");
-  expect(boxes.at(-1)?.width).toBeGreaterThan(boxes[0].width * 1.8);
+  expect(boxes.at(-1)?.width).toBeLessThan(boxes[0].width * 0.75);
 });
 
 test("submit route defaults to the broker XMTP path", async ({ page }) => {

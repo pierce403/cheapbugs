@@ -977,7 +977,8 @@ button:disabled,
     padding: 7px 6px;
   }
 
-  .nav-link:last-child:nth-child(odd) {
+  .nav-link:first-child,
+  .nav-link:last-child:nth-child(even) {
     grid-column: 1 / -1;
   }
 

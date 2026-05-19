@@ -67,7 +67,7 @@ cheapbugs/
   - Header build metadata shows `VITE_BUILD_ID`/`VITE_BUILD_TIME` when provided, otherwise falls back to the bundle commit hash and current build time, and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
   - The `stake` and `treasury` navigation items are always available; the `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
-  - On mobile widths, the shell stacks the banner/header content, keeps auth controls full-width, and renders navigation as stable two-column tap targets with an odd final item spanning the row.
+  - On mobile widths, the shell stacks the banner/header content, keeps auth controls full-width, and renders navigation as stable two-column tap targets with `index` spanning the first row.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
   - [x] `npm run test:e2e` covers the development banner text and orange status styling, GitHub brand icon, build metadata, mobile navigation layout, header BUGZ status states, owner-only manage navigation, and that ordinary routes do not trigger treasury dashboard reads.
