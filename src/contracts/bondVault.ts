@@ -3,7 +3,7 @@ import { Contract, parseUnits } from "ethers";
 import { chainConfig } from "../config/chains";
 import { authController } from "../services";
 import { appLog } from "../lib/logger";
-import { RpcReadCache } from "../lib/rpcReadCache";
+import { RpcReadCache, isRateLimitError } from "../lib/rpcReadCache";
 import { normalizeAddress } from "../lib/utils";
 import type { HexString } from "../types/domain";
 
@@ -98,6 +98,30 @@ const txHash = (value: string | null | undefined): HexString => toHex(value ?? "
 
 const shortenError = (message: string): string => (message.length > 240 ? `${message.slice(0, 237)}...` : message);
 
+const appendError = (current: string | null, next: string): string => (current ? `${current} ${next}` : next);
+
+const dashboardReadErrorMessage = (label: string, error: unknown): string => {
+  if (isRateLimitError(error)) {
+    return `${label} is temporarily unavailable because the Base RPC is rate-limiting reads. The app will wait before retrying.`;
+  }
+  const raw = error instanceof Error ? error.message : String(error);
+  return `${label} failed: ${shortenError(raw)}`;
+};
+
+const bondLevelFromActive = (active: bigint, decimals: number): number => {
+  const scale = 10n ** BigInt(decimals);
+  const wholeTokens = active / scale;
+  let level = 0;
+  let threshold = 10n;
+
+  while (wholeTokens >= threshold) {
+    level += 1;
+    threshold *= 10n;
+  }
+
+  return level;
+};
+
 const bondErrorMessage = (label: string, error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error);
   if (/user rejected|denied transaction|rejected the request/i.test(raw)) {
@@ -182,29 +206,58 @@ export const loadBondVaultDashboard = async (account: HexString): Promise<BondVa
 
   const key = `bond-dashboard:${bondVaultAddress()}:${tokenAddress()}:${normalizedAccount}`;
   return readCache.getOrLoad(key, READ_TTL_MS, async () => {
-    const metadata = await getBugzTokenMetadata().catch((error) => {
-      appLog.warn("stake: BUGZ metadata read failed", { error });
-      return null;
-    });
-    const decimals = metadata?.decimals ?? 18;
-    const symbol = metadata?.symbol ?? "BUGZ";
+    const decimals = 18;
+    const symbol = "BUGZ";
     const vault = readVault();
     const token = readToken();
 
     try {
-      const [accountTuple, levelRaw, withdrawalDelayRaw, tokenBalance, allowance] = await withReadTimeout(
-        Promise.all([
-          vault.accountOf(normalizedAccount) as Promise<BondAccountTuple>,
-          vault.getLevel(normalizedAccount) as Promise<bigint>,
-          vault.WITHDRAWAL_DELAY() as Promise<bigint>,
-          getBugzTokenBalance(normalizedAccount),
-          token.allowance(normalizedAccount, bondVaultAddress()) as Promise<bigint>
-        ]),
-        "Bond vault dashboard"
+      const accountTuple = await withReadTimeout(
+        vault.accountOf(normalizedAccount) as Promise<BondAccountTuple>,
+        "Bond vault account"
       );
       const active = accountTuple.active ?? accountTuple[0];
       const pendingWithdrawal = accountTuple.pendingWithdrawal ?? accountTuple[1];
       const withdrawAvailableAt = accountTuple.withdrawAvailableAt ?? accountTuple[2];
+      let tokenBalance: bigint | null = null;
+      let allowance: bigint | null = null;
+      let errorMessage: string | null = null;
+
+      try {
+        tokenBalance = await withReadTimeout(getBugzTokenBalance(normalizedAccount), "BUGZ balance");
+      } catch (error) {
+        appLog.warn("stake: BUGZ balance read failed", { error });
+        errorMessage = appendError(errorMessage, dashboardReadErrorMessage("BUGZ balance", error));
+        if (isRateLimitError(error)) {
+          return {
+            isConfigured: true,
+            vaultAddress: bondVaultAddress(),
+            tokenAddress: tokenAddress(),
+            account: normalizedAccount,
+            active,
+            pendingWithdrawal,
+            totalBond: active + pendingWithdrawal,
+            withdrawAvailableAt: Number(withdrawAvailableAt),
+            withdrawalDelaySeconds: DEFAULT_WITHDRAWAL_DELAY_SECONDS,
+            level: bondLevelFromActive(active, decimals),
+            tokenBalance,
+            allowance,
+            decimals,
+            symbol,
+            errorMessage
+          };
+        }
+      }
+
+      try {
+        allowance = await withReadTimeout(
+          token.allowance(normalizedAccount, bondVaultAddress()) as Promise<bigint>,
+          "Bond vault allowance"
+        );
+      } catch (error) {
+        appLog.warn("stake: bond allowance read failed", { error });
+        errorMessage = appendError(errorMessage, dashboardReadErrorMessage("Bond vault allowance", error));
+      }
 
       return {
         isConfigured: true,
@@ -215,13 +268,13 @@ export const loadBondVaultDashboard = async (account: HexString): Promise<BondVa
         pendingWithdrawal,
         totalBond: active + pendingWithdrawal,
         withdrawAvailableAt: Number(withdrawAvailableAt),
-        withdrawalDelaySeconds: Number(withdrawalDelayRaw || BigInt(DEFAULT_WITHDRAWAL_DELAY_SECONDS)),
-        level: Number(levelRaw),
+        withdrawalDelaySeconds: DEFAULT_WITHDRAWAL_DELAY_SECONDS,
+        level: bondLevelFromActive(active, decimals),
         tokenBalance,
         allowance,
         decimals,
         symbol,
-        errorMessage: null
+        errorMessage
       };
     } catch (error) {
       return {
@@ -239,7 +292,7 @@ export const loadBondVaultDashboard = async (account: HexString): Promise<BondVa
         allowance: null,
         decimals,
         symbol,
-        errorMessage: error instanceof Error ? error.message : "Bond vault dashboard read failed."
+        errorMessage: dashboardReadErrorMessage("Bond vault dashboard", error)
       };
     }
   });

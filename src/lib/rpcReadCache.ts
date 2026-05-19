@@ -11,10 +11,30 @@ type FailureRecord = {
 const RATE_LIMIT_COOLDOWN_MS = 60_000;
 const ERROR_COOLDOWN_MS = 10_000;
 
+let globalRateLimitFailure: FailureRecord | null = null;
+
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export const isRateLimitError = (error: unknown): boolean =>
   /\b429\b|too many requests|rate.?limit/i.test(errorMessage(error));
+
+const rateLimitCooldownError = (retryAt: number): Error => {
+  const retrySeconds = Math.max(1, Math.ceil((retryAt - Date.now()) / 1_000));
+  return new Error(`Base RPC is temporarily rate-limiting reads. Try again in ${retrySeconds}s.`);
+};
+
+const activeGlobalRateLimitFailure = (): Error | null => {
+  if (!globalRateLimitFailure) {
+    return null;
+  }
+
+  if (globalRateLimitFailure.retryAt <= Date.now()) {
+    globalRateLimitFailure = null;
+    return null;
+  }
+
+  return rateLimitCooldownError(globalRateLimitFailure.retryAt);
+};
 
 export class RpcReadCache {
   private readonly values = new Map<string, CachedRecord<unknown>>();
@@ -49,6 +69,11 @@ export class RpcReadCache {
       return cached;
     }
 
+    const globalRateLimit = activeGlobalRateLimitFailure();
+    if (globalRateLimit) {
+      throw globalRateLimit;
+    }
+
     const failure = this.failures.get(key);
     if (failure && failure.retryAt > Date.now()) {
       throw failure.error;
@@ -62,9 +87,14 @@ export class RpcReadCache {
     const promise = loader()
       .then((value) => this.set(key, value, ttlMs))
       .catch((error) => {
+        const rateLimited = isRateLimitError(error);
+        const retryAt = Date.now() + (rateLimited ? RATE_LIMIT_COOLDOWN_MS : ERROR_COOLDOWN_MS);
+        if (rateLimited) {
+          globalRateLimitFailure = { error, retryAt };
+        }
         this.failures.set(key, {
           error,
-          retryAt: Date.now() + (isRateLimitError(error) ? RATE_LIMIT_COOLDOWN_MS : ERROR_COOLDOWN_MS)
+          retryAt
         });
         throw error;
       })

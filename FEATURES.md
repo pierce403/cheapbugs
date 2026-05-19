@@ -62,7 +62,7 @@ cheapbugs/
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
   - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete and logs a high-visibility console error if the read resolves unavailable.
   - Header BUGZ status only reads the connected wallet BUGZ balance; it must not load token metadata, treasury BUGZ, or treasury native ETH on ordinary route changes.
-  - Browser contract adapters dedupe in-flight Base RPC reads, cache successful reads briefly, persist public bug-index reads where useful, and apply a short cooldown after rate-limit errors.
+  - Browser contract adapters disable ethers' automatic HTTP 429 retry loop, dedupe in-flight Base RPC reads, cache successful reads briefly, share a cross-adapter cooldown after rate-limit errors, and persist public bug-index reads where useful.
   - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows the bundle commit hash and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
@@ -101,11 +101,12 @@ cheapbugs/
   - Current bonded addresses are enumerable with `bondedAddressCount`, `bondedAddressAt`, and `bondedAddressList`.
   - The `/stake` route lets connected users approve BUGZ for the bond vault, bond BUGZ, request the two-step withdrawal, and withdraw when the 7-day delay has elapsed.
   - The stake UI shows wallet BUGZ, allowance, active bond, pending withdrawal, current level, next-level threshold, and a live countdown/progress bar for step-2 withdrawal readiness.
+  - The stake dashboard keeps RPC reads conservative: it reads `accountOf`, computes the displayed level client-side from active whole BUGZ, uses the fixed 7-day withdrawal delay, and skips nonessential balance or allowance reads during a Base RPC cooldown.
 - **Test Criteria**:
   - [x] Forge unit tests cover bonding, two-step withdrawal, withdrawal cancellation, pending-withdrawal slashing, slasher permissions, full slash removal, and address enumeration.
   - [x] Forge fuzz tests cover level math and percentage slash accounting.
   - [x] Forge invariant tests prove the vault's BUGZ balance equals the listed active-plus-pending bond exposure across randomized bond, withdrawal, cancellation, and slash sequences.
-  - [x] Playwright covers the stake route dashboard, level display, allowance display, pending-withdrawal warning, and withdrawal countdown state with mocked Base RPC.
+  - [x] Playwright covers the stake route dashboard, level display, allowance display, pending-withdrawal warning, withdrawal countdown state, and Base RPC rate-limit backoff with mocked Base RPC.
 
 ### Owner Manage Console
 

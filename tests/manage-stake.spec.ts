@@ -215,6 +215,32 @@ test("shows staking level, allowance, and pending-withdrawal countdown", async (
   await expect(page.getByText("Adding a new bond cancels your pending withdrawal")).toBeVisible();
 });
 
+test("backs off from stake reads when Base RPC rate-limits", async ({ page }) => {
+  await seedLocalIdentity(page);
+  await mockEnsRpc(page);
+  let baseCalls = 0;
+  await page.route("https://mainnet.base.org/**", async (route) => {
+    baseCalls += 1;
+    await route.fulfill({
+      status: 429,
+      contentType: "application/json",
+      headers: { "retry-after": "60" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: 429, message: "Too Many Requests" }
+      })
+    });
+  });
+
+  await page.goto("/stake");
+
+  const stakePanel = page.getByTestId("stake-panel");
+  await expect(stakePanel).toContainText(/rate-limiting|Too Many Requests|Base RPC/i);
+  await expect(stakePanel).toContainText("wallet balance");
+  expect(baseCalls).toBeLessThanOrEqual(3);
+});
+
 test("shows manage navigation and owner-only contract controls for the owner wallet", async ({ page }) => {
   await seedLocalIdentity(page);
   await mockEnsRpc(page);

@@ -3,7 +3,7 @@ import { Contract, getAddress, isAddress } from "ethers";
 import { chainConfig } from "../config/chains";
 import { authController } from "../services";
 import { appLog } from "../lib/logger";
-import { RpcReadCache } from "../lib/rpcReadCache";
+import { RpcReadCache, isRateLimitError } from "../lib/rpcReadCache";
 import { normalizeAddress } from "../lib/utils";
 import type { HexString } from "../types/domain";
 
@@ -209,35 +209,40 @@ export const loadContractOwnerAccess = async (account: HexString | null): Promis
     .join(":")}`;
 
   return readCache.getOrLoad(key, OWNER_READ_TTL_MS, async () => {
-    const contracts = await Promise.all(
-      managedContracts().map(async (contract): Promise<ManagedContractOwner> => {
-        if (!contract.address) {
-          return emptyOwner(contract.key, contract.label, "", normalizedAccount, "Contract address is not configured.");
-        }
+    const contracts: ManagedContractOwner[] = [];
+    let rateLimitMessage: string | null = null;
 
-        const address = normalizeAddress(contract.address);
-        try {
-          const owner = await ownerOf(address, contract.abi, contract.label);
-          return {
-            key: contract.key,
-            label: contract.label,
-            address,
-            owner,
-            isOwner: Boolean(normalizedAccount && owner === normalizedAccount),
-            errorMessage: null
-          };
-        } catch (error) {
-          appLog.warn("manage: owner read failed", { contract: contract.label, error });
-          return emptyOwner(
-            contract.key,
-            contract.label,
-            address,
-            normalizedAccount,
-            error instanceof Error ? error.message : "Owner read failed."
-          );
+    for (const contract of managedContracts()) {
+      if (!contract.address) {
+        contracts.push(emptyOwner(contract.key, contract.label, "", normalizedAccount, "Contract address is not configured."));
+        continue;
+      }
+
+      const address = normalizeAddress(contract.address);
+      if (rateLimitMessage) {
+        contracts.push(emptyOwner(contract.key, contract.label, address, normalizedAccount, rateLimitMessage));
+        continue;
+      }
+
+      try {
+        const owner = await ownerOf(address, contract.abi, contract.label);
+        contracts.push({
+          key: contract.key,
+          label: contract.label,
+          address,
+          owner,
+          isOwner: Boolean(normalizedAccount && owner === normalizedAccount),
+          errorMessage: null
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Owner read failed.";
+        appLog.warn("manage: owner read failed", { contract: contract.label, error });
+        contracts.push(emptyOwner(contract.key, contract.label, address, normalizedAccount, errorMessage));
+        if (isRateLimitError(error)) {
+          rateLimitMessage = errorMessage;
         }
-      })
-    );
+      }
+    }
 
     return {
       account: normalizedAccount,
