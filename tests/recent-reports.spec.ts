@@ -4,8 +4,6 @@ import { AbiCoder, Interface, id } from "ethers";
 import { bugIndexAbi } from "../src/contracts/bugIndexAbi";
 
 const bugIndexAddress = "0x515FDbc9876aC26870794E26605c7DD04c18679b";
-const bondVaultAddress = "0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3";
-const treasuryVaultAddress = "0x4A080668d9848928dc6D48921cbDc4273fe27A9d";
 const reporterAddress = "0x1234567890123456789012345678901234567890";
 const reportHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const zeroBytes32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
@@ -227,9 +225,12 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
 
   await page.goto("/");
 
-  await expect(page.getByText(`bug index: ${bugIndexAddress}`)).toBeVisible();
-  await expect(page.getByText(`bond vault: ${bondVaultAddress}`)).toBeVisible();
-  await expect(page.getByText(`treasury vault: ${treasuryVaultAddress}`)).toBeVisible();
+  await expect(page.getByText("public goods crowdfunding protocol")).toBeVisible();
+  await expect(page.getByText(`bug index: ${bugIndexAddress}`)).toHaveCount(0);
+  await expect(page.getByText("bond vault:")).toHaveCount(0);
+  await expect(page.getByText("treasury vault:")).toHaveCount(0);
+  await expect(page.getByText("[ patrons of the arts ]")).toHaveCount(0);
+  await expect(page.getByText("static assets only")).toHaveCount(0);
 
   const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
   const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });

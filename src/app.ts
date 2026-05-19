@@ -452,9 +452,6 @@ export class CheapBugsApp {
         </header>
         <section class="notice-stack">${notices}</section>
         <main class="main-column" data-view-root>${view.html}</main>
-        <footer class="footer panel">
-          <div>${escapeHtml(env.appName)} / static assets only / no database / no server renderer</div>
-        </footer>
         ${profileModal}
       </div>
     `;

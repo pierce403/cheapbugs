@@ -140,7 +140,7 @@ npm run launch:bug-index
 - Foundry is now configured with `contracts/` as the source directory, `script/` for deploy scripts, and `test/` for scenario coverage.
 - `forge-std` is tracked as the `lib/forge-std` git submodule, so fresh clones need `git submodule update --init --recursive` before `forge build` or `forge test`.
 - The BUGZ patrons leaderboard prefers the Etherscan V2 `tokenholderlist` API when `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` is configured, falls back to 10,000-block Transfer-log pages from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`, and caches holder snapshots in localStorage for 24 hours. Treasury stats use the committed Base treasury vault by default; `VITE_BUGZ_TREASURY_ADDRESS` only overrides that address.
-- The home page patron preview is cache-only; do not make the home route trigger fresh holder scans.
+- The home page no longer renders a patrons preview; keep BUGZ holder scans isolated to `/patrons`.
 - Header BUGZ status should call `loadBugzHeaderBalance`, not `loadTokenDashboard`; ordinary route chrome must only read connected wallet BUGZ balance and avoid treasury/token metadata dashboard reads.
 - Base RPC contract adapters use `src/lib/rpcReadCache.ts` for short success caching, in-flight deduplication, and rate-limit cooldowns. Reuse that for new public RPC read adapters.
 - The `/manage` route uses `src/contracts/cheapbugsSuite.ts` to read `owner()` across the suite and expose owner actions for index brokers/admins/vault wiring, treasury broker/index/divisor wiring, bond slasher/treasury wiring, and ownership transfers. `renounceOwnership` is intentionally not exposed in the browser UI.

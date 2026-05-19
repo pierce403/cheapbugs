@@ -58,6 +58,7 @@ cheapbugs/
 - **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `stake`, `treasury`, `manage`, `token`, and `patrons`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
 - **Properties**:
   - The first screen is the usable app, not a landing page.
+  - The home intro describes CheapBugs as a public goods crowdfunding protocol and summarizes the static GitHub/IPFS/XMTP/Base architecture without listing raw contract addresses, a patrons preview, or a footer in the first screen.
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
   - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete and logs a high-visibility console error if the read resolves unavailable.
   - Header BUGZ status only reads the connected wallet BUGZ balance; it must not load token metadata, treasury BUGZ, or treasury native ETH on ordinary route changes.
@@ -349,7 +350,7 @@ cheapbugs/
 - **Description**: `/patrons` shows a daily-cached BUGZ holder leaderboard using Etherscan V2 holder data when configured, with a Base RPC Transfer-log fallback.
 - **Properties**:
   - Holder snapshots cache in localStorage for 24 hours.
-  - The home page patron preview is cache-only and must not trigger fresh scans.
+  - The home page does not render a patrons preview; holder scans stay isolated to `/patrons`.
   - The RPC fallback reads 10,000-block Transfer-log pages from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`.
   - RPC failures render setup guidance for `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY`.
 - **Test Criteria**:
