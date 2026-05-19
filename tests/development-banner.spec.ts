@@ -41,7 +41,7 @@ test("mobile header keeps navigation as stable tap targets", async ({ page }) =>
   const nav = page.locator(".nav-row");
   const links = nav.locator(".nav-link");
   await expect(nav).toHaveCSS("display", "grid");
-  await expect(links).toHaveCount(7);
+  await expect(links).toHaveCount(8);
   await expect(page.locator(".brand")).toHaveText("cheapbugs");
 
   const boxes = await links.evaluateAll((nodes) =>
@@ -60,15 +60,29 @@ test("mobile header keeps navigation as stable tap targets", async ({ page }) =>
   for (const box of boxes) {
     rows.set(box.top, [...(rows.get(box.top) ?? []), box]);
     expect(box.height).toBeGreaterThanOrEqual(34);
+    expect(Math.abs(box.width - boxes[0].width)).toBeLessThanOrEqual(2);
   }
 
-  const firstRow = rows.get(boxes[0].top) ?? [];
-  expect(firstRow).toHaveLength(1);
-  expect(boxes[0].text).toBe("index");
-  expect(boxes[0].width).toBeGreaterThan(boxes[1].width * 1.8);
+  expect(boxes.map((box) => box.text)).toEqual(["index", "about", "submit", "review", "stake", "treasury", "token", "patrons"]);
   expect(Math.max(...Array.from(rows.values()).map((row) => row.length))).toBeLessThanOrEqual(2);
-  expect(boxes.at(-1)?.text).toBe("patrons");
-  expect(boxes.at(-1)?.width).toBeLessThan(boxes[0].width * 0.75);
+  expect(Math.min(...Array.from(rows.values()).map((row) => row.length))).toBe(2);
+});
+
+test("about route explains lifecycle, contracts, stack, and tokenomics", async ({ page }) => {
+  await page.goto("/about");
+
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(page.getByTestId("about-panel")).toContainText("CheapBugs is a public bug-report market");
+  await expect(page.getByText("[ bug lifecycle ]")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "1. submission" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "3. judging window" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "4. reveal and payout" })).toBeVisible();
+  await expect(page.getByText("[ smart contracts ]")).toBeVisible();
+  await expect(page.getByText("bond vault")).toBeVisible();
+  await expect(page.getByText("[ tokenomics ]")).toBeVisible();
+  await expect(page.getByText("0.1% to 1% of the treasury")).toBeVisible();
+  await expect(page.getByText("[ tech stack ]")).toBeVisible();
+  await expect(page.getByText("XMTP DMs carry structured broker submissions")).toBeVisible();
 });
 
 test("submit route defaults to the broker XMTP path", async ({ page }) => {

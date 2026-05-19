@@ -1,6 +1,7 @@
 import { activeStorageProvider } from "./storage";
 import { authController } from "./services";
 import { AppRouter } from "./router";
+import { renderAboutView } from "./views/about";
 import { renderHomeView } from "./views/home";
 import { renderLoginView } from "./views/login";
 import { renderManageView } from "./views/manage";
@@ -274,6 +275,8 @@ export class CheapBugsApp {
     switch (context.route.name) {
       case "submit":
         return renderSubmitView(context);
+      case "about":
+        return renderAboutView(context);
       case "report":
         return renderReportView(context);
       case "profile":
@@ -385,6 +388,7 @@ export class CheapBugsApp {
 
     const navItems = [
       ["/", "index"],
+      ["/about", "about"],
       ["/submit", "submit"],
       ["/review", "review"],
       ["/stake", "stake"],

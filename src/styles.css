@@ -506,6 +506,29 @@ button:disabled,
   overflow-wrap: anywhere;
 }
 
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.about-grid article {
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  background: rgba(0, 0, 0, 0.16);
+  padding: 10px;
+}
+
+.about-grid h2 {
+  color: var(--warning);
+  font-size: 13px;
+  margin: 0 0 6px;
+  text-transform: lowercase;
+}
+
+.about-grid p {
+  margin: 0;
+}
+
 .nav-row {
   display: flex;
   gap: 8px;
@@ -977,11 +1000,6 @@ button:disabled,
     padding: 7px 6px;
   }
 
-  .nav-link:first-child,
-  .nav-link:last-child:nth-child(even) {
-    grid-column: 1 / -1;
-  }
-
   .brand {
     font-size: 20px;
     letter-spacing: 0.12em;
@@ -1000,6 +1018,10 @@ button:disabled,
   .button-row .button,
   .treasury-actions .button {
     flex: 1 1 140px;
+  }
+
+  .about-grid {
+    grid-template-columns: 1fr;
   }
 
   .data-table {

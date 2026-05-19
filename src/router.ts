@@ -20,6 +20,10 @@ const matchRoute = (path: string): RouteMatch => {
     return { name: "submit", path: normalized, params: {} };
   }
 
+  if (normalized === "/about") {
+    return { name: "about", path: normalized, params: {} };
+  }
+
   if (normalized === "/review") {
     return { name: "review", path: normalized, params: {} };
   }

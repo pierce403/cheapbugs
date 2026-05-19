@@ -2,6 +2,7 @@ import type { AppNotice } from "./domain";
 
 export type RouteName =
   | "home"
+  | "about"
   | "submit"
   | "report"
   | "profile"
