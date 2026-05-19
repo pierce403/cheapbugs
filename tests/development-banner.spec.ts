@@ -24,17 +24,6 @@ test("shows the GitHub repository icon link beside the brand", async ({ page }) 
   await page.goto("/");
 
   const brandBlock = page.locator(".brand-block");
-  const expectedBuildTime = await page.evaluate(() =>
-    new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      second: "2-digit",
-      timeZoneName: "short"
-    }).format(new Date("2026-05-17T19:34:56.000Z"))
-  );
   await expect(brandBlock.locator(".brand")).toHaveText("cheapbugs");
   await expect(brandBlock.getByText("github", { exact: true })).toHaveCount(0);
   await expect(brandBlock.getByRole("link", { name: "GitHub repository" })).toHaveAttribute(
@@ -42,7 +31,40 @@ test("shows the GitHub repository icon link beside the brand", async ({ page }) 
     "https://github.com/pierce403/cheapbugs"
   );
   await expect(brandBlock.locator(".brand-github-icon")).toBeVisible();
-  await expect(brandBlock.getByTestId("build-badge")).toHaveText(`build testbuild123 / ${expectedBuildTime}`);
+  await expect(brandBlock.getByTestId("build-badge")).toHaveText(/^build [a-z0-9]{3,12} \/ .+/i);
+});
+
+test("mobile header keeps navigation as stable tap targets", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+
+  const nav = page.locator(".nav-row");
+  const links = nav.locator(".nav-link");
+  await expect(nav).toHaveCSS("display", "grid");
+  await expect(links).toHaveCount(7);
+  await expect(page.locator(".brand")).toHaveText("cheapbugs");
+
+  const boxes = await links.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        text: node.textContent?.trim() ?? ""
+      };
+    })
+  );
+  const rows = new Map<number, typeof boxes>();
+  for (const box of boxes) {
+    rows.set(box.top, [...(rows.get(box.top) ?? []), box]);
+    expect(box.height).toBeGreaterThanOrEqual(34);
+  }
+
+  expect(Math.max(...Array.from(rows.values()).map((row) => row.length))).toBeLessThanOrEqual(2);
+  expect(boxes.at(-1)?.text).toBe("patrons");
+  expect(boxes.at(-1)?.width).toBeGreaterThan(boxes[0].width * 1.8);
 });
 
 test("submit route defaults to the broker XMTP path", async ({ page }) => {

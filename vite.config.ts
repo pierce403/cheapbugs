@@ -19,8 +19,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const routerMode = env.VITE_ROUTER_MODE === "hash" ? "hash" : "history";
   const explicitBase = env.VITE_BASE_PATH || process.env.VITE_BASE_PATH;
-  const buildId = shortBuildId(env.VITE_BUILD_ID) || shortBuildId(process.env.GITHUB_SHA) || gitCommit() || "dev";
-  const buildTime = env.VITE_BUILD_TIME || new Date().toISOString();
+  const buildId =
+    shortBuildId(env.VITE_BUILD_ID || process.env.VITE_BUILD_ID) ||
+    shortBuildId(process.env.GITHUB_SHA) ||
+    gitCommit() ||
+    "dev";
+  const buildTime = env.VITE_BUILD_TIME || process.env.VITE_BUILD_TIME || new Date().toISOString();
 
   return {
     base: explicitBase || (routerMode === "hash" ? "./" : "/"),

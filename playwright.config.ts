@@ -5,6 +5,20 @@ const chromiumExecutablePath =
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
   (existsSync("/usr/bin/google-chrome") ? "/usr/bin/google-chrome" : undefined);
 
+const webServerEnv: Record<string, string> = {
+  ...Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  ),
+  VITE_ROUTER_MODE: "history",
+  VITE_CHAIN_RPC_URL: "https://mainnet.base.org",
+  VITE_ENS_RPC_URL: "https://ethereum-rpc.publicnode.com",
+  VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK: "46093316",
+  VITE_ETHERSCAN_API_KEY: "",
+  VITE_BASESCAN_API_KEY: "",
+  VITE_BUILD_ID: "testbuild123",
+  VITE_BUILD_TIME: "2026-05-17T19:34:56.000Z"
+};
+
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
@@ -25,19 +39,11 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 5177",
+    command:
+      "VITE_BUILD_ID=testbuild123 VITE_BUILD_TIME=2026-05-17T19:34:56.000Z npm run dev -- --host 127.0.0.1 --port 5177 --force",
     url: "http://127.0.0.1:5177/",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: {
-      VITE_ROUTER_MODE: "history",
-      VITE_CHAIN_RPC_URL: "https://mainnet.base.org",
-      VITE_ENS_RPC_URL: "https://ethereum-rpc.publicnode.com",
-      VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK: "46093316",
-      VITE_ETHERSCAN_API_KEY: "",
-      VITE_BASESCAN_API_KEY: "",
-      VITE_BUILD_ID: "testbuild123",
-      VITE_BUILD_TIME: "2026-05-17T19:34:56.000Z"
-    }
+    env: webServerEnv
   }
 });
