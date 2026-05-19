@@ -9,6 +9,7 @@ import {
   parseTags
 } from "../lib/utils";
 import { RpcReadCache } from "../lib/rpcReadCache";
+import { QueryCache } from "../lib/cache";
 
 import { bugIndexAbi } from "./bugIndexAbi";
 import { createBaseReadProvider } from "./rpcProvider";
@@ -39,8 +40,11 @@ export const isBugIndexConfigured = (): boolean => Boolean(chainConfig.bugIndexA
 
 const readProvider = createBaseReadProvider();
 const readCache = new RpcReadCache();
+const persistentCache = new QueryCache("cheapbugs.bugIndex.v1");
 const LATEST_REPORTS_TTL_MS = 15_000;
 const REPORT_TTL_MS = 60_000;
+const PERSISTENT_REPORT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const PERSISTENT_LATEST_TTL_MS = 60_000;
 const BUG_INDEX_READ_TIMEOUT_MS = 4_000;
 
 const readContract = () => new Contract(bugIndexAddress(), bugIndexAbi, readProvider);
@@ -72,17 +76,27 @@ export const getBugReport = async (reportHash: `0x${string}`): Promise<Submissio
   }
 
   const key = `report:${bugIndexAddress()}:${reportHash}`;
+  const stale = persistentCache.getStale<SubmissionPublic>(key);
+  const cached = persistentCache.get<SubmissionPublic>(key);
+  if (cached) {
+    return readCache.set(key, cached, REPORT_TTL_MS);
+  }
 
   try {
-    return await readCache.getOrLoad(key, REPORT_TTL_MS, async () => {
+    const report = await readCache.getOrLoad(key, REPORT_TTL_MS, async () => {
       const record = (await withReadTimeout(
         readContract().getReport(reportHash) as Promise<ContractSubmission>,
         "Bug index getReport"
       )) as ContractSubmission;
       return fromContractSubmission(record);
     });
+    return persistentCache.set(key, report, PERSISTENT_REPORT_TTL_MS);
   } catch {
-    return readCache.getStale<SubmissionPublic>(key);
+    const staleReport = readCache.getStale<SubmissionPublic>(key) ?? stale;
+    if (staleReport) {
+      return persistentCache.set(key, staleReport, PERSISTENT_REPORT_TTL_MS);
+    }
+    return null;
   }
 };
 
@@ -92,9 +106,14 @@ export const getLatestBugReports = async (limit: number): Promise<SubmissionPubl
   }
 
   const key = `latest:${bugIndexAddress()}:${limit}`;
+  const stale = persistentCache.getStale<SubmissionPublic[]>(key);
+  const cached = persistentCache.get<SubmissionPublic[]>(key);
+  if (cached) {
+    return readCache.set(key, cached, LATEST_REPORTS_TTL_MS);
+  }
 
   try {
-    return await readCache.getOrLoad(key, LATEST_REPORTS_TTL_MS, async () => {
+    const reports = await readCache.getOrLoad(key, LATEST_REPORTS_TTL_MS, async () => {
       const hashes = await withReadTimeout(
         readContract().latestReportHashes(BigInt(limit)) as Promise<`0x${string}`[]>,
         "Bug index latestReportHashes"
@@ -102,8 +121,13 @@ export const getLatestBugReports = async (limit: number): Promise<SubmissionPubl
       const reports = await Promise.all(hashes.map((hash) => getBugReport(hash)));
       return reports.filter((entry): entry is SubmissionPublic => entry !== null);
     });
+    return persistentCache.set(key, reports, PERSISTENT_LATEST_TTL_MS);
   } catch {
-    return readCache.getStale<SubmissionPublic[]>(key) ?? [];
+    const staleReports = readCache.getStale<SubmissionPublic[]>(key) ?? stale;
+    if (staleReports) {
+      return persistentCache.set(key, staleReports, PERSISTENT_LATEST_TTL_MS);
+    }
+    return [];
   }
 };
 

@@ -61,7 +61,7 @@ cheapbugs/
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
   - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete and logs a high-visibility console error if the read resolves unavailable.
   - Header BUGZ status only reads the connected wallet BUGZ balance; it must not load token metadata, treasury BUGZ, or treasury native ETH on ordinary route changes.
-  - Browser contract adapters dedupe in-flight Base RPC reads, cache successful reads briefly, and apply a short cooldown after rate-limit errors.
+  - Browser contract adapters dedupe in-flight Base RPC reads, cache successful reads briefly, persist public bug-index reads where useful, and apply a short cooldown after rate-limit errors.
   - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows the bundle commit hash and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
@@ -165,7 +165,7 @@ cheapbugs/
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
   - Direct browser-to-index submission is disabled; `src/contracts/bugIndex.ts` keeps read helpers and exposes no direct write helper.
   - The frontend defaults to the verified Base contract suite, so new broker-published bugs can be read into index/recent-report views without requiring `VITE_BUG_INDEX_ADDRESS` in local env.
-  - Recent-report reads use short in-memory caching, in-flight request reuse, and fail-open public metadata/ENS lookups so route changes do not repeatedly call `latestReportHashes`/`getReport` or block the shell on optional display data.
+  - Recent-report reads use in-memory caching, localStorage-backed public bug-index detail caches, in-flight request reuse, and fail-open public metadata/ENS lookups so route changes and reloads do not repeatedly call `latestReportHashes`/`getReport` or block the shell on optional display data.
   - Launcher scripts refresh frontend ABI files after compilation, deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together, check the deployed wiring, and verify all three contracts on Etherscan/BaseScan by default for real deployments.
   - The Node launcher writes tracked deployment manifests and generated contract artifacts under `deployments/base-8453/`, including compiler/tool versions, optimizer and `via_ir` settings, source/package hashes, constructor arguments, transaction logs for broadcasts, verification command inputs, and generated ABI/bytecode artifacts.
   - Launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set; otherwise they deploy from `BROKER_KEY`, seed that broker as the initial broker when no broker list is provided, and transfer ownership to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
@@ -177,7 +177,7 @@ cheapbugs/
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
   - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
-  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, resolving the author ENS name, and routing to the author profile page.
+  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, caching those reads across route changes and reloads, resolving the author ENS name, and routing to the author profile page.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 
 ### Removed Direct Submission Path
@@ -243,12 +243,14 @@ cheapbugs/
   - The broker stores the out-of-bundle details key and bundle metadata in SQLite for later reveal work.
   - The bug index stores the bundle CID, bundle/content commitments, encrypted details hash, reveal time, and details-key commitment.
   - The frontend treats gateway-fetched BugBundle public metadata as untrusted display data: it validates shape and string fields, sanitizes rendered text, and falls back to onchain fields on timeout or malformed content.
+  - Browser IPFS reads cache the full encrypted BugBundle JSON in localStorage for 30 days, reuse in-flight fetches by CID, and fall back to the last cached BugBundle when a public gateway rate-limits or fails. Decrypted private details are not persisted in this cache.
   - After the 7-day judgment period, a broker adds the raw 32-byte details key to the bug index. The index verifies `sha256(rawKey) == detailsKeyCommitment`; browsers can then fetch the bundle from IPFS, read the key from the index, decrypt details locally, and render the bug as ordinary readable content.
 - **Test Criteria**:
   - [x] Broker tests cover EIP-712-authorized encrypted BugBundle verification and pinning without plaintext details in the pinned JSON.
   - [x] Broker tests cover Kubo API startup/add request wiring without requiring a live Kubo daemon.
   - [x] Browser tests cover PublishBug signature prompt state.
   - [x] Broker tests prove the broker rejects altered bundle authorization hashes and invalid BugBundle validation results.
+  - [x] Playwright covers cached BugBundle and bug-index detail rendering across reloads and when Base/IPFS providers return 429.
   - [ ] Browser tests cover submitter-side bundle construction, details encryption, and key commitment generation against deterministic vectors.
   - [ ] Broker tests add dedicated cases for bad recovered signatures, mismatched details keys, and unintelligible decrypted details.
   - [x] Contract tests prove keys cannot be revealed before the judgment window and revealed keys must match the stored commitment.

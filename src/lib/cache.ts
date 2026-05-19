@@ -40,6 +40,27 @@ export class QueryCache {
     }
   }
 
+  getStale<T>(key: string): T | null {
+    const memoryHit = this.memory.get(key);
+    if (memoryHit) {
+      return memoryHit.value as T;
+    }
+
+    const raw = window.localStorage.getItem(this.storageKey(key));
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as CachedRecord<T>;
+      this.memory.set(key, parsed as CachedRecord<unknown>);
+      return parsed.value;
+    } catch {
+      window.localStorage.removeItem(this.storageKey(key));
+      return null;
+    }
+  }
+
   set<T>(key: string, value: T, ttlMs: number): T {
     const record: CachedRecord<T> = {
       value,
@@ -47,7 +68,11 @@ export class QueryCache {
     };
 
     this.memory.set(key, record as CachedRecord<unknown>);
-    window.localStorage.setItem(this.storageKey(key), JSON.stringify(record));
+    try {
+      window.localStorage.setItem(this.storageKey(key), JSON.stringify(record));
+    } catch {
+      // Keep the in-memory copy even when localStorage quota or browser policy blocks persistence.
+    }
     return value;
   }
 

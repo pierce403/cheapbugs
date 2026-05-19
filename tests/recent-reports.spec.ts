@@ -57,6 +57,34 @@ const reportTuple = () => {
   ];
 };
 
+const submissionPublic = () => ({
+  reportId: "CB-LIVE-0001",
+  reportHash,
+  reporterAddress,
+  createdAt: new Date(1_779_120_000 * 1000).toISOString(),
+  disclosureMode: "public",
+  publicSummary: "Fresh broker-published bug from chain.",
+  encryptedPayloadCid: "ipfs://bafyrecentbug",
+  targetKind: "protocol",
+  targetRefHash: id("base-protocol"),
+  tags: ["base", "parser"],
+  contentHash: id("public-content")
+});
+
+const bugBundlePayload = () => ({
+  schema: "cheapbugs.bug_bundle.v1",
+  version: 1,
+  core: {
+    submission: {
+      title: "Live parser exploit",
+      target: {
+        kind: "protocol",
+        reference: "Base protocol parser"
+      }
+    }
+  }
+});
+
 const mockBaseRpc = async (page: Page): Promise<{ counts: { latest: number; getReport: number } }> => {
   const counts = { latest: 0, getReport: 0 };
 
@@ -157,31 +185,45 @@ const mockEnsRpc = async (page: Page): Promise<void> => {
   });
 };
 
-const mockBugBundleGateway = async (page: Page): Promise<void> => {
+const mockBugBundleGateway = async (page: Page): Promise<{ counts: { bundle: number } }> => {
+  const counts = { bundle: 0 };
   await page.route("https://ipfs.io/ipfs/bafyrecentbug", async (route) => {
+    counts.bundle += 1;
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
-        schema: "cheapbugs.bug_bundle.v1",
-        version: 1,
-        core: {
-          submission: {
-            title: "Live parser exploit",
-            target: {
-              kind: "protocol",
-              reference: "Base protocol parser"
-            }
-          }
-        }
-      })
+      body: JSON.stringify(bugBundlePayload())
     });
   });
+
+  return { counts };
+};
+
+const seedExpiredReportCaches = async (page: Page): Promise<void> => {
+  await page.addInitScript(
+    ({ address, hash, report, bundle }) => {
+      const expiredRecord = (value: unknown) =>
+        JSON.stringify({
+          value,
+          expiresAt: Date.now() - 1
+        });
+
+      window.localStorage.setItem(`cheapbugs.bugIndex.v1:latest:${address}:12`, expiredRecord([report]));
+      window.localStorage.setItem(`cheapbugs.bugIndex.v1:report:${address}:${hash}`, expiredRecord(report));
+      window.localStorage.setItem("cheapbugs.ipfs:ipfs-gateway:ipfs://bafyrecentbug", expiredRecord(bundle));
+    },
+    {
+      address: bugIndexAddress,
+      hash: reportHash,
+      report: submissionPublic(),
+      bundle: bugBundlePayload()
+    }
+  );
 };
 
 test("renders newly indexed onchain bugs in recent reports", async ({ page }) => {
   const { counts } = await mockBaseRpc(page);
   await mockEnsRpc(page);
-  await mockBugBundleGateway(page);
+  const gateway = await mockBugBundleGateway(page);
 
   await page.goto("/");
 
@@ -202,18 +244,61 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
 
   expect(counts.latest).toBeGreaterThan(0);
   expect(counts.getReport).toBeGreaterThan(0);
+  expect(gateway.counts.bundle).toBe(1);
 
   const countsAfterFirstRender = { ...counts };
+  const gatewayCallsAfterFirstRender = gateway.counts.bundle;
   await page.getByRole("link", { name: "submit" }).click();
   await expect(page).toHaveURL(/\/submit$/);
   await page.getByRole("link", { name: "index" }).click();
   await expect(reportRow).toContainText("Fresh broker-published bug from chain.");
   expect(counts).toEqual(countsAfterFirstRender);
+  expect(gateway.counts.bundle).toBe(gatewayCallsAfterFirstRender);
 
-  await reportRow.getByRole("link", { name: "alice.eth" }).click();
+  await page.reload();
+  const reloadedRecentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
+  const reloadedReportRow = reloadedRecentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
+  await expect(reloadedReportRow).toContainText("Base protocol parser (protocol)");
+  expect(counts).toEqual(countsAfterFirstRender);
+  expect(gateway.counts.bundle).toBe(gatewayCallsAfterFirstRender);
+
+  await reloadedReportRow.getByRole("link", { name: "alice.eth" }).click();
   await expect(page).toHaveURL(new RegExp(`/profile/${reporterAddress}$`));
   await expect(page.locator(".profile-page-panel")).toContainText("alice.eth");
   await expect(page.locator(".profile-page-panel")).toContainText("420 BUGZ");
   const profileSubmissions = page.locator("section").filter({ hasText: "[ previous submissions ]" });
   await expect(profileSubmissions).toContainText("Live parser exploit");
+});
+
+test("renders stale cached report and BugBundle details when providers rate limit", async ({ page }) => {
+  await seedExpiredReportCaches(page);
+  await mockEnsRpc(page);
+
+  let baseCalls = 0;
+  let gatewayCalls = 0;
+  await page.route("https://mainnet.base.org/**", async (route) => {
+    baseCalls += 1;
+    await route.fulfill({
+      status: 429,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { message: "Too Many Requests" } })
+    });
+  });
+  await page.route("https://ipfs.io/ipfs/bafyrecentbug", async (route) => {
+    gatewayCalls += 1;
+    await route.fulfill({
+      status: 429,
+      contentType: "text/plain",
+      body: "Too Many Requests"
+    });
+  });
+
+  await page.goto("/");
+
+  const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
+  const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
+  await expect(reportRow).toContainText("Fresh broker-published bug from chain.");
+  await expect(reportRow).toContainText("Base protocol parser (protocol)");
+  expect(baseCalls).toBeGreaterThan(0);
+  expect(gatewayCalls).toBe(1);
 });

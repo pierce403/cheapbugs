@@ -4,7 +4,8 @@ import { QueryCache } from "./cache";
 import { STORAGE_KEYS } from "./constants";
 
 const cache = new QueryCache("cheapbugs.ipfs");
-const JSON_CACHE_TTL = 60_000;
+const JSON_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+const inflightJson = new Map<string, Promise<unknown>>();
 
 export const normalizeIpfsUri = (value: string): string => {
   if (value.startsWith("ipfs://")) {
@@ -41,5 +42,30 @@ export const uploadJson = async <T>(
 export const downloadJson = async <T>(provider: StorageProvider, uri: string): Promise<T> => {
   const normalized = normalizeIpfsUri(uri);
   const key = `${provider.id}:${normalized}`;
-  return cache.getOrLoad(key, JSON_CACHE_TTL, () => provider.downloadJson<T>(normalized));
+  const stale = cache.getStale<T>(key);
+  const cached = cache.get<T>(key);
+  if (cached !== null) {
+    return cached;
+  }
+
+  const existing = inflightJson.get(key);
+  if (existing) {
+    return existing as Promise<T>;
+  }
+
+  const load = provider
+    .downloadJson<T>(normalized)
+    .then((value) => cache.set(key, value, JSON_CACHE_TTL))
+    .catch((error) => {
+      if (stale !== null) {
+        return cache.set(key, stale, JSON_CACHE_TTL);
+      }
+      throw error;
+    })
+    .finally(() => {
+      inflightJson.delete(key);
+    });
+
+  inflightJson.set(key, load);
+  return load;
 };

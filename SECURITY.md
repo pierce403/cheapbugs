@@ -96,6 +96,7 @@ Current and required properties:
 - Details keys must not be included in IPFS bundles. They are held by the broker during the judgment period and later published through the bug index after the reveal window opens.
 - Public gateway priming is best-effort and does not guarantee persistence. It can also reveal a CID to a third-party gateway before the onchain index references it, so it is disabled by default.
 - IPFS CIDs and gateway responses are untrusted input. Rendering code must sanitize and validate fetched content, including the public BugBundle title and target fields used in archive tables.
+- Browser localStorage may cache full encrypted BugBundle JSON and public bug-index records to reduce gateway/RPC pressure. This cache must not store decrypted private details or unrevealed details keys.
 - Pinata credentials must stay out of browser code.
 
 ### EAS
