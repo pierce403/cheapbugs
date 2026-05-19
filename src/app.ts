@@ -460,7 +460,6 @@ export class CheapBugsApp {
 
     const navItems = [
       ["/", "index"],
-      ["/about", "about"],
       ["/submit", "submit"],
       ["/review", "review"],
       ["/stake", "stake"],
@@ -471,6 +470,7 @@ export class CheapBugsApp {
     if (this.ownerAccessState.status === "ready" && this.ownerAccessState.access.isAnyOwner) {
       navItems.push(["/manage", "manage"]);
     }
+    navItems.push(["/about", "about"]);
     const nav = navItems
       .map(
         ([path, label]) =>

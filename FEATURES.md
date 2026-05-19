@@ -55,7 +55,7 @@ cheapbugs/
 ### Static Web App Shell
 
 - **Stability**: stable
-- **Description**: Vite/TypeScript browser app with routes for `index`, `about`, `submit`, `review`, `report`, `profile`, `stake`, `treasury`, `manage`, `token`, and `patrons`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
+- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `stake`, `treasury`, `manage`, `token`, `patrons`, and `about`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
 - **Properties**:
   - The first screen is the usable app, not a landing page.
   - The home intro describes CheapBugs as a public goods crowdfunding protocol and summarizes the static GitHub/IPFS/XMTP/Base architecture without listing raw contract addresses, a patrons preview, or a footer in the first screen.
@@ -68,6 +68,7 @@ cheapbugs/
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
   - The `about` route is a static protocol explainer covering bug submission, broker publishing, judging, reveal, payouts, smart contract mechanics, the tech stack, and BUGZ tokenomics without making public RPC or IPFS reads.
   - The `stake` and `treasury` navigation items are always available; the `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
+  - The `about` navigation item stays at the end of the nav, after the owner-only `manage` item when it is visible.
   - On mobile widths, the shell stacks the banner/header content, keeps auth controls full-width, and renders navigation as stable equal-width two-column tap targets.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
