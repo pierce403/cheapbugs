@@ -3,12 +3,15 @@ import { authController } from "./services";
 import { AppRouter } from "./router";
 import { renderHomeView } from "./views/home";
 import { renderLoginView } from "./views/login";
+import { renderManageView } from "./views/manage";
 import { renderPatronsView } from "./views/patrons";
 import { renderProfileView } from "./views/profile";
 import { renderReportView } from "./views/report";
 import { renderReviewView } from "./views/review";
+import { renderStakeView } from "./views/stake";
 import { renderSubmitView } from "./views/submit";
 import { renderTokenView } from "./views/token";
+import { loadContractOwnerAccess } from "./contracts/cheapbugsSuite";
 import { ENS_REGISTER_URL, ensProfileUrl } from "./lib/ens";
 import { appLog } from "./lib/logger";
 import { loadBugzHeaderBalance, type HeaderBugzBalance } from "./lib/token";
@@ -18,7 +21,7 @@ import { chainConfig } from "./config/chains";
 import { env } from "./config/env";
 import type { AppNotice } from "./types/domain";
 import type { SessionState } from "./types/app";
-import type { AppViewContext, ViewResult } from "./views/types";
+import type { AppViewContext, ContractOwnerViewState, ViewResult } from "./views/types";
 
 const noticeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const expectedLaunchDate = "June 1, 2026";
@@ -227,6 +230,8 @@ export class CheapBugsApp {
   private profileModalOpen = false;
   private bugzHeaderState: BugzHeaderState = { status: "idle", address: null };
   private bugzHeaderRequestId = 0;
+  private ownerAccessState: ContractOwnerViewState = { status: "idle", address: null };
+  private ownerAccessRequestId = 0;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -248,6 +253,7 @@ export class CheapBugsApp {
     return {
       route: this.router.getRoute(),
       session: authController.getSession(),
+      ownerAccess: this.ownerAccessState,
       router: this.router,
       storage: activeStorageProvider(),
       notices: this.notices,
@@ -273,6 +279,10 @@ export class CheapBugsApp {
         return renderProfileView(context);
       case "review":
         return renderReviewView(context);
+      case "stake":
+        return renderStakeView(context);
+      case "manage":
+        return renderManageView(context);
       case "token":
         return renderTokenView(context);
       case "patrons":
@@ -313,12 +323,50 @@ export class CheapBugsApp {
     });
   }
 
+  private ensureOwnerAccessLoad(session: SessionState): void {
+    if (!session.address) {
+      this.ownerAccessState = { status: "idle", address: null };
+      return;
+    }
+
+    if (
+      this.ownerAccessState.address === session.address &&
+      (this.ownerAccessState.status === "loading" ||
+        this.ownerAccessState.status === "ready" ||
+        this.ownerAccessState.status === "error")
+    ) {
+      return;
+    }
+
+    const requestId = ++this.ownerAccessRequestId;
+    const address = session.address;
+    this.ownerAccessState = { status: "loading", address, requestId };
+    void loadContractOwnerAccess(address)
+      .then((access) => {
+        if (this.ownerAccessRequestId !== requestId || authController.getSession().address !== address) {
+          return;
+        }
+        this.ownerAccessState = { status: "ready", address, access };
+        void this.render();
+      })
+      .catch((error) => {
+        if (this.ownerAccessRequestId !== requestId || authController.getSession().address !== address) {
+          return;
+        }
+        const errorMessage = error instanceof Error ? error.message : "Contract owner lookup failed.";
+        appLog.warn("manage: owner access lookup failed", { error });
+        this.ownerAccessState = { status: "error", address, errorMessage };
+        void this.render();
+      });
+  }
+
   private async shell(view: ViewResult, context: AppViewContext): Promise<string> {
     const session = context.session;
     if (!session.address) {
       this.profileModalOpen = false;
     }
     this.ensureBugzHeaderLoad(session);
+    this.ensureOwnerAccessLoad(session);
     const bugzStatus = renderBugzStatus(session, context.router.href("/token"), this.bugzHeaderState);
     const profileModal = this.profileModalOpen ? renderProfileModal(session, bugzStatus) : "";
     const notices = context.notices
@@ -332,13 +380,18 @@ export class CheapBugsApp {
       )
       .join("");
 
-    const nav = [
+    const navItems = [
       ["/", "index"],
       ["/submit", "submit"],
       ["/review", "review"],
+      ["/stake", "stake"],
       ["/token", "token"],
       ["/patrons", "patrons"]
-    ]
+    ];
+    if (this.ownerAccessState.status === "ready" && this.ownerAccessState.access.isAnyOwner) {
+      navItems.push(["/manage", "manage"]);
+    }
+    const nav = navItems
       .map(
         ([path, label]) =>
           `<a href="${context.router.href(path)}" data-nav class="nav-link">${escapeHtml(label)}</a>`
@@ -405,6 +458,7 @@ export class CheapBugsApp {
 
   async render(): Promise<void> {
     const token = ++this.renderToken;
+    this.ensureOwnerAccessLoad(authController.getSession());
     const context = this.buildContext();
     let view: ViewResult;
 

@@ -677,6 +677,10 @@ button:disabled,
   color: var(--warning);
 }
 
+.muted-copy {
+  color: var(--muted);
+}
+
 .field-warning {
   margin: 0;
 }
@@ -731,6 +735,134 @@ button:disabled,
   padding: 8px;
 }
 
+.action-status {
+  min-height: 20px;
+  color: var(--warning);
+  overflow-wrap: anywhere;
+}
+
+.manage-page-panel,
+.stake-page-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.manage-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.manage-action-form {
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.inline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.stake-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.stake-level-badge {
+  width: 86px;
+  min-height: 86px;
+  border: 1px solid var(--line-soft);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  background: #0f0a08;
+}
+
+.stake-level-badge span {
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.stake-level-badge strong {
+  color: var(--warning);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.stake-meter-block {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stake-meter-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.stake-meter-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stake-meter-row span:last-child {
+  text-align: right;
+}
+
+.stake-meter {
+  height: 12px;
+  border: 1px solid rgba(255, 106, 0, 0.36);
+  background: #050505;
+  overflow: hidden;
+}
+
+.stake-meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff6a00, #ffb06d);
+}
+
+.countdown-fill {
+  background: linear-gradient(90deg, #ff8b3d, #ffd0a3);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metric-grid div {
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.16);
+  min-width: 0;
+}
+
+.metric-grid span,
+.metric-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.metric-grid span {
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.stake-withdraw-actions {
+  margin-top: 10px;
+}
+
 .trade-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -751,12 +883,15 @@ button:disabled,
 
   .banner,
   .development-banner,
-  .intro-panel,
-  .profile-page-header,
-  .two-column,
-  .trade-grid,
-  .auth-grid,
-  .inline-input {
+    .intro-panel,
+    .profile-page-header,
+    .stake-hero,
+    .two-column,
+    .trade-grid,
+    .manage-action-grid,
+    .metric-grid,
+    .auth-grid,
+    .inline-input {
     grid-template-columns: 1fr;
     display: grid;
   }

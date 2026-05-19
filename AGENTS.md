@@ -78,6 +78,8 @@ npm run launch:bug-index
 - `deployments/base-8453/cheapbugs-contract-suite.latest.json`: tracked reproducibility manifest for the latest CheapBugs contract-suite dry run or deployment
 - `deployments/base-8453/generated/latest/`: tracked generated Foundry artifacts for the latest contract-suite build
 - `src/contracts/bugIndex.ts`: frontend read/write adapter for the bug index contract
+- `src/contracts/cheapbugsSuite.ts`: frontend owner/read/write adapter for CheapBugs contract-suite management
+- `src/contracts/bondVault.ts`: frontend bond-vault staking adapter for BUGZ approval, bonding, delayed withdrawals, and level reads
 - `src/contracts/bugzToken.ts`: read-only BUGZ adapter for metadata, connected-wallet balances, optional treasury stats, and patron scans
 - `src/contracts/bugzTrade.ts`: static frontend Uniswap v4 trade adapter for BUGZ buy/sell on Base
 - `src/contracts/bugzTokenAbi.ts`: generated frontend ABI module for the BUGZ token contract
@@ -88,6 +90,8 @@ npm run launch:bug-index
 - `src/lib/reportDisplay.ts`: title/target display fallbacks from BugBundle public metadata plus onchain fields
 - `src/lib/logger.ts`: namespaced browser console logging helper for click/auth/debug breadcrumbs
 - `src/views/profile.ts`: public author profile route for ENS avatar/name, BUGZ balance, and recent submissions
+- `src/views/manage.ts`: owner-gated contract-suite management route
+- `src/views/stake.ts`: connected-wallet BUGZ bonding and delayed-withdrawal route
 - `src/xmtp/browser.ts`: browser XMTP SDK adapter for local/external wallet signers
 - `src/xmtp/broker.ts`: structured broker submission DM helper
 - `src/storage/gateway.ts`: static IPFS gateway reader and disabled-upload fallback
@@ -123,7 +127,7 @@ npm run launch:bug-index
 - The verified Base contract suite is `CheapBugsBugIndex` `0x515FDbc9876aC26870794E26605c7DD04c18679b`, `CheapBugsBondVault` `0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3`, and `CheapBugsTreasuryVault` `0x4A080668d9848928dc6D48921cbDc4273fe27A9d`. The frontend defaults to all three addresses in `src/config/env.ts`; `VITE_BUGZ_TREASURY_ADDRESS` remains only a legacy treasury-vault display alias.
 - BUGZ is live on Base at `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07` and is the default `VITE_BUGZ_TOKEN_ADDRESS`. The contract suite hardcodes this BUGZ address; do not reintroduce a repo-managed BUGZ token deployment path.
 - The `/token` route reads connected-wallet BUGZ balances and performs static, browser-signed buy/sell swaps through the Uniswap v4 Quoter and Universal Router 2.1.1 on Base. Do not replace this with a backend buy-flow.
-- The frontend nav is now `index`, `submit`, `review`, `token`, `patrons`, with compact login/session controls in the top-right header block. Do not re-add the old chain/storage/wallet/SIWE debug block to the header.
+- The frontend nav is now `index`, `submit`, `review`, `stake`, `token`, `patrons`, with `manage` appearing only for wallets that own at least one CheapBugs contract. Header login/session controls stay compact in the top-right header block. Do not re-add the old chain/storage/wallet/SIWE debug block to the header.
 - The header brand row includes a compact orange GitHub icon link to `https://github.com/pierce403/cheapbugs` immediately to the right of the `cheapbugs` wordmark, followed by build metadata from `src/buildInfo.ts`. The build timestamp is injected as ISO and formatted in the viewer's local timezone.
 - Reviewer trust is frontend-enforced through an allowlist in config. This is an MVP choice and should be replaceable later.
 - The launcher scripts refresh their frontend ABI files after compilation so the app stays aligned with deployed contract shapes. Real contract-suite deployments verify all three contracts on Etherscan/BaseScan by default; set `ETHERSCAN_API_KEY` or `BASESCAN_API_KEY`, and use `BUG_INDEX_VERIFY_CONTRACTS=0` only for intentional unverified deploys.
@@ -136,6 +140,9 @@ npm run launch:bug-index
 - The home page patron preview is cache-only; do not make the home route trigger fresh holder scans.
 - Header BUGZ status should call `loadBugzHeaderBalance`, not `loadTokenDashboard`; ordinary route chrome must only read connected wallet BUGZ balance and avoid treasury/token metadata dashboard reads.
 - Base RPC contract adapters use `src/lib/rpcReadCache.ts` for short success caching, in-flight deduplication, and rate-limit cooldowns. Reuse that for new public RPC read adapters.
+- The `/manage` route uses `src/contracts/cheapbugsSuite.ts` to read `owner()` across the suite and expose owner actions for index brokers/admins/vault wiring, treasury broker/index/divisor wiring, bond slasher/treasury wiring, and ownership transfers. `renounceOwnership` is intentionally not exposed in the browser UI.
+- The `/stake` route uses `src/contracts/bondVault.ts` and shows active bond, pending withdrawal, wallet BUGZ, allowance, level, next-level threshold, and a live countdown for delayed withdrawal step 2. Keep copy clear that pending withdrawals remain slashable and new bonds cancel pending withdrawals.
+- `tests/manage-stake.spec.ts` mocks Base RPC for owner checks, role snapshots, and bond-vault account state.
 - `tests/recent-reports.spec.ts` mocks Base JSON-RPC, IPFS BugBundle public metadata, ENS, and BUGZ balance reads to verify that index `latestReportHashes` plus `getReport` results render in the home route's `[ recent reports ]` table and link to the author profile route.
 - `tests/header-bugz.spec.ts` verifies connected header BUGZ status does not issue treasury native balance reads on ordinary routes.
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.

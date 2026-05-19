@@ -35,6 +35,8 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The broker pins the verified encrypted BugBundle through local Kubo without adding broker status fields to the payload.
 - The pinned bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
 - The frontend may fetch the pinned BugBundle public core to display title and target metadata, but that gateway content is untrusted display data and must not override onchain attribution, commitments, payout state, or authorization checks.
+- The frontend owner console reads contract ownership and exposes owner transaction forms only as a convenience layer. `onlyOwner` checks in the contracts remain the authority for all management calls.
+- The frontend staking route helps users approve, bond, request withdrawal, and withdraw BUGZ, but bond accounting, withdrawal delays, and slashing guarantees are enforced only by `CheapBugsBondVault`.
 - After IPFS pinning, the broker publishes the signed report to `CheapBugsBugIndex.publishBug`, checks the broker role and gas funding before broadcast, waits for a receipt, and records the report hash and transaction hash in SQLite. `BROKER_DRY_RUN=1` skips the broadcast and Signal relay while still exercising validation and IPFS pinning.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
 
@@ -62,6 +64,7 @@ Current and required properties:
 - The browser is trusted to display the correct signing intent only if the loaded static assets are authentic.
 - Wallet signatures are the source of identity authority, not form fields.
 - ENS names and avatars are presentation only. Author profile links and report attribution must continue to use the reporter address stored by the bug index.
+- Owner/manage UI visibility is presentation only. A hidden, stale, or manually opened `/manage` route must not be treated as authorization; contracts must enforce ownership.
 - Local XMTP identity keys are browser-stored recovery material. A compromised browser profile compromises that local wallet.
 - External wallets and WalletConnect devices must show signature prompts clearly enough for users to detect unexpected signing requests.
 
@@ -117,12 +120,14 @@ Current and required properties:
 - Only active bond contributes to `getLevel` and bonded bug vote weight.
 - Vote weights are snapshotted in the index at vote time, so later withdrawals or slashes do not alter already-cast vote totals.
 - The owner controls slashers, so slasher compromise can transfer bonded BUGZ to the treasury.
+- The `/stake` frontend must present pending withdrawals as still slashable and must not imply the countdown protects funds from slashing.
 
 ### CheapBugsTreasuryVault
 
 - Detail-key purchases are onchain payment records for broker verification; the broker still decides whether and when to deliver a key offchain.
 - Rewards can only be paid by the configured index and only for brokers also authorized by the treasury.
 - A bad treasury/index configuration can block payouts or pay from an unintended treasury. The launcher checks the deployed wiring, and operators should still record the verified addresses before funding the treasury.
+- Browser owner controls for vault/index wiring, role lists, payout divisor, and ownership transfer are operational convenience only. Operators should still verify transaction prompts and resulting contract state before funding or relying on a new configuration.
 - Deployment manifests under `deployments/` are public reproducibility records. They include deployer and role addresses, constructor arguments, bytecode hashes, generated artifacts, and transaction hashes, but must not include private keys, explorer API keys, or unredacted RPC URLs.
 
 ### BUGZ Credentials And Reputation

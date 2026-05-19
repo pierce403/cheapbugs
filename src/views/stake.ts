@@ -1,0 +1,323 @@
+import {
+  approveBondVault,
+  bondBugz,
+  loadBondVaultDashboard,
+  requestBondWithdrawal,
+  withdrawBond,
+  type BondVaultDashboard
+} from "../contracts/bondVault";
+import { appLog } from "../lib/logger";
+import { escapeHtml, formatTokenAmount, shortHash } from "../lib/utils";
+
+import type { AppViewContext, ViewResult } from "./types";
+
+const wholeBugz = (decimals: number): bigint => 10n ** BigInt(decimals);
+
+const pow10 = (exponent: number): bigint => {
+  let value = 1n;
+  for (let index = 0; index < exponent; index += 1) {
+    value *= 10n;
+  }
+  return value;
+};
+
+const nextLevelThreshold = (level: number): bigint => pow10(Math.max(1, level + 1));
+
+const levelProgressPercent = (active: bigint, level: number, decimals: number): number => {
+  const whole = active / wholeBugz(decimals);
+  const next = nextLevelThreshold(level);
+  const previous = level <= 0 ? 0n : pow10(level);
+  const span = next - previous;
+  if (span <= 0n) {
+    return 100;
+  }
+  const progress = whole > previous ? whole - previous : 0n;
+  return Math.max(0, Math.min(100, Number((progress * 10_000n) / span) / 100));
+};
+
+const withdrawalState = (dashboard: BondVaultDashboard): { ready: boolean; hasPending: boolean; secondsRemaining: number } => {
+  const hasPending = dashboard.pendingWithdrawal > 0n;
+  if (!hasPending || dashboard.withdrawAvailableAt <= 0) {
+    return { hasPending, ready: false, secondsRemaining: 0 };
+  }
+
+  const secondsRemaining = Math.max(0, dashboard.withdrawAvailableAt - Math.floor(Date.now() / 1000));
+  return {
+    hasPending,
+    ready: secondsRemaining === 0,
+    secondsRemaining
+  };
+};
+
+const formatDuration = (seconds: number): string => {
+  if (seconds <= 0) {
+    return "ready now";
+  }
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const secs = seconds % 60;
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${secs}s`;
+  }
+  return `${minutes}m ${secs}s`;
+};
+
+const countdownProgress = (dashboard: BondVaultDashboard): number => {
+  if (!dashboard.pendingWithdrawal || !dashboard.withdrawAvailableAt) {
+    return 0;
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const start = dashboard.withdrawAvailableAt - dashboard.withdrawalDelaySeconds;
+  const elapsed = Math.max(0, now - start);
+  return Math.max(0, Math.min(100, (elapsed / dashboard.withdrawalDelaySeconds) * 100));
+};
+
+const token = (value: bigint | null, dashboard: Pick<BondVaultDashboard, "decimals" | "symbol">): string =>
+  value === null ? "-" : `${formatTokenAmount(value, dashboard.decimals)} ${dashboard.symbol}`;
+
+const renderConnect = (): string => `
+  <section class="panel">
+    <div class="panel-title">[ stake ]</div>
+    <p class="warning-copy">Connect a wallet to bond BUGZ, see your level, or request a delayed withdrawal.</p>
+  </section>
+`;
+
+const renderStake = (dashboard: BondVaultDashboard): string => {
+  if (!dashboard.isConfigured) {
+    return `
+      <section class="panel">
+        <div class="panel-title">[ stake ]</div>
+        <p class="warning-copy">The BUGZ token or bond vault address is not configured for this deployment.</p>
+      </section>
+    `;
+  }
+
+  const level = dashboard.level;
+  const nextThreshold = nextLevelThreshold(level);
+  const progress = levelProgressPercent(dashboard.active, level, dashboard.decimals);
+  const withdrawal = withdrawalState(dashboard);
+  const countdown = formatDuration(withdrawal.secondsRemaining);
+  const countdownPercent = withdrawal.ready ? 100 : countdownProgress(dashboard);
+  const withdrawDisabled = withdrawal.ready ? "" : "disabled";
+
+  return `
+    <section class="panel stake-page-panel" data-testid="stake-panel">
+      <div class="panel-title">[ stake ]</div>
+      ${dashboard.errorMessage ? `<p class="warning-copy">${escapeHtml(dashboard.errorMessage)}</p>` : ""}
+      <div class="stake-hero">
+        <div class="stake-level-badge">
+          <span>level</span>
+          <strong>${level}</strong>
+        </div>
+        <div class="stake-meter-block">
+          <div class="stake-meter-row">
+            <span>${escapeHtml(token(dashboard.active, dashboard))} active</span>
+            <span>next level at ${nextThreshold.toLocaleString()} ${escapeHtml(dashboard.symbol)}</span>
+          </div>
+          <div class="stake-meter" aria-label="level progress">
+            <div class="stake-meter-fill" style="width: ${progress.toFixed(2)}%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="metric-grid">
+        <div><span>active bond</span><strong>${escapeHtml(token(dashboard.active, dashboard))}</strong></div>
+        <div><span>pending withdrawal</span><strong>${escapeHtml(token(dashboard.pendingWithdrawal, dashboard))}</strong></div>
+        <div><span>wallet balance</span><strong>${escapeHtml(token(dashboard.tokenBalance, dashboard))}</strong></div>
+        <div><span>vault allowance</span><strong>${escapeHtml(token(dashboard.allowance, dashboard))}</strong></div>
+      </div>
+      <table class="data-table compact-table">
+        <tbody>
+          <tr><th>bond vault</th><td><code>${escapeHtml(dashboard.vaultAddress)}</code></td></tr>
+          <tr><th>BUGZ token</th><td><code>${escapeHtml(dashboard.tokenAddress)}</code></td></tr>
+          <tr><th>wallet</th><td><code>${escapeHtml(dashboard.account)}</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">[ add BUGZ ]</div>
+      <form id="stake-bond-form" class="stack-form narrow-form">
+        <label>
+          amount
+          <input id="stake-bond-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="1000" required />
+        </label>
+        ${
+          dashboard.pendingWithdrawal > 0n
+            ? `<p class="field-warning warning-copy">Adding a new bond cancels your pending withdrawal and restores it to active bond.</p>`
+            : ""
+        }
+        <p class="helper-copy">Approve the vault first when the amount is above the current allowance, then bond to level up.</p>
+        <div class="button-row">
+          <button class="button secondary" type="submit" name="stakeAction" value="approve">approve BUGZ</button>
+          <button class="button" type="submit" name="stakeAction" value="bond">bond BUGZ</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">[ withdraw ]</div>
+      <div class="withdraw-countdown" data-withdraw-available-at="${dashboard.withdrawAvailableAt}" data-withdraw-delay="${dashboard.withdrawalDelaySeconds}">
+        <div class="stake-meter-row">
+          <span>step 2: ${escapeHtml(withdrawal.ready ? "withdrawal ready" : withdrawal.hasPending ? "waiting period" : "no pending withdrawal")}</span>
+          <span data-countdown-label>${escapeHtml(withdrawal.hasPending ? countdown : "-")}</span>
+        </div>
+        <div class="stake-meter" aria-label="withdrawal countdown">
+          <div class="stake-meter-fill countdown-fill" data-countdown-fill style="width: ${countdownPercent.toFixed(2)}%"></div>
+        </div>
+      </div>
+      <form id="stake-withdraw-request-form" class="stack-form narrow-form">
+        <label>
+          amount to request
+          <input id="stake-withdraw-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="100" required />
+        </label>
+        <p class="helper-copy">Requesting withdrawal moves active BUGZ into the 7-day pending queue. Pending BUGZ remains slashable and no longer counts toward voting level.</p>
+        <button class="button secondary" type="submit" ${dashboard.active > 0n ? "" : "disabled"}>request withdrawal</button>
+      </form>
+      <div class="button-row stake-withdraw-actions">
+        <button id="stake-withdraw-button" class="button" type="button" ${withdrawDisabled}>withdraw pending BUGZ</button>
+      </div>
+      <div id="stake-action-status" class="action-status" role="status" aria-live="polite"></div>
+    </section>
+  `;
+};
+
+const bindCountdown = (root: HTMLElement): void => {
+  const countdown = root.querySelector<HTMLElement>(".withdraw-countdown");
+  const label = root.querySelector<HTMLElement>("[data-countdown-label]");
+  const fill = root.querySelector<HTMLElement>("[data-countdown-fill]");
+  const withdrawButton = root.querySelector<HTMLButtonElement>("#stake-withdraw-button");
+  if (!countdown || !label || !fill) {
+    return;
+  }
+
+  const availableAt = Number(countdown.dataset.withdrawAvailableAt || "0");
+  const delay = Number(countdown.dataset.withdrawDelay || "604800");
+  if (!availableAt) {
+    return;
+  }
+
+  const tick = () => {
+    if (!countdown.isConnected) {
+      globalThis.clearInterval(timer);
+      return;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const remaining = Math.max(0, availableAt - now);
+    const start = availableAt - delay;
+    const progress = remaining === 0 ? 100 : Math.max(0, Math.min(100, ((now - start) / delay) * 100));
+    label.textContent = formatDuration(remaining);
+    fill.style.width = `${progress.toFixed(2)}%`;
+    if (withdrawButton && remaining === 0) {
+      withdrawButton.disabled = false;
+    }
+  };
+
+  const timer = globalThis.setInterval(tick, 1000);
+  tick();
+};
+
+export const renderStakeView = async (context: AppViewContext): Promise<ViewResult> => {
+  if (!context.session.address) {
+    return {
+      title: "Stake",
+      html: renderConnect()
+    };
+  }
+
+  const dashboard = await loadBondVaultDashboard(context.session.address);
+  return {
+    title: "Stake",
+    html: renderStake(dashboard),
+    afterRender(root) {
+      bindCountdown(root);
+      const status = root.querySelector<HTMLElement>("#stake-action-status");
+      const setStatus = (message: string) => {
+        if (status) {
+          status.textContent = message;
+        }
+      };
+      const buttons = () => Array.from(root.querySelectorAll<HTMLButtonElement>("button"));
+      const withButtonsDisabled = async (work: () => Promise<void>) => {
+        const allButtons = buttons();
+        allButtons.forEach((button) => {
+          button.disabled = true;
+        });
+        try {
+          await work();
+        } finally {
+          allButtons.forEach((button) => {
+            button.disabled = false;
+          });
+        }
+      };
+
+      root.querySelector<HTMLFormElement>("#stake-bond-form")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
+        const form = event.currentTarget as HTMLFormElement;
+        const amount = String(new FormData(form).get("amount") ?? "");
+        const action = submitter?.value === "approve" ? "approve" : "bond";
+        await withButtonsDisabled(async () => {
+          setStatus(action === "approve" ? "waiting for approval transaction..." : "waiting for bond transaction...");
+          try {
+            const result = action === "approve" ? await approveBondVault(amount) : await bondBugz(amount);
+            const message = result.skipped
+              ? "Bond vault already has enough allowance."
+              : `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
+            setStatus(message);
+            context.notify("success", message);
+            await context.rerender();
+          } catch (error) {
+            appLog.warn("stake: bond action failed", { error });
+            const message = error instanceof Error ? error.message : "Stake action failed.";
+            setStatus(message);
+            context.notify("error", message);
+          }
+        });
+      });
+
+      root.querySelector<HTMLFormElement>("#stake-withdraw-request-form")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget as HTMLFormElement;
+        const amount = String(new FormData(form).get("amount") ?? "");
+        await withButtonsDisabled(async () => {
+          setStatus("waiting for withdrawal request transaction...");
+          try {
+            const result = await requestBondWithdrawal(amount);
+            const message = `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
+            setStatus(message);
+            context.notify("success", message);
+            await context.rerender();
+          } catch (error) {
+            appLog.warn("stake: withdrawal request failed", { error });
+            const message = error instanceof Error ? error.message : "Withdrawal request failed.";
+            setStatus(message);
+            context.notify("error", message);
+          }
+        });
+      });
+
+      root.querySelector<HTMLButtonElement>("#stake-withdraw-button")?.addEventListener("click", async () => {
+        await withButtonsDisabled(async () => {
+          setStatus("waiting for withdrawal transaction...");
+          try {
+            const result = await withdrawBond();
+            const message = `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
+            setStatus(message);
+            context.notify("success", message);
+            await context.rerender();
+          } catch (error) {
+            appLog.warn("stake: withdraw failed", { error });
+            const message = error instanceof Error ? error.message : "Withdrawal failed.";
+            setStatus(message);
+            context.notify("error", message);
+          }
+        });
+      });
+    }
+  };
+};

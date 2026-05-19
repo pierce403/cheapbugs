@@ -55,7 +55,7 @@ cheapbugs/
 ### Static Web App Shell
 
 - **Stability**: stable
-- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `token`, and `patrons`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
+- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `stake`, `manage`, `token`, and `patrons`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
 - **Properties**:
   - The first screen is the usable app, not a landing page.
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
@@ -65,9 +65,10 @@ cheapbugs/
   - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows the bundle commit hash and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
+  - The `stake` navigation item is always available; the `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
-  - [x] `npm run test:e2e` covers the development banner text and orange status styling, GitHub brand icon, build metadata, header BUGZ status states, and that ordinary routes do not trigger treasury dashboard reads.
+  - [x] `npm run test:e2e` covers the development banner text and orange status styling, GitHub brand icon, build metadata, header BUGZ status states, owner-only manage navigation, and that ordinary routes do not trigger treasury dashboard reads.
 
 ### Wallet Auth And Local XMTP Identity
 
@@ -97,10 +98,31 @@ cheapbugs/
   - `bondOf(account)` returns total slashable exposure, `activeBondOf(account)` returns voting-eligible bond, and `getLevel(account)` returns `floor(log10(active whole BUGZ))`.
   - Pending withdrawals are excluded from `getLevel`; balances below 10 whole BUGZ produce level 0 and cannot add nonzero vote weight.
   - Current bonded addresses are enumerable with `bondedAddressCount`, `bondedAddressAt`, and `bondedAddressList`.
+  - The `/stake` route lets connected users approve BUGZ for the bond vault, bond BUGZ, request the two-step withdrawal, and withdraw when the 7-day delay has elapsed.
+  - The stake UI shows wallet BUGZ, allowance, active bond, pending withdrawal, current level, next-level threshold, and a live countdown/progress bar for step-2 withdrawal readiness.
 - **Test Criteria**:
   - [x] Forge unit tests cover bonding, two-step withdrawal, withdrawal cancellation, pending-withdrawal slashing, slasher permissions, full slash removal, and address enumeration.
   - [x] Forge fuzz tests cover level math and percentage slash accounting.
   - [x] Forge invariant tests prove the vault's BUGZ balance equals the listed active-plus-pending bond exposure across randomized bond, withdrawal, cancellation, and slash sequences.
+  - [x] Playwright covers the stake route dashboard, level display, allowance display, pending-withdrawal warning, and withdrawal countdown state with mocked Base RPC.
+
+### Owner Manage Console
+
+- **Stability**: in-progress
+- **Description**: `/manage` is a wallet-gated owner console for CheapBugs contract-suite administration.
+- **Properties**:
+  - The app reads `owner()` from `CheapBugsBugIndex`, `CheapBugsBondVault`, and `CheapBugsTreasuryVault` after wallet login.
+  - `manage` appears in navigation only when the connected wallet owns at least one contract in the suite.
+  - Direct `/manage` access by non-owner wallets renders an owner-only gate instead of transaction controls.
+  - The console displays the owner/address status for all three contracts plus current index brokers/admins, index vault wiring, treasury brokers, treasury index, standard payout divisor, and bond slash treasury.
+  - Index owner controls expose `setBroker`, `setAdmin`, `setBondVault`, `setTreasuryVault`, and `transferOwnership`.
+  - Treasury owner controls expose `setBroker`, `setIndex`, `setStandardPayoutDivisor`, and `transferOwnership`.
+  - Bond-vault owner controls expose `setSlasher`, `setTreasury`, and `transferOwnership`.
+  - `renounceOwnership` is intentionally not exposed in the browser UI because it can permanently remove live administrative recovery paths.
+  - The UI prechecks the connected owner where possible, but the contracts remain the source of authority for every owner-only call.
+- **Test Criteria**:
+  - [x] Playwright covers manage nav visibility for owner wallets, direct non-owner gating, and the owner action surface with mocked Base RPC.
+  - [x] `npm run build` type-checks owner adapters and route wiring.
 
 ### CheapBugs Treasury Vault
 
