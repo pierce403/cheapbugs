@@ -47,7 +47,7 @@ cheapbugs/
 - The vaults hardcode the live Base BUGZ token address `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`; this repo no longer deploys a BUGZ token contract.
 - XMTP broker submissions are private XMTP DMs to the broker; the browser builds an encrypted `BugBundle`, signs a contract-verifiable EIP-712 `PublishBug` authorization, sends the out-of-bundle reveal key to the broker, and the broker verifies, pins the bundle through local Kubo IPFS, then calls `CheapBugsBugIndex.publishBug`.
 - The remaining broker lifecycle work is post-window details-key reveal and ordered payout completion through the bug index.
-- Reviewer verdicts are EAS attestations on Base and are read through EAS GraphQL.
+- Reviewer verdicts are EAS attestations on Base and are read through EAS GraphQL. Core payout status flags are written directly to `CheapBugsBugIndex` by owner-managed index admins.
 - The Python broker is an optional off-static runtime with SQLite state; it does not change the frontend deployment model.
 
 ## Features
@@ -68,6 +68,7 @@ cheapbugs/
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
   - The `about` route is a static protocol explainer covering bug submission, broker publishing, judging, reveal, payouts, smart contract mechanics, the tech stack, and BUGZ tokenomics without making public RPC or IPFS reads.
   - The `stake` and `treasury` navigation items are always available; the `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
+  - Index admin authority does not grant `manage` navigation; admins use `/review` for report status flagging.
   - The `about` navigation item stays at the end of the nav, after the owner-only `manage` item when it is visible.
   - On mobile widths, the shell stacks the banner/header content, keeps auth controls full-width, and renders navigation as stable equal-width two-column tap targets.
 - **Test Criteria**:
@@ -121,6 +122,7 @@ cheapbugs/
 - **Properties**:
   - The app reads `owner()` from `CheapBugsBugIndex`, `CheapBugsBondVault`, and `CheapBugsTreasuryVault` after wallet login.
   - `manage` appears in navigation only when the connected wallet owns at least one contract in the suite.
+  - Index admins who are not contract owners do not see owner controls and should use `/review` for report status decisions.
   - Direct `/manage` access by non-owner wallets renders an owner-only gate instead of transaction controls.
   - The console displays the owner/address status for all three contracts plus current index brokers/admins, index vault wiring, treasury brokers, treasury index, standard payout divisor, and bond slash treasury.
   - Index owner controls expose `setBroker`, `setAdmin`, `setBondVault`, `setTreasuryVault`, and `transferOwnership`.
@@ -186,6 +188,7 @@ cheapbugs/
   - Report titles and human-readable target references are not separate onchain fields; the frontend reads them from the public core of the pinned `cheapbugs.bug_bundle.v1` payload and falls back to onchain report id/target kind if the public IPFS read fails or is malformed.
   - The stored details-key commitment is SHA-256 over the raw 32-byte key. Brokers reveal the raw `bytes32` key after the 7-day window.
   - Owner-managed admins can flag bugs as `Valid`, `Invalid`, or `Spam`; payout completion requires an admin status.
+  - The `/review` route recognizes either frontend reviewer allowlist access or onchain index admin authority. Index admins can see recent indexed reports and call `flagBug` from the queue.
   - Bonded users can vote up or down before the reveal window closes. Vote weight is snapshotted at vote time from `CheapBugsBondVault.getLevel(voter)`.
   - Bug payouts must be completed in report order. Only an authorized broker can complete payout, and invalid or spam bugs require a zero multiplier.
   - On payout completion, the index reveals the details key if needed, calls `CheapBugsTreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
@@ -209,6 +212,7 @@ cheapbugs/
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
   - [x] `CHEAPBUGS_LIVE_PAYOUT_FORK=1 forge test --match-contract CheapBugsLivePayoutForkTest -vvv` is an opt-in Base fork rehearsal for live ordered payouts. The readiness test checks index/treasury wiring, broker permissions, admin presence, and report status. The snapshot payout simulation needs `CHEAPBUGS_LIVE_PAYOUT_DETAIL_KEYS` as comma-delimited raw `bytes32` details keys in payout order, plus optional `CHEAPBUGS_LIVE_PAYOUT_STATUSES` and `CHEAPBUGS_LIVE_PAYOUT_MULTIPLIERS`.
   - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the score/title/author/date/unlock order, caching those reads across route changes and reloads, resolving the author ENS name, routing to the author profile page, displaying bonded vote totals/current direction, opening the detail-unlock modal from locked rows, and routing level-0 voters to staking.
+  - [x] Playwright covers an onchain index admin who is not a contract owner seeing the review queue and status-flag controls while the owner-only `manage` nav stays hidden.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 
 ### Removed Direct Submission Path

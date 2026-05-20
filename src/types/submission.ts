@@ -1,4 +1,4 @@
-import type { DisclosureMode, HexString, TargetKind } from "./domain";
+import type { BugIndexStatus, DisclosureMode, HexString, TargetKind } from "./domain";
 
 export const BUG_TYPE_OPTIONS = [
   {
@@ -85,6 +85,8 @@ export type SubmissionPublic = {
   detailsKeyCommitment: HexString;
   revealAfter: string | null;
   detailsKeyRevealed: boolean;
+  indexStatus?: BugIndexStatus;
+  payoutCompleted?: boolean;
 };
 
 export type SubmissionPublicMetadata = {

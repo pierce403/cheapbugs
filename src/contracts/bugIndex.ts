@@ -3,7 +3,7 @@ import { Contract, Interface } from "ethers";
 import { chainConfig } from "../config/chains";
 import type { SubmissionPublic } from "../types/submission";
 import { authController } from "../services";
-import type { HexString } from "../types/domain";
+import type { BugIndexStatus, HexString } from "../types/domain";
 import {
   indexToDisclosureMode,
   indexToTargetKind,
@@ -33,7 +33,10 @@ type ContractSubmission = {
   encryptedDetailsHash: `0x${string}`;
   detailsKeyCommitment: `0x${string}`;
   revealAfter: bigint;
+  detailsKey?: `0x${string}`;
   detailsKeyRevealed: boolean;
+  status?: number;
+  payoutCompleted?: boolean;
 };
 
 type ContractBondVote = {
@@ -83,6 +86,7 @@ const REPORT_TTL_MS = 60_000;
 const PERSISTENT_REPORT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PERSISTENT_LATEST_TTL_MS = 60_000;
 const BUG_VOTES_TTL_MS = 15_000;
+const ADMIN_READ_TTL_MS = 30_000;
 const BUG_INDEX_READ_TIMEOUT_MS = 4_000;
 const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11";
 const MULTICALL3_ABI = [
@@ -139,6 +143,34 @@ const fromContractBondVote = (vote: ContractBondVote): Pick<BugVoteState, "voter
   };
 };
 
+const indexToBugStatus = (value: number): BugIndexStatus => {
+  switch (value) {
+    case 1:
+      return "valid";
+    case 2:
+      return "invalid";
+    case 3:
+      return "spam";
+    case 0:
+    default:
+      return "unreviewed";
+  }
+};
+
+const bugStatusToIndex = (value: BugIndexStatus): number => {
+  switch (value) {
+    case "valid":
+      return 1;
+    case "invalid":
+      return 2;
+    case "spam":
+      return 3;
+    case "unreviewed":
+    default:
+      return 0;
+  }
+};
+
 const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => ({
   reportId: entry.reportId,
   reportHash: entry.reportHash,
@@ -155,8 +187,36 @@ const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => 
   encryptedDetailsHash: entry.encryptedDetailsHash,
   detailsKeyCommitment: entry.detailsKeyCommitment,
   revealAfter: new Date(Number(entry.revealAfter) * 1000).toISOString(),
-  detailsKeyRevealed: entry.detailsKeyRevealed
+  detailsKeyRevealed: entry.detailsKeyRevealed,
+  indexStatus: indexToBugStatus(Number(entry.status ?? 0)),
+  payoutCompleted: Boolean(entry.payoutCompleted)
 });
+
+export const loadBugIndexAdminAccess = async (
+  account: HexString | null | undefined
+): Promise<{ isAdmin: boolean; errorMessage: string | null }> => {
+  if (!isBugIndexConfigured() || !account) {
+    return { isAdmin: false, errorMessage: null };
+  }
+
+  const normalizedAccount = normalizeAddress(account);
+  const key = `admin:${bugIndexAddress()}:${normalizedAccount}`;
+
+  try {
+    const isAdmin = await readCache.getOrLoad(key, ADMIN_READ_TTL_MS, async () =>
+      withReadTimeout(
+        scheduleBaseRpcRead("Bug index admin check", () => readContract().admins(normalizedAccount) as Promise<boolean>),
+        "Bug index admin check"
+      )
+    );
+    return { isAdmin, errorMessage: null };
+  } catch (error) {
+    return {
+      isAdmin: false,
+      errorMessage: error instanceof Error ? error.message : "Bug index admin check failed."
+    };
+  }
+};
 
 export const getBugReport = async (reportHash: `0x${string}`): Promise<SubmissionPublic | null> => {
   if (!isBugIndexConfigured()) {
@@ -395,6 +455,47 @@ export const submitBugBondVote = async (reportHash: `0x${string}`, support: bool
     return normalizeAddress(receipt?.hash ?? tx.hash);
   } catch (error) {
     throw submitVoteError(error);
+  }
+};
+
+export const flagBugReportStatus = async (
+  reportHash: `0x${string}`,
+  status: Exclude<BugIndexStatus, "unreviewed">
+): Promise<HexString> => {
+  const account = authController.getSession().address;
+  if (!account) {
+    throw new Error("Connect an index admin wallet before flagging reports.");
+  }
+
+  try {
+    const signer = await authController.getSigner();
+    const signerAddress = normalizeAddress(await signer.getAddress());
+    if (signerAddress !== normalizeAddress(account)) {
+      throw new Error("Connected wallet changed. Reconnect before flagging reports.");
+    }
+
+    const contract = new Contract(bugIndexAddress(), bugIndexAbi, signer);
+    const tx = await contract.flagBug(reportHash, bugStatusToIndex(status));
+    const receipt = await tx.wait();
+    readCache.clear();
+    persistentCache.clear(`report:${bugIndexAddress()}:${reportHash}`);
+    [10, 12, 15, 25, 50].forEach((limit) => persistentCache.clear(`latest:${bugIndexAddress()}:${limit}`));
+    return normalizeAddress(receipt?.hash ?? tx.hash);
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    if (/user rejected|denied transaction|rejected the request/i.test(raw)) {
+      throw new Error("Status flag was rejected in the wallet.");
+    }
+    if (/insufficient funds|insufficient.*gas/i.test(raw)) {
+      throw new Error("Status flag needs more Base ETH for gas.");
+    }
+    if (/NotAdmin/i.test(raw)) {
+      throw new Error("Status flag requires an authorized bug-index admin.");
+    }
+    if (/InvalidStatus/i.test(raw)) {
+      throw new Error("Choose valid, invalid, or spam before flagging.");
+    }
+    throw new Error(`Status flag failed: ${shortenError(raw)}`);
   }
 };
 

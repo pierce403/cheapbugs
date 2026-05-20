@@ -931,6 +931,20 @@ button:disabled,
   overflow-wrap: anywhere;
 }
 
+.inline-action-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-action-form select {
+  min-width: 96px;
+  border: 1px solid rgba(255, 106, 0, 0.32);
+  background: #070707;
+  color: var(--text);
+  padding: 6px;
+}
+
 .manage-page-panel,
 .stake-page-panel {
   display: grid;
