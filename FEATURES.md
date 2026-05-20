@@ -207,6 +207,7 @@ cheapbugs/
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
   - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
+  - [x] `CHEAPBUGS_LIVE_PAYOUT_FORK=1 forge test --match-contract CheapBugsLivePayoutForkTest -vvv` is an opt-in Base fork rehearsal for live ordered payouts. The readiness test checks index/treasury wiring, broker permissions, admin presence, and report status. The snapshot payout simulation needs `CHEAPBUGS_LIVE_PAYOUT_DETAIL_KEYS` as comma-delimited raw `bytes32` details keys in payout order, plus optional `CHEAPBUGS_LIVE_PAYOUT_STATUSES` and `CHEAPBUGS_LIVE_PAYOUT_MULTIPLIERS`.
   - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the score/title/author/date/unlock order, caching those reads across route changes and reloads, resolving the author ENS name, routing to the author profile page, displaying bonded vote totals/current direction, opening the detail-unlock modal from locked rows, and routing level-0 voters to staking.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 
