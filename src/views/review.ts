@@ -4,8 +4,8 @@ import { chainConfig } from "../config/chains";
 import { flagBugReportStatus, loadBugIndexAdminAccess } from "../contracts/bugIndex";
 import { authorDisplayFromMap, loadAuthorDisplayMap } from "../lib/authors";
 import { getSchemaCatalog } from "../lib/schema-overrides";
-import { loadReviewQueue } from "../lib/reports";
-import { reportDetailsUnlockText, reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
+import { loadRecentBundles } from "../lib/reports";
+import { reportDetailsUnlockText, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate } from "../lib/utils";
 import type { BugIndexStatus } from "../types/domain";
 
@@ -36,6 +36,7 @@ const renderSchemaRegistrationHandlers = (root: HTMLElement, appContext: AppView
 
 const statusSelect = (currentStatus: BugIndexStatus, title: string): string => `
   <select name="status" aria-label="admin status for ${escapeHtml(title)}">
+    <option value="unreviewed" ${currentStatus === "unreviewed" ? "selected" : ""} disabled>pending</option>
     ${REVIEWABLE_STATUSES.map(
       (status) => `<option value="${status}" ${currentStatus === status ? "selected" : ""}>${status}</option>`
     ).join("")}
@@ -45,9 +46,17 @@ const statusSelect = (currentStatus: BugIndexStatus, title: string): string => `
 const flagForm = (reportHash: string, currentStatus: BugIndexStatus, title: string, disabled: boolean): string => `
   <form class="inline-action-form" data-index-flag-report="${escapeHtml(reportHash)}">
     ${statusSelect(currentStatus, title)}
-    <button class="button secondary" type="submit" ${disabled ? "disabled" : ""}>flag</button>
+    <button class="button secondary" type="submit" ${disabled ? "disabled" : ""}>set</button>
   </form>
 `;
+
+const statusCell = (adminAccess: boolean, reportHash: string, currentStatus: BugIndexStatus, title: string, payoutCompleted: boolean): string => {
+  if (adminAccess) {
+    return flagForm(reportHash, currentStatus, title, payoutCompleted);
+  }
+
+  return currentStatus === "unreviewed" ? "pending" : currentStatus;
+};
 
 export const renderReviewView = async (context: AppViewContext): Promise<ViewResult> => {
   const schemaRows = getSchemaCatalog()
@@ -101,14 +110,14 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
   }
 
   let queueError: string | null = null;
-  const queue = await loadReviewQueue(15).catch((error) => {
+  const queue = await loadRecentBundles(15).catch((error) => {
     queueError = error instanceof Error ? error.message : "Review queue failed to load.";
     return [];
   });
-  const authorDisplays = await loadAuthorDisplayMap(queue.map(({ bundle }) => bundle.publicSubmission.reporterAddress));
+  const authorDisplays = await loadAuthorDisplayMap(queue.map((bundle) => bundle.publicSubmission.reporterAddress));
   const queueRows = queue.length
     ? queue
-        .map(({ bundle, reviewState }) => {
+        .map((bundle) => {
           const href = context.router.href(`/report/${bundle.publicSubmission.reportHash}`);
           const author = authorDisplayFromMap(authorDisplays, bundle.publicSubmission.reporterAddress);
           const profileHref = context.router.href(`/profile/${author.address}`);
@@ -118,18 +127,14 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
             <tr>
               <td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td>
               <td><a href="${href}" data-nav>${escapeHtml(title)}</a></td>
-              <td>${escapeHtml(reportDisplayTarget(bundle))}</td>
               <td><a href="${profileHref}" data-nav>${escapeHtml(author.label)}</a></td>
               <td>${escapeHtml(reportDetailsUnlockText(bundle))}</td>
-              <td>${escapeHtml(indexStatus)}</td>
-              <td>${escapeHtml(reviewState.headline?.validity ?? "pending")}</td>
-              <td>${adminAccess.isAdmin ? flagForm(bundle.publicSubmission.reportHash, indexStatus, title, Boolean(bundle.publicSubmission.payoutCompleted)) : "-"}</td>
-              <td>${escapeHtml(bundle.publicSubmission.publicSummary)}</td>
+              <td>${statusCell(adminAccess.isAdmin, bundle.publicSubmission.reportHash, indexStatus, title, Boolean(bundle.publicSubmission.payoutCompleted))}</td>
             </tr>
           `;
         })
         .join("")
-    : `<tr><td colspan="9" class="muted-cell">${escapeHtml(queueError ?? "No report queue items resolved yet.")}</td></tr>`;
+    : `<tr><td colspan="5" class="muted-cell">${escapeHtml(queueError ?? "No report queue items resolved yet.")}</td></tr>`;
 
   return {
     title: "Review Queue",
@@ -145,18 +150,14 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
         <p class="helper-copy">bond vault: ${escapeHtml(chainConfig.bugBondVaultAddress)}</p>
         <p class="helper-copy">treasury vault: ${escapeHtml(chainConfig.bugTreasuryVaultAddress)}</p>
         <div id="review-admin-status" class="action-status" role="status" aria-live="polite"></div>
-        <table class="data-table">
+        <table class="data-table review-queue-table">
           <thead>
             <tr>
               <th>date</th>
               <th>title</th>
-              <th>target</th>
               <th>author</th>
               <th>details</th>
-              <th>index status</th>
-              <th>trusted state</th>
               <th>admin flag</th>
-              <th>summary</th>
             </tr>
           </thead>
           <tbody>${queueRows}</tbody>

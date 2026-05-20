@@ -935,6 +935,7 @@ button:disabled,
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 
 .inline-action-form select {
@@ -943,6 +944,17 @@ button:disabled,
   background: #070707;
   color: var(--text);
   padding: 6px;
+}
+
+.review-queue-table th:nth-child(1),
+.review-queue-table td:nth-child(1),
+.review-queue-table th:nth-child(3),
+.review-queue-table td:nth-child(3),
+.review-queue-table th:nth-child(4),
+.review-queue-table td:nth-child(4),
+.review-queue-table th:nth-child(5),
+.review-queue-table td:nth-child(5) {
+  white-space: nowrap;
 }
 
 .manage-page-panel,

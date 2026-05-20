@@ -188,7 +188,7 @@ cheapbugs/
   - Report titles and human-readable target references are not separate onchain fields; the frontend reads them from the public core of the pinned `cheapbugs.bug_bundle.v1` payload and falls back to onchain report id/target kind if the public IPFS read fails or is malformed.
   - The stored details-key commitment is SHA-256 over the raw 32-byte key. Brokers reveal the raw `bytes32` key after the 7-day window.
   - Owner-managed admins can flag bugs as `Valid`, `Invalid`, or `Spam`; payout completion requires an admin status.
-  - The `/review` route recognizes either frontend reviewer allowlist access or onchain index admin authority. Index admins can see recent indexed reports and call `flagBug` from the queue.
+  - The `/review` route recognizes either frontend reviewer allowlist access or onchain index admin authority. The queue is a compact date/title/author/details/admin-flag table; index admins see pending status inside the admin flag dropdown and can set `valid`, `invalid`, or `spam`.
   - Bonded users can vote up or down before the reveal window closes. Vote weight is snapshotted at vote time from `CheapBugsBondVault.getLevel(voter)`.
   - Bug payouts must be completed in report order. Only an authorized broker can complete payout, and invalid or spam bugs require a zero multiplier.
   - On payout completion, the index reveals the details key if needed, calls `CheapBugsTreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
@@ -212,7 +212,7 @@ cheapbugs/
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
   - [x] `CHEAPBUGS_LIVE_PAYOUT_FORK=1 forge test --match-contract CheapBugsLivePayoutForkTest -vvv` is an opt-in Base fork rehearsal for live ordered payouts. The readiness test checks index/treasury wiring, broker permissions, admin presence, and report status. The snapshot payout simulation needs `CHEAPBUGS_LIVE_PAYOUT_DETAIL_KEYS` as comma-delimited raw `bytes32` details keys in payout order, plus optional `CHEAPBUGS_LIVE_PAYOUT_STATUSES` and `CHEAPBUGS_LIVE_PAYOUT_MULTIPLIERS`.
   - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the score/title/author/date/unlock order, caching those reads across route changes and reloads, resolving the author ENS name, routing to the author profile page, displaying bonded vote totals/current direction, opening the detail-unlock modal from locked rows, and routing level-0 voters to staking.
-  - [x] Playwright covers an onchain index admin who is not a contract owner seeing the review queue and status-flag controls while the owner-only `manage` nav stays hidden.
+  - [x] Playwright covers an onchain index admin who is not a contract owner seeing the compact review queue and pending status dropdown while the owner-only `manage` nav stays hidden.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 
 ### Removed Direct Submission Path

@@ -203,29 +203,26 @@ const mockBugBundleGateway = async (page: Page): Promise<void> => {
   });
 };
 
-const mockEasGraphql = async (page: Page): Promise<void> => {
-  await page.route("https://base.easscan.org/graphql", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ data: { attestations: [] } })
-    });
-  });
-};
-
 test("shows review queue and status flag controls for onchain index admins", async ({ page }) => {
   await seedLocalIdentity(page);
   await mockBaseRpc(page);
   await mockEnsRpc(page);
   await mockBugBundleGateway(page);
-  await mockEasGraphql(page);
 
   await page.goto("/review");
 
   await expect(page.getByRole("link", { name: "manage", exact: true })).toHaveCount(0);
   const queue = page.locator("section").filter({ hasText: "[ reviewer queue ]" });
   await expect(queue).toContainText("Index admin access recognized");
+  await expect(queue.locator("thead th")).toHaveText(["date", "title", "author", "details", "admin flag"]);
   await expect(queue).toContainText("Admin-visible parser exploit");
-  await expect(queue).toContainText("unreviewed");
-  await expect(queue.getByLabel("admin status for Admin-visible parser exploit")).toBeVisible();
-  await expect(queue.getByRole("button", { name: "flag" })).toBeVisible();
+  await expect(queue.locator("thead")).not.toContainText("target");
+  await expect(queue.locator("thead")).not.toContainText("summary");
+  await expect(queue.locator("thead")).not.toContainText("trusted state");
+  await expect(queue.locator("thead")).not.toContainText("index status");
+  const statusSelect = queue.getByLabel("admin status for Admin-visible parser exploit");
+  await expect(statusSelect).toBeVisible();
+  await expect(statusSelect).toHaveValue("unreviewed");
+  await expect(statusSelect.locator("option:checked")).toHaveText("pending");
+  await expect(queue.getByRole("button", { name: "set" })).toBeVisible();
 });
