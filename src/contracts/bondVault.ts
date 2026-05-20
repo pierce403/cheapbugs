@@ -321,7 +321,7 @@ export const loadBondVaultDashboard = async (account: HexString): Promise<BondVa
 const connectedAccount = (): HexString => {
   const account = authController.getSession().address;
   if (!account) {
-    throw new Error("Connect a wallet before staking BUGZ.");
+    throw new Error("Connect a wallet before bonding BUGZ.");
   }
   return account;
 };

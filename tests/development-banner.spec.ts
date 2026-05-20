@@ -63,7 +63,7 @@ test("mobile header keeps navigation as stable tap targets", async ({ page }) =>
     expect(Math.abs(box.width - boxes[0].width)).toBeLessThanOrEqual(2);
   }
 
-  expect(boxes.map((box) => box.text)).toEqual(["index", "submit", "review", "stake", "treasury", "token", "patrons", "about"]);
+  expect(boxes.map((box) => box.text)).toEqual(["index", "submit", "review", "bond", "treasury", "token", "patrons", "about"]);
   expect(Math.max(...Array.from(rows.values()).map((row) => row.length))).toBeLessThanOrEqual(2);
   expect(Math.min(...Array.from(rows.values()).map((row) => row.length))).toBe(2);
 });

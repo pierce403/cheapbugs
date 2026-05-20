@@ -36,7 +36,7 @@ export const renderAboutView = async (_context: AppViewContext): Promise<ViewRes
           <h2>3. judging window</h2>
           <p>
             Public metadata is visible immediately. Private details stay encrypted for at least seven days while admins
-            classify the report as valid, invalid, or spam and bonded users can vote up or down with stake-weighted power.
+            classify the report as valid, invalid, or spam and bonded users can vote up or down with bond-weighted power.
           </p>
         </article>
         <article>
@@ -63,7 +63,7 @@ export const renderAboutView = async (_context: AppViewContext): Promise<ViewRes
           <tr>
             <th>bond vault</th>
             <td>
-              BUGZ staking contract with active bonds, two-step seven-day withdrawals, pending-withdrawal slashing,
+              BUGZ bonding contract with active bonds, two-step seven-day withdrawals, pending-withdrawal slashing,
               owner-managed slashers, treasury-directed slash transfers, enumerable bonded accounts, and log10 levels.
             </td>
           </tr>
@@ -90,7 +90,7 @@ export const renderAboutView = async (_context: AppViewContext): Promise<ViewRes
           </p>
         </article>
         <article>
-          <h2>stake and reputation</h2>
+          <h2>bond and reputation</h2>
           <p>
             BUGZ bonds are not burned during normal participation. They establish voting level and abuse resistance.
             Pending withdrawals stop counting toward vote power but remain slashable until released.

@@ -392,7 +392,7 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await expect(profileSubmissions).toContainText("2d 4h");
 });
 
-test("shows bonded vote totals and sends level-zero voters to staking", async ({ page }) => {
+test("shows bonded vote totals and sends level-zero voters to bonding", async ({ page }) => {
   await seedLocalIdentity(page);
   await mockBaseRpc(page, {
     upVoteWeight: 7n,
@@ -421,11 +421,11 @@ test("shows bonded vote totals and sends level-zero voters to staking", async ({
 
   await downvote.click();
 
-  const dialog = page.getByRole("dialog", { name: "stake required" });
+  const dialog = page.getByRole("dialog", { name: "bond required" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Voting requires staked BUGZ");
+  await expect(dialog).toContainText("Voting requires bonded BUGZ");
 
-  await dialog.getByRole("button", { name: "go to stake" }).click();
+  await dialog.getByRole("button", { name: "go to bond" }).click();
   await expect(page).toHaveURL(/\/stake$/);
 });
 

@@ -55,7 +55,7 @@ cheapbugs/
 ### Static Web App Shell
 
 - **Stability**: stable
-- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `stake`, `treasury`, `manage`, `token`, `patrons`, and `about`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
+- **Description**: Vite/TypeScript browser app with routes for `index`, `submit`, `review`, `report`, `profile`, `/stake` labeled as `bond`, `treasury`, `manage`, `token`, `patrons`, and `about`, a compact header session area, a GitHub icon link, build metadata, and a centralized development banner.
 - **Properties**:
   - The first screen is the usable app, not a landing page.
   - The home intro describes CheapBugs as a public goods crowdfunding protocol and summarizes the static GitHub/IPFS/XMTP/Base architecture without listing raw contract addresses, a patrons preview, or a footer in the first screen.
@@ -67,7 +67,7 @@ cheapbugs/
   - Header build metadata shows `VITE_BUILD_ID`/`VITE_BUILD_TIME` when provided, otherwise falls back to the bundle commit hash and current build time, and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
   - The `about` route is a static protocol explainer covering bug submission, broker publishing, judging, reveal, payouts, smart contract mechanics, the tech stack, and BUGZ tokenomics without making public RPC or IPFS reads.
-  - The `stake` and `treasury` navigation items are always available; the `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
+  - The `bond` and `treasury` navigation items are always available; `bond` routes to `/stake` for compatibility. The `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
   - Index admin authority does not grant `manage` navigation; admins use `/review` for report status flagging.
   - The `about` navigation item stays at the end of the nav, after the owner-only `manage` item when it is visible.
   - On mobile widths, the shell stacks the banner/header content, keeps auth controls full-width, and renders navigation as stable equal-width two-column tap targets.
@@ -106,14 +106,15 @@ cheapbugs/
   - `bondOf(account)` returns total slashable exposure, `activeBondOf(account)` returns voting-eligible bond, and `getLevel(account)` returns `floor(log10(active whole BUGZ))`.
   - Pending withdrawals are excluded from `getLevel`; balances below 10 whole BUGZ produce level 0 and cannot add nonzero vote weight.
   - Current bonded addresses are enumerable with `bondedAddressCount`, `bondedAddressAt`, and `bondedAddressList`.
-  - The `/stake` route lets connected users approve BUGZ for the bond vault, bond BUGZ, request the two-step withdrawal, and withdraw when the 7-day delay has elapsed.
-  - The stake UI shows wallet BUGZ, allowance, active bond, pending withdrawal, current level, next-level threshold, and a live countdown/progress bar for step-2 withdrawal readiness.
-  - The stake dashboard keeps RPC reads conservative: it reads `accountOf`, computes the displayed level client-side from active whole BUGZ, uses the fixed 7-day withdrawal delay, and skips nonessential balance or allowance reads during a Base RPC cooldown.
+  - The `/stake` route is labeled `bond` in the UI and lets connected users approve BUGZ for the bond vault, bond BUGZ, request the two-step withdrawal, and withdraw when the 7-day delay has elapsed.
+  - The bond UI shows wallet BUGZ, allowance, active bond, pending withdrawal, current level, next-level threshold, and a live countdown/progress bar for step-2 withdrawal readiness without showing raw bond-vault or BUGZ-token contract addresses.
+  - The add-bond form has one primary action button. It says `approve bugz` when the entered amount is above the current allowance, and `bond bugz` when current allowance is sufficient.
+  - The bond dashboard keeps RPC reads conservative: it reads `accountOf`, computes the displayed level client-side from active whole BUGZ, uses the fixed 7-day withdrawal delay, and skips nonessential balance or allowance reads during a Base RPC cooldown.
 - **Test Criteria**:
   - [x] Forge unit tests cover bonding, two-step withdrawal, withdrawal cancellation, pending-withdrawal slashing, slasher permissions, full slash removal, and address enumeration.
   - [x] Forge fuzz tests cover level math and percentage slash accounting.
   - [x] Forge invariant tests prove the vault's BUGZ balance equals the listed active-plus-pending bond exposure across randomized bond, withdrawal, cancellation, and slash sequences.
-  - [x] Playwright covers the stake route dashboard, level display, allowance display, pending-withdrawal warning, withdrawal countdown state, and Base RPC rate-limit backoff with mocked Base RPC.
+  - [x] Playwright covers the bond route dashboard, level display, allowance display, one-button approve/bond behavior, hidden contract addresses, pending-withdrawal warning, withdrawal countdown state, and Base RPC rate-limit backoff with mocked Base RPC.
 
 ### Owner Manage Console
 
@@ -198,7 +199,7 @@ cheapbugs/
   - The frontend defaults to the verified Base contract suite, so new broker-published bugs can be read into index/recent-report views without requiring `VITE_BUG_INDEX_ADDRESS` in local env.
   - Recent-report reads use in-memory caching, localStorage-backed public bug-index detail caches, in-flight request reuse, and fail-open public metadata/ENS lookups so route changes and reloads do not repeatedly call `latestReportHashes`/`getReport` or block the shell on optional display data.
   - Home/index bug-listing tables show score, title, author, date, and unlock columns in that order. The target column is intentionally omitted from this compact archive view so long titles get the widest column.
-  - Home/index score cells include bonded vote controls in the form up arrow, net vote weight, down arrow. Hover titles expose total up/down weights, the connected user's current direction lights up, and level-0 vote attempts show a stake-required modal with a route to `/stake`.
+  - Home/index score cells include bonded vote controls in the form up arrow, net vote weight, down arrow. Hover titles expose total up/down weights, the connected user's current direction lights up, and level-0 vote attempts show a bond-required modal with a route to `/stake`.
   - The unlock column renders days, hours, or minutes until `revealAfter`, then falls back to `unlockable` or `unlocked` after reveal. Locked rows show a small lock icon next to the countdown that opens the shared detail-unlock quote/payment modal.
   - Launcher scripts refresh frontend ABI files after compilation, deploy/wire `CheapBugsBondVault`, `CheapBugsTreasuryVault`, and `CheapBugsBugIndex` together, check the deployed wiring, and verify all three contracts on Etherscan/BaseScan by default for real deployments.
   - The Node launcher writes tracked deployment manifests and generated contract artifacts under `deployments/base-8453/`, including compiler/tool versions, optimizer and `via_ir` settings, source/package hashes, constructor arguments, transaction logs for broadcasts, verification command inputs, and generated ABI/bytecode artifacts.
@@ -212,7 +213,7 @@ cheapbugs/
   - [x] Real launchers require an Etherscan/BaseScan API key for default contract verification unless `BUG_INDEX_VERIFY_CONTRACTS=0` is explicitly set.
   - [x] Launchers support `BROKER_KEY` as the deployer fallback and keep final ownership separate from the funded deployer.
   - [x] `CHEAPBUGS_LIVE_PAYOUT_FORK=1 forge test --match-contract CheapBugsLivePayoutForkTest -vvv` is an opt-in Base fork rehearsal for live ordered payouts. The readiness test checks index/treasury wiring, broker permissions, admin presence, and report status. The snapshot payout simulation needs `CHEAPBUGS_LIVE_PAYOUT_DETAIL_KEYS` as comma-delimited raw `bytes32` details keys in payout order, plus optional `CHEAPBUGS_LIVE_PAYOUT_STATUSES` and `CHEAPBUGS_LIVE_PAYOUT_MULTIPLIERS`.
-  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the score/title/author/date/unlock order, caching those reads across route changes and reloads, resolving the author ENS name, routing to the author profile page, displaying bonded vote totals/current direction, opening the detail-unlock modal from locked rows, and routing level-0 voters to staking.
+  - [x] Playwright covers the home route loading `latestReportHashes`/`getReport` from the configured index, enriching rows from mocked BugBundle public metadata, rendering the score/title/author/date/unlock order, caching those reads across route changes and reloads, resolving the author ENS name, routing to the author profile page, displaying bonded vote totals/current direction, opening the detail-unlock modal from locked rows, and routing level-0 voters to bonding.
   - [x] Playwright covers an onchain index admin who is not a contract owner seeing the compact review queue, no contract/schema chrome, the pending status dropdown, and the pending-only filter while the owner-only `manage` nav stays hidden.
   - [x] `deployments/base-8453/cheapbugs-contract-suite.latest.json` and `deployments/base-8453/generated/latest/*.json` provide committed reproducibility records without private keys or explorer API keys.
 

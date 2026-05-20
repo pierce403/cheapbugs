@@ -63,7 +63,7 @@ export type BugVoteState = {
 
 export class NoBondVotingPowerError extends Error {
   constructor() {
-    super("Voting requires staked BUGZ.");
+    super("Voting requires bonded BUGZ.");
     this.name = "NoBondVotingPowerError";
   }
 }

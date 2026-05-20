@@ -142,7 +142,7 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
           <p class="lede">
             CheapBugs is a public goods crowdfunding protocol designed to accelerate the identification and elimination
             of bugs in the global software ecosystem. Participation is generally open at the moment, but may eventually
-            require some level of community stake to mitigate abuse. The protocol is designed to be sufficiently
+            require some level of community bond to mitigate abuse. The protocol is designed to be sufficiently
             decentralized. This frontend is static HTML on GitHub. Bug data is stored on IPFS, communications happen over
             XMTP, and execution and payouts happen on the Base network. The community is encouraged to expand the
             ecosystem using any tools available, including generative AI tooling. Enjoy!
@@ -187,10 +187,10 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
       <div id="vote-level-modal" class="processing-modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="vote-level-title">
         <div class="panel processing-modal is-complete vote-level-modal">
           <div class="signature-modal-copy">
-            <strong id="vote-level-title">stake required</strong>
-            <p>Voting requires staked BUGZ. Stake BUGZ to level up before voting on bug reports.</p>
+            <strong id="vote-level-title">bond required</strong>
+            <p>Voting requires bonded BUGZ. Bond BUGZ to level up before voting on bug reports.</p>
             <div class="modal-actions">
-              <button id="vote-level-stake" class="button" type="button">go to stake</button>
+              <button id="vote-level-stake" class="button" type="button">go to bond</button>
               <button id="vote-level-close" class="button secondary" type="button">close</button>
             </div>
           </div>

@@ -79,9 +79,38 @@ const countdownProgress = (dashboard: BondVaultDashboard): number => {
 const token = (value: bigint | null, dashboard: Pick<BondVaultDashboard, "decimals" | "symbol">): string =>
   value === null ? "-" : `${formatTokenAmount(value, dashboard.decimals)} ${dashboard.symbol}`;
 
+const parseDisplayAmount = (rawAmount: string, decimals: number): bigint | null => {
+  const raw = rawAmount.trim().replace(/,/g, "");
+  if (!raw || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) {
+    return null;
+  }
+
+  const [wholePart = "0", fractionPart = ""] = raw.split(".");
+  if (fractionPart.length > decimals) {
+    return null;
+  }
+
+  const whole = BigInt(wholePart || "0");
+  const fraction = BigInt((fractionPart + "0".repeat(decimals)).slice(0, decimals) || "0");
+  return whole * wholeBugz(decimals) + fraction;
+};
+
+const bondFormAction = (rawAmount: string, allowance: bigint | null, decimals: number): "approve" | "bond" => {
+  if (allowance === null) {
+    return "approve";
+  }
+  const amount = parseDisplayAmount(rawAmount, decimals);
+  if (amount === null || amount <= 0n) {
+    return allowance > 0n ? "bond" : "approve";
+  }
+  return allowance >= amount ? "bond" : "approve";
+};
+
+const bondActionLabel = (action: "approve" | "bond"): string => (action === "approve" ? "approve bugz" : "bond bugz");
+
 const renderConnect = (): string => `
   <section class="panel">
-    <div class="panel-title">[ stake ]</div>
+    <div class="panel-title">[ bond ]</div>
     <p class="warning-copy">Connect a wallet to bond BUGZ, see your level, or request a delayed withdrawal.</p>
   </section>
 `;
@@ -90,7 +119,7 @@ const renderStake = (dashboard: BondVaultDashboard): string => {
   if (!dashboard.isConfigured) {
     return `
       <section class="panel">
-        <div class="panel-title">[ stake ]</div>
+        <div class="panel-title">[ bond ]</div>
         <p class="warning-copy">The BUGZ token or bond vault address is not configured for this deployment.</p>
       </section>
     `;
@@ -103,10 +132,12 @@ const renderStake = (dashboard: BondVaultDashboard): string => {
   const countdown = formatDuration(withdrawal.secondsRemaining);
   const countdownPercent = withdrawal.ready ? 100 : countdownProgress(dashboard);
   const withdrawDisabled = withdrawal.ready ? "" : "disabled";
+  const initialBondAction = bondFormAction("", dashboard.allowance, dashboard.decimals);
+  const encodedAllowance = dashboard.allowance === null ? "" : dashboard.allowance.toString();
 
   return `
     <section class="panel stake-page-panel" data-testid="stake-panel">
-      <div class="panel-title">[ stake ]</div>
+      <div class="panel-title">[ bond ]</div>
       ${dashboard.errorMessage ? `<p class="warning-copy">${escapeHtml(dashboard.errorMessage)}</p>` : ""}
       <div class="stake-hero">
         <div class="stake-level-badge">
@@ -129,17 +160,10 @@ const renderStake = (dashboard: BondVaultDashboard): string => {
         <div><span>wallet balance</span><strong>${escapeHtml(token(dashboard.tokenBalance, dashboard))}</strong></div>
         <div><span>vault allowance</span><strong>${escapeHtml(token(dashboard.allowance, dashboard))}</strong></div>
       </div>
-      <table class="data-table compact-table">
-        <tbody>
-          <tr><th>bond vault</th><td><code>${escapeHtml(dashboard.vaultAddress)}</code></td></tr>
-          <tr><th>BUGZ token</th><td><code>${escapeHtml(dashboard.tokenAddress)}</code></td></tr>
-          <tr><th>wallet</th><td><code>${escapeHtml(dashboard.account)}</code></td></tr>
-        </tbody>
-      </table>
     </section>
 
     <section class="panel">
-      <div class="panel-title">[ add BUGZ ]</div>
+      <div class="panel-title">[ add bugz to bond ]</div>
       <form id="stake-bond-form" class="stack-form narrow-form">
         <label>
           amount
@@ -150,10 +174,10 @@ const renderStake = (dashboard: BondVaultDashboard): string => {
             ? `<p class="field-warning warning-copy">Adding a new bond cancels your pending withdrawal and restores it to active bond.</p>`
             : ""
         }
-        <p class="helper-copy">Approve the vault first when the amount is above the current allowance, then bond to level up.</p>
         <div class="button-row">
-          <button class="button secondary" type="submit" name="stakeAction" value="approve">approve BUGZ</button>
-          <button class="button" type="submit" name="stakeAction" value="bond">bond BUGZ</button>
+          <button id="stake-bond-submit" class="button" type="submit" name="bondAction" value="${initialBondAction}" data-allowance="${escapeHtml(encodedAllowance)}" data-decimals="${dashboard.decimals}">
+            ${bondActionLabel(initialBondAction)}
+          </button>
         </div>
       </form>
     </section>
@@ -223,14 +247,14 @@ const bindCountdown = (root: HTMLElement): void => {
 export const renderStakeView = async (context: AppViewContext): Promise<ViewResult> => {
   if (!context.session.address) {
     return {
-      title: "Stake",
+      title: "Bond",
       html: renderConnect()
     };
   }
 
   const dashboard = await loadBondVaultDashboard(context.session.address);
   return {
-    title: "Stake",
+    title: "Bond",
     html: renderStake(dashboard),
     afterRender(root) {
       bindCountdown(root);
@@ -243,24 +267,40 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
       const buttons = () => Array.from(root.querySelectorAll<HTMLButtonElement>("button"));
       const withButtonsDisabled = async (work: () => Promise<void>) => {
         const allButtons = buttons();
+        const previousStates = allButtons.map((button) => ({ button, disabled: button.disabled }));
         allButtons.forEach((button) => {
           button.disabled = true;
         });
         try {
           await work();
         } finally {
-          allButtons.forEach((button) => {
-            button.disabled = false;
+          previousStates.forEach(({ button, disabled }) => {
+            button.disabled = disabled;
           });
         }
       };
+
+      const bondAmountInput = root.querySelector<HTMLInputElement>("#stake-bond-amount");
+      const bondSubmitButton = root.querySelector<HTMLButtonElement>("#stake-bond-submit");
+      const updateBondButton = () => {
+        if (!bondSubmitButton) {
+          return;
+        }
+        const allowance = bondSubmitButton.dataset.allowance ? BigInt(bondSubmitButton.dataset.allowance) : null;
+        const decimals = Number(bondSubmitButton.dataset.decimals || "18");
+        const action = bondFormAction(bondAmountInput?.value ?? "", allowance, decimals);
+        bondSubmitButton.value = action;
+        bondSubmitButton.textContent = bondActionLabel(action);
+      };
+      bondAmountInput?.addEventListener("input", updateBondButton);
+      updateBondButton();
 
       root.querySelector<HTMLFormElement>("#stake-bond-form")?.addEventListener("submit", async (event) => {
         event.preventDefault();
         const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
         const form = event.currentTarget as HTMLFormElement;
         const amount = String(new FormData(form).get("amount") ?? "");
-        const action = submitter?.value === "approve" ? "approve" : "bond";
+        const action = (submitter?.value ?? bondSubmitButton?.value) === "approve" ? "approve" : "bond";
         await withButtonsDisabled(async () => {
           setStatus(action === "approve" ? "waiting for approval transaction..." : "waiting for bond transaction...");
           try {
@@ -273,7 +313,7 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
             await context.rerender();
           } catch (error) {
             appLog.warn("stake: bond action failed", { error });
-            const message = error instanceof Error ? error.message : "Stake action failed.";
+            const message = error instanceof Error ? error.message : "Bond action failed.";
             setStatus(message);
             context.notify("error", message);
           }

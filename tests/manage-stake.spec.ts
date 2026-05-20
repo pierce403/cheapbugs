@@ -194,28 +194,36 @@ const mockBaseRpc = async (
   });
 };
 
-test("shows staking level, allowance, and pending-withdrawal countdown", async ({ page }) => {
+test("shows bonding level, allowance, and pending-withdrawal countdown", async ({ page }) => {
   await seedLocalIdentity(page);
   await mockEnsRpc(page);
   await mockBaseRpc(page, { owner: otherOwnerAddress });
 
   await page.goto("/stake");
 
-  await expect(page.getByRole("link", { name: "stake" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "bond" })).toBeVisible();
   const stakePanel = page.getByTestId("stake-panel");
+  await expect(stakePanel).not.toContainText(bondVaultAddress);
+  await expect(stakePanel).not.toContainText(bugzTokenAddress);
   await expect(stakePanel.locator(".stake-level-badge strong")).toHaveText("2");
   await expect(stakePanel).toContainText("250 BUGZ active");
   await expect(stakePanel).toContainText("pending withdrawal");
   await expect(stakePanel).toContainText("50 BUGZ");
   await expect(stakePanel).toContainText("1,500 BUGZ");
   await expect(stakePanel).toContainText("25 BUGZ");
+  await expect(page.getByText("[ add bugz to bond ]")).toBeVisible();
+  await expect(page.getByRole("button", { name: "bond bugz" })).toBeVisible();
+  await page.getByLabel("amount", { exact: true }).fill("100");
+  await expect(page.getByRole("button", { name: "approve bugz" })).toBeVisible();
+  await page.getByLabel("amount", { exact: true }).fill("10");
+  await expect(page.getByRole("button", { name: "bond bugz" })).toBeVisible();
   await expect(page.getByText("step 2: waiting period")).toBeVisible();
   await expect(page.locator("[data-countdown-label]")).not.toHaveText("-");
   await expect(page.getByRole("button", { name: "withdraw pending BUGZ" })).toBeDisabled();
   await expect(page.getByText("Adding a new bond cancels your pending withdrawal")).toBeVisible();
 });
 
-test("backs off from stake reads when Base RPC rate-limits", async ({ page }) => {
+test("backs off from bond reads when Base RPC rate-limits", async ({ page }) => {
   await seedLocalIdentity(page);
   await mockEnsRpc(page);
   let baseCalls = 0;

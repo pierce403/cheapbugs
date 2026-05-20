@@ -462,7 +462,7 @@ export class CheapBugsApp {
       ["/", "index"],
       ["/submit", "submit"],
       ["/review", "review"],
-      ["/stake", "stake"],
+      ["/stake", "bond"],
       ["/treasury", "treasury"],
       ["/token", "token"],
       ["/patrons", "patrons"]
