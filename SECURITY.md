@@ -16,6 +16,9 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 
 - Direct onchain submissions to `CheapBugsBugIndex` are disabled; only owner-authorized brokers can call `publishBug`.
 - `CheapBugsBugIndex.publishBug` requires a reporter EIP-712 signature that binds the reporter, broker, index domain, chain id, report fields, BugBundle hash, encrypted details hash, details-key commitment, reveal time, nonce, and deadline. The broker-produced IPFS CID is stored but not signature-bound because it is known only after pinning.
+- The index verifies the reporter signature itself at submission time: `publishBug` rebuilds the EIP-712 digest with `msg.sender` as broker, recovers the signer with ECDSA, and requires it to equal the submitted reporter. Broker-side signature checks are preflight validation, not the onchain authority.
+- The browser signs `bugBundleHash` as the SHA-256 of the canonical `BugBundle.core`. That core includes the submission options and display fields: `bug_type`, `severity`, `target_interest`, title, public summary, target, disclosure mode, and tags. The signed `reportHash` and `contentHash` also include the submission object plus encrypted-details hash and details-key commitment, so brokers cannot alter those fields without invalidating the signed hashes.
+- Base RPC calls for `publishBug`, including gas estimation, do not carry plaintext private details, AES-GCM ciphertext, or the out-of-bundle details key. The transaction calldata contains public-safe fields, the broker-pinned CID, hash commitments, reveal timing, nonce/deadline, and the reporter signature. Private details are sent to the broker over XMTP, stored in IPFS only as encrypted ciphertext, and the details key stays offchain until post-window reveal.
 - `CheapBugsBugIndex` rejects expired signatures, replayed reporter nonces, duplicate report hashes, wrong broker signatures, and reveal windows shorter than 7 days from onchain publication.
 - `CheapBugsBugIndex` accepts details-key reveals only after the 7-day window and only when `sha256(raw 32-byte key)` matches the stored commitment.
 - `CheapBugsBondVault` keeps pending withdrawals slashable during the 7-day withdrawal delay, and new bonds cancel pending withdrawals.
@@ -55,12 +58,12 @@ Current and required properties:
 
 - The browser builds a canonical `cheapbugs.bug_bundle.v1` commitment from the unsigned bundle core.
 - The browser generates a random details key, encrypts private details into the bundle, and keeps the details key outside the IPFS-bound bundle.
-- The reporter signs an EIP-712 typed message that binds reporter, broker wallet, Base chain id, bug-index contract address, report fields, bundle hash, encrypted details hash, details-key commitment, reveal time, created time, nonce, and deadline.
+- The reporter signs an EIP-712 typed message that binds reporter, broker wallet, Base chain id, bug-index contract address, report fields, bundle hash, encrypted details hash, details-key commitment, reveal time, created time, nonce, and deadline. The signed report fields include hashes derived from the `BugBundle.core.submission` object, which contains bug type, severity, target interest, title, public summary, target, disclosure mode, and tags.
 - The XMTP message carries the encrypted BugBundle, `publish_authorization`, and out-of-bundle details key.
 - The broker verifies the envelope, confirms the supplied details key matches the bundle commitment, decrypts details for objective well-formedness checks, and pins the encrypted bundle payload without modification before doing EAS or registry writes.
-- `CheapBugsBugIndex` verifies the reporter signature for broker-relayed submissions and stores the signed reporter.
+- `CheapBugsBugIndex` verifies the reporter signature for broker-relayed submissions by reconstructing the same EIP-712 digest, recovering the signer, and storing the signed reporter only after recovery matches.
 - The contract rejects invalid signatures, wrong broker/domain, wrong chain or contract through the EIP-712 domain/broker binding, expired signatures, duplicate report hashes, and replayed nonces.
-- The contract stores the bundle CID/commitments and details-key commitment when the broker registers the report.
+- The contract stores the bundle CID/commitments and details-key commitment when the broker registers the report. The CID is a pointer and is not itself signed or fetchable by the contract; the stored `bugBundleHash`, `encryptedDetailsHash`, and `detailsKeyCommitment` are the authenticity commitments for any fetched bundle content.
 - The contract accepts the details key only after the 7-day judgment period and only when it matches the stored key commitment.
 - If contract wallets are supported, the relay path must support EIP-1271 signature validation.
 
@@ -105,6 +108,7 @@ Current and required properties:
 - Private report material must not be uploaded in plaintext by the browser.
 - In the current broker flow, IPFS stores a single BugBundle JSON object whose `details` section is encrypted ciphertext.
 - Details keys must not be included in IPFS bundles. They are held by the broker during the judgment period and later published through the bug index after the reveal window opens.
+- IPFS CIDs are not part of the reporter's EIP-712 signature and cannot be verified onchain. The contract stores the CID alongside signed hash commitments so offchain readers and brokers have a signed bundle/core/ciphertext commitment to compare against fetched content.
 - Public gateway priming is best-effort and does not guarantee persistence. It can also reveal a CID to a third-party gateway before the onchain index references it, so it is disabled by default.
 - IPFS CIDs and gateway responses are untrusted input. Rendering code must sanitize and validate fetched content, including the public BugBundle title and target fields used in archive tables.
 - Browser localStorage may cache full encrypted BugBundle JSON and public bug-index records to reduce gateway/RPC pressure. This cache must not store decrypted private details or unrevealed details keys.
