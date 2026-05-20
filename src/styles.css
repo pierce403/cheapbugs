@@ -946,6 +946,18 @@ button:disabled,
   padding: 6px;
 }
 
+.inline-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.inline-checkbox input {
+  accent-color: var(--warning);
+}
+
 .review-queue-table th:nth-child(1),
 .review-queue-table td:nth-child(1),
 .review-queue-table th:nth-child(3),

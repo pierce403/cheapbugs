@@ -9,6 +9,7 @@ const adminAddress = "0x47e727b6fd24efd9cc74eb5d9153e94c82681d3c";
 const otherOwnerAddress = "0x1234567890123456789012345678901234567890";
 const reporterAddress = "0x9999999999999999999999999999999999999999";
 const reportHash = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const validReportHash = "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 const zeroBytes32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
 const abiCoder = AbiCoder.defaultAbiCoder();
 const ownableInterface = new Interface(["function owner() view returns (address)"]);
@@ -47,14 +48,24 @@ const seedLocalIdentity = async (page: Page): Promise<void> => {
   }, localIdentity);
 };
 
-const reportTuple = () => [
-  reportHash,
-  "CB-ADMIN-0001",
+const reportTuple = ({
+  hash = reportHash,
+  reportId = "CB-ADMIN-0001",
+  cid = "ipfs://bafyreviewadmin",
+  status = 0
+}: {
+  hash?: string;
+  reportId?: string;
+  cid?: string;
+  status?: number;
+} = {}) => [
+  hash,
+  reportId,
   reporterAddress,
   1_779_120_000n,
   2,
   "Fresh broker-published bug ready for admin triage.",
-  "ipfs://bafyreviewadmin",
+  cid,
   4,
   id("base-protocol"),
   "base, parser",
@@ -65,7 +76,7 @@ const reportTuple = () => [
   BigInt(Math.floor(Date.now() / 1000) + 604_800),
   zeroBytes32,
   false,
-  0,
+  status,
   false,
   0n,
   0
@@ -118,15 +129,28 @@ const mockBaseRpc = async (page: Page): Promise<void> => {
         return {
           id: request.id,
           jsonrpc: "2.0",
-          result: bugIndexInterface.encodeFunctionResult("latestReportHashes", [[reportHash]])
+          result: bugIndexInterface.encodeFunctionResult("latestReportHashes", [[reportHash, validReportHash]])
         };
       }
 
       if (target === bugIndexAddress.toLowerCase() && selector === getReportSelector) {
+        const [requestedHash] = bugIndexInterface.decodeFunctionData("getReport", call.data ?? "0x") as [string];
+        const isValidReport = requestedHash.toLowerCase() === validReportHash.toLowerCase();
         return {
           id: request.id,
           jsonrpc: "2.0",
-          result: bugIndexInterface.encodeFunctionResult("getReport", [reportTuple()])
+          result: bugIndexInterface.encodeFunctionResult("getReport", [
+            reportTuple(
+              isValidReport
+                ? {
+                    hash: validReportHash,
+                    reportId: "CB-ADMIN-0002",
+                    cid: "ipfs://bafyreviewvalid",
+                    status: 1
+                  }
+                : undefined
+            )
+          ])
         };
       }
 
@@ -201,6 +225,24 @@ const mockBugBundleGateway = async (page: Page): Promise<void> => {
       })
     });
   });
+  await page.route("https://ipfs.io/ipfs/bafyreviewvalid", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        schema: "cheapbugs.bug_bundle.v1",
+        version: 1,
+        core: {
+          submission: {
+            title: "Already flagged parser exploit",
+            target: {
+              kind: "protocol",
+              reference: "Base protocol parser"
+            }
+          }
+        }
+      })
+    });
+  });
 };
 
 test("shows review queue and status flag controls for onchain index admins", async ({ page }) => {
@@ -213,16 +255,30 @@ test("shows review queue and status flag controls for onchain index admins", asy
 
   await expect(page.getByRole("link", { name: "manage", exact: true })).toHaveCount(0);
   const queue = page.locator("section").filter({ hasText: "[ reviewer queue ]" });
-  await expect(queue).toContainText("Index admin access recognized");
+  await expect(queue).not.toContainText("Connected reviewer");
+  await expect(queue).not.toContainText("Index admin access recognized");
+  await expect(queue).not.toContainText("bug index:");
+  await expect(queue).not.toContainText("bond vault:");
+  await expect(queue).not.toContainText("treasury vault:");
+  await expect(page.getByText("[ schema catalog ]")).toHaveCount(0);
   await expect(queue.locator("thead th")).toHaveText(["date", "title", "author", "details", "admin flag"]);
   await expect(queue).toContainText("Admin-visible parser exploit");
+  await expect(queue).toContainText("Already flagged parser exploit");
   await expect(queue.locator("thead")).not.toContainText("target");
   await expect(queue.locator("thead")).not.toContainText("summary");
   await expect(queue.locator("thead")).not.toContainText("trusted state");
   await expect(queue.locator("thead")).not.toContainText("index status");
+  const pendingOnly = queue.getByLabel("only show pending");
+  await expect(pendingOnly).toBeVisible();
+  await expect(pendingOnly).not.toBeChecked();
   const statusSelect = queue.getByLabel("admin status for Admin-visible parser exploit");
   await expect(statusSelect).toBeVisible();
   await expect(statusSelect).toHaveValue("unreviewed");
   await expect(statusSelect.locator("option:checked")).toHaveText("pending");
-  await expect(queue.getByRole("button", { name: "set" })).toBeVisible();
+  await expect(queue.getByRole("button", { name: "set" })).toHaveCount(2);
+
+  await pendingOnly.check();
+  await expect(queue.getByLabel("only show pending")).toBeChecked();
+  await expect(queue).toContainText("Admin-visible parser exploit");
+  await expect(queue).not.toContainText("Already flagged parser exploit");
 });
