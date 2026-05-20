@@ -634,19 +634,55 @@ button:disabled,
   font-weight: 600;
 }
 
-.bug-listing-table .score-column {
-  width: 1%;
+.bug-listing-table {
+  table-layout: fixed;
+  min-width: 940px;
+}
+
+.bug-listing-table .score-col {
+  width: 132px;
+}
+
+.bug-listing-table .author-col {
+  width: 220px;
+}
+
+.bug-listing-table .date-col {
+  width: 280px;
+}
+
+.bug-listing-table .unlock-col {
+  width: 128px;
+}
+
+.bug-listing-table .score-column,
+.bug-listing-table th:nth-child(1) {
   white-space: nowrap;
+  overflow-wrap: normal;
 }
 
-.bug-listing-table .title-column {
-  width: 100%;
-  min-width: 240px;
+.bug-listing-table .title-column a {
+  overflow-wrap: anywhere;
 }
 
+.bug-listing-table th:nth-child(3),
+.bug-listing-table td:nth-child(3),
+.bug-listing-table th:nth-child(4),
+.bug-listing-table td:nth-child(4),
+.bug-listing-table th:nth-child(5),
+.bug-listing-table td:nth-child(5),
 .bug-listing-table .date-column,
 .bug-listing-table .unlock-column {
   white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.bug-listing-table td:nth-child(3) a {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
 }
 
 .bug-title-cell {

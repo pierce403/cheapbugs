@@ -341,6 +341,10 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
 
   const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
   await expect(recentReports.locator("thead th")).toHaveText(["score", "title", "author", "date", "unlock"]);
+  const authorHeader = recentReports.locator("thead th").nth(2);
+  await expect(authorHeader).toHaveCSS("white-space", "nowrap");
+  const authorHeaderBox = await authorHeader.boundingBox();
+  expect(authorHeaderBox?.width ?? 0).toBeGreaterThan(160);
   const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
   await expect(reportRow.locator("td").nth(0).locator(".bug-vote-score")).toHaveText("0");
   await expect(reportRow.locator("td").nth(1)).toContainText("Live parser exploit");

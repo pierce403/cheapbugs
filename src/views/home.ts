@@ -123,6 +123,15 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
   const recentRows = bundles.length
     ? bundles.map(renderBugListingRow).join("")
     : `<tr><td colspan="5" class="muted-cell">No onchain bug reports resolved yet.</td></tr>`;
+  const bugListingColumns = `
+    <colgroup>
+      <col class="score-col" />
+      <col class="title-col" />
+      <col class="author-col" />
+      <col class="date-col" />
+      <col class="unlock-col" />
+    </colgroup>
+  `;
 
   return {
     title: "CheapBugs",
@@ -145,6 +154,7 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
       <section class="panel">
         <div class="panel-title">[ featured items ]</div>
         <table class="data-table bug-listing-table">
+          ${bugListingColumns}
           <thead>
             <tr>
               <th>score</th>
@@ -161,6 +171,7 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
       <section class="panel">
         <div class="panel-title">[ recent reports ]</div>
         <table class="data-table bug-listing-table">
+          ${bugListingColumns}
           <thead>
             <tr>
               <th>score</th>
