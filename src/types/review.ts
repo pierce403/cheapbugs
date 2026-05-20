@@ -18,6 +18,7 @@ export type ReviewNote = {
 
 export type ReviewDisplayState = {
   headline: ReviewVerdict | null;
+  latest: ReviewVerdict[];
   trusted: ReviewVerdict[];
   ignored: ReviewVerdict[];
   confidenceAverage: number | null;

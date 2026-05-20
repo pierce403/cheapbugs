@@ -364,8 +364,11 @@ cheapbugs/
   - `@ethereum-attestation-service/eas-sdk` is intentionally not used because it pulled Hardhat-era dependencies into npm audit.
   - Writes use direct ethers contract calls in `src/attest/eas.ts`.
   - `ReviewVerdict` is active; `PayoutRecord` remains a placeholder for future public payout records.
+  - Report detail pages show latest EAS verdict attestations in the trusted review panel with a trust column, while the headline state and confidence average still use only `VITE_REVIEWER_ADDRESSES`.
+  - Report detail pages do not show raw CheapBugs contract-suite addresses in the report metadata table.
 - **Test Criteria**:
   - [x] `npm run build` type-checks EAS reads/writes.
+  - [x] Playwright covers a mocked report detail page with EAS verdict rows, hidden contract addresses, and `unlock details` copy.
   - [ ] Add browser tests for mocked verdict submission once schema UIDs are stable in test config.
 
 ### BUGZ Token And Trading

@@ -1,12 +1,12 @@
-import { getSchemaCatalog } from "../lib/schema-overrides";
+import { getSchemaUid } from "../lib/schema-overrides";
 import { loadAuthorDisplay } from "../lib/authors";
 import { computeReviewDisplayState } from "../lib/eas";
 import { decryptPrivateSubmission, getStoredAccessKey, loadReviewVerdicts, loadSubmissionBundle, submitReviewVerdict } from "../lib/reports";
 import { saveReportAccessKey } from "../lib/report-access";
 import { toGatewayUrl } from "../lib/ipfs";
 import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
-import { chainConfig } from "../config/chains";
 import { escapeHtml, formatDate, newlineToBreaks, shortHash, textOrDash } from "../lib/utils";
+import type { ReviewVerdict } from "../types/review";
 
 import { bindDetailUnlockFlow, renderDetailUnlockModal } from "./detailUnlock";
 import type { AppViewContext, ViewResult } from "./types";
@@ -31,7 +31,13 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
   const target = reportDisplayTarget(bundle);
   const author = await loadAuthorDisplay(bundle.publicSubmission.reporterAddress);
   const authorHref = context.router.href(`/profile/${author.address}`);
-  const reviews = await loadReviewVerdicts(reportHash);
+  let reviewLoadError: string | null = null;
+  let reviews: ReviewVerdict[] = [];
+  try {
+    reviews = await loadReviewVerdicts(reportHash);
+  } catch (error) {
+    reviewLoadError = error instanceof Error ? error.message : "Review verdicts could not be loaded.";
+  }
   const reviewState = computeReviewDisplayState(reviews);
   const accessKey = getStoredAccessKey(reportHash);
   const revealAt = bundle.publicSubmission.revealAfter ? Date.parse(bundle.publicSubmission.revealAfter) : NaN;
@@ -40,7 +46,7 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
     !bundle.publicSubmission.detailsKeyRevealed &&
     Number.isFinite(revealAt) &&
     revealAt > Date.now();
-  let privateView = `<p class="muted-copy">Private dossier locked. Paste the review access key to decrypt client-side.</p>`;
+  let privateView = `<p class="muted-copy">Private details locked. Paste the review access key to decrypt client-side.</p>`;
   const earlyUnlockCta = canBuyEarlyDetails
     ? `
       <button id="buy-detail-unlock" type="button" class="button secondary lock-action" data-detail-unlock-report="${reportHash}">
@@ -77,12 +83,14 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
     }
   }
 
-  const trustedRows = reviewState.trusted.length
-    ? reviewState.trusted
+  const trustedReviewers = new Set(reviewState.trusted.map((review) => review.reviewer));
+  const reviewRows = reviewState.latest.length
+    ? reviewState.latest
         .map(
           (review) => `
             <tr>
               <td>${escapeHtml(shortHash(review.reviewer, 12, 8))}</td>
+              <td>${trustedReviewers.has(review.reviewer) ? "trusted" : "untrusted"}</td>
               <td>${escapeHtml(review.validity)}</td>
               <td>${escapeHtml(review.impact)}</td>
               <td>${escapeHtml(review.rewardClass)}</td>
@@ -92,13 +100,13 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
           `
         )
         .join("")
-    : `<tr><td colspan="6" class="muted-cell">No trusted verdicts yet.</td></tr>`;
+    : `<tr><td colspan="7" class="muted-cell">No verdicts yet.</td></tr>`;
 
-  const schemaWarning = getSchemaCatalog().filter((schema) => !schema.uid).length
-    ? `<p class="warning-copy">One or more review-related schema UIDs are unset. Reviewer verdict writes will fail until schemas are registered and configured.</p>`
+  const schemaWarning = !getSchemaUid("ReviewVerdict")
+    ? `<p class="warning-copy">Review verdict schema UID is unset. EAS reviews cannot be loaded or submitted until the schema is configured.</p>`
     : "";
-  const bugIndexWarning = !chainConfig.bugIndexAddress
-    ? `<p class="warning-copy">VITE_BUG_INDEX_ADDRESS is unset. Base onchain submissions are disabled until the bug index contract is deployed and configured.</p>`
+  const reviewLoadWarning = reviewLoadError
+    ? `<p class="warning-copy">Review verdicts are unavailable: ${escapeHtml(reviewLoadError)}</p>`
     : "";
 
   return {
@@ -106,7 +114,6 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
     html: `
       <section class="panel">
         <div class="panel-title">[ ${escapeHtml(title)} ]</div>
-        ${bugIndexWarning}
         ${schemaWarning}
         <table class="data-table">
           <tbody>
@@ -125,15 +132,13 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
             <tr><th>target ref hash</th><td>${escapeHtml(bundle.publicSubmission.targetRefHash)}</td></tr>
             <tr><th>content hash</th><td>${escapeHtml(bundle.publicSubmission.contentHash)}</td></tr>
             <tr><th>tags</th><td>${escapeHtml(textOrDash(bundle.publicSubmission.tags.join(", ")))}</td></tr>
-            <tr><th>bug index</th><td>${escapeHtml(chainConfig.bugIndexAddress || "unset")}</td></tr>
-            <tr><th>bond vault</th><td>${escapeHtml(chainConfig.bugBondVaultAddress)}</td></tr>
-            <tr><th>treasury vault</th><td>${escapeHtml(chainConfig.bugTreasuryVaultAddress)}</td></tr>
           </tbody>
         </table>
       </section>
 
       <section class="panel">
         <div class="panel-title">[ trusted review state ]</div>
+        ${reviewLoadWarning}
         <p class="lede">
           headline: ${escapeHtml(reviewState.headline?.validity ?? "pending")} /
           ${escapeHtml(reviewState.headline?.impact ?? "none")} /
@@ -144,6 +149,7 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
           <thead>
             <tr>
               <th>reviewer</th>
+              <th>trust</th>
               <th>validity</th>
               <th>impact</th>
               <th>reward</th>
@@ -151,12 +157,12 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
               <th>note</th>
             </tr>
           </thead>
-          <tbody>${trustedRows}</tbody>
+          <tbody>${reviewRows}</tbody>
         </table>
       </section>
 
       <section class="panel">
-        <div class="panel-title">[ private dossier ]</div>
+        <div class="panel-title">[ private details ]</div>
         ${earlyUnlockCta}
         <form id="access-key-form" class="stack-form narrow-form">
           <label>
@@ -167,7 +173,7 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
               <button id="copy-access-key" type="button" class="button secondary">copy</button>
             </div>
           </label>
-          <button class="button secondary" type="submit">unlock dossier</button>
+          <button class="button secondary" type="submit">unlock details</button>
         </form>
         <div class="private-view">${privateView}</div>
       </section>

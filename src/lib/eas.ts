@@ -59,6 +59,7 @@ const graphql = async <T>(query: string, variables: Record<string, unknown>): Pr
 };
 
 const parseDecodedData = (value: string): DecodedField[] => JSON.parse(value) as DecodedField[];
+const normalizeHex = (value: string): `0x${string}` => value.toLowerCase() as `0x${string}`;
 
 const readField = <T>(fields: DecodedField[], name: string): T => {
   const field = fields.find((entry) => entry.name === name);
@@ -72,7 +73,7 @@ const readField = <T>(fields: DecodedField[], name: string): T => {
 const reviewFromAttestation = (attestation: GraphqlAttestation): ReviewVerdict => {
   const fields = parseDecodedData(attestation.decodedDataJson);
   return {
-    reportHash: readField<`0x${string}`>(fields, "reportHash"),
+    reportHash: normalizeHex(readField<`0x${string}`>(fields, "reportHash")),
     reviewer: normalizeAddress(attestation.attester),
     validity: indexToValidity(Number(readField<string | number>(fields, "validity"))),
     impact: indexToImpact(Number(readField<string | number>(fields, "impact"))),
@@ -117,11 +118,19 @@ export const getReviewVerdictsByReportHash = async (reportHash: `0x${string}`): 
 
   const data = await graphql<{ attestations: GraphqlAttestation[] }>(query, {
     schemaId: schemaUid,
-    needle: reportHash,
+    needle: reportHash.toLowerCase(),
     take: 100
   });
 
-  return data.attestations.map(reviewFromAttestation);
+  const normalizedReportHash = reportHash.toLowerCase();
+  return data.attestations.flatMap((attestation) => {
+    try {
+      const review = reviewFromAttestation(attestation);
+      return review.reportHash.toLowerCase() === normalizedReportHash ? [review] : [];
+    } catch {
+      return [];
+    }
+  });
 };
 
 export const computeReviewDisplayState = (reviews: ReviewVerdict[]): ReviewDisplayState => {
@@ -146,6 +155,7 @@ export const computeReviewDisplayState = (reviews: ReviewVerdict[]): ReviewDispl
 
   return {
     headline: trusted[0] ?? null,
+    latest: allLatest,
     trusted,
     ignored,
     confidenceAverage

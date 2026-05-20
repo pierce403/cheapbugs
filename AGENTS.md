@@ -157,6 +157,7 @@ npm run launch:bug-index
 - `tests/manage-stake.spec.ts` mocks Base RPC for owner checks, role snapshots, and bond-vault account state.
 - `tests/treasury.spec.ts` mocks Base RPC for BUGZ metadata, treasury balance, treasury reward math, Uniswap v4 quotes, and Chainlink ETH/USD reads.
 - `tests/recent-reports.spec.ts` mocks Base JSON-RPC, IPFS BugBundle public metadata, ENS, and BUGZ balance reads to verify that index `latestReportHashes` plus `getReport` results render in the home route's `[ recent reports ]` table with score/title/author/date/unlock columns, cache across route changes and reloads, survive 429s from Base/IPFS using stale localStorage, open the detail-unlock modal from locked rows, and link to the author profile route.
+- `tests/report-detail.spec.ts` mocks Base JSON-RPC, IPFS BugBundle public metadata, ENS, and EAS GraphQL to verify the individual report route hides raw contract-suite addresses, uses `unlock details` copy, and renders latest EAS verdict rows with trusted/untrusted state.
 - `tests/header-bugz.spec.ts` verifies connected header BUGZ status does not issue treasury native balance reads on ordinary routes.
 - GitHub Pages deployment uses a GitHub Actions workflow, root-relative Vite base paths for the `cheapbugs.net` custom domain, and hash routing for SPA compatibility.
 - GitHub Pages should stay on the GitHub Actions workflow source, not legacy branch publishing.

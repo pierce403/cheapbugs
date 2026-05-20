@@ -50,6 +50,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The frontend index vote controls are a convenience layer over `CheapBugsBugIndex.submitBondVote`. Browser level checks only avoid predictable failed transactions; the index and bond vault remain the authority for vote eligibility and snapshotted weight.
 - After IPFS pinning, the broker publishes the signed report to `CheapBugsBugIndex.publishBug`, checks the broker role and gas funding before broadcast, waits for a receipt, and records the report hash and transaction hash in SQLite. `BROKER_DRY_RUN=1` skips the broadcast and Signal relay while still exercising validation and IPFS pinning.
 - Reviewer verdict writes use EAS directly from the reviewer wallet path, with EAS content treated as untrusted input when read back.
+- Report detail pages may display EAS verdict attestations from any attester returned by the configured verdict schema query, but only attestations from `VITE_REVIEWER_ADDRESSES` contribute to the trusted headline and confidence average.
 
 ## Reporter-Signed Broker Relay
 
@@ -121,6 +122,7 @@ Current and required properties:
 - Offchain EAS attestations are signed data objects that still need an application storage and transport decision.
 - EAS attestations or pointers do not by themselves prove that a reporter authorized a broker-submitted bug report unless the attestation data includes, or is backed by, a reporter-verifiable signature.
 - EAS note content and decoded fields must be treated as untrusted user input.
+- Frontend trusted-review summaries are allowlist-based presentation. Showing an untrusted attestation row does not make that attester trusted for payouts, admin status, or headline verdict state.
 
 ### CheapBugsBugIndex
 
