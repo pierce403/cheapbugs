@@ -2,8 +2,15 @@ import type { SubmissionBundle } from "../types/submission";
 
 import { textOrDash } from "./utils";
 
-export const reportDisplayTitle = (bundle: SubmissionBundle): string =>
-  textOrDash(bundle.publicMetadata.title ?? bundle.publicSubmission.reportId);
+export const reportDisplayTitle = (bundle: SubmissionBundle): string => {
+  if (bundle.publicMetadata.title) {
+    return textOrDash(bundle.publicMetadata.title);
+  }
+  if (bundle.publicMetadata.status === "loading") {
+    return "loading...";
+  }
+  return textOrDash(bundle.publicSubmission.reportId);
+};
 
 export const reportDisplayTarget = (bundle: SubmissionBundle): string => {
   const targetReference = bundle.publicMetadata.targetReference;

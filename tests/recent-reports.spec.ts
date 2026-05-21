@@ -290,10 +290,18 @@ const mockEnsRpc = async (page: Page): Promise<void> => {
   });
 };
 
-const mockBugBundleGateway = async (page: Page): Promise<{ counts: { bundle: number } }> => {
+const mockBugBundleGateway = async (
+  page: Page,
+  options: { delayMs?: number } = {}
+): Promise<{ counts: { bundle: number } }> => {
   const counts = { bundle: 0 };
   await page.route("https://ipfs.io/ipfs/bafyrecentbug", async (route) => {
     counts.bundle += 1;
+    if (options.delayMs) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, options.delayMs);
+      });
+    }
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(bugBundlePayload())
@@ -399,6 +407,26 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await expect(profileSubmissions.locator("thead th")).toHaveText(["date", "title", "target", "author", "details"]);
   await expect(profileSubmissions).toContainText("Live parser exploit");
   await expect(profileSubmissions).toContainText("2d 4h");
+});
+
+test("uses a loading title placeholder while BugBundle metadata is still propagating", async ({ page }) => {
+  await mockBaseRpc(page);
+  await mockEnsRpc(page);
+  await mockBugBundleGateway(page, { delayMs: 2_500 });
+
+  await page.goto("/");
+
+  const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
+  const loadingRow = recentReports.getByRole("row").filter({ hasText: "loading..." });
+  await expect(loadingRow).toBeVisible();
+  await expect(recentReports.getByText("CB-LIVE-0001")).toHaveCount(0);
+
+  await page.waitForTimeout(800);
+  await page.getByRole("link", { name: "submit" }).click();
+  await expect(page).toHaveURL(/\/submit$/);
+  await page.getByRole("link", { name: "index" }).click();
+
+  await expect(recentReports.getByRole("row").filter({ hasText: "Live parser exploit" })).toBeVisible();
 });
 
 test("shows bonded vote totals and sends level-zero voters to bonding", async ({ page }) => {

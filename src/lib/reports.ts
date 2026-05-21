@@ -150,11 +150,15 @@ const trimmedString = (value: unknown, maxLength: number): string | null => {
   return trimmed.slice(0, maxLength);
 };
 
-const emptyPublicMetadata = (errorMessage: string | null = null): SubmissionPublicMetadata => ({
+const emptyPublicMetadata = (
+  errorMessage: string | null = null,
+  status: SubmissionPublicMetadata["status"] = "unavailable"
+): SubmissionPublicMetadata => ({
   title: null,
   targetKind: null,
   targetReference: null,
-  errorMessage
+  errorMessage,
+  status
 });
 
 const parsePublicBugBundleMetadata = (payload: unknown): SubmissionPublicMetadata => {
@@ -170,7 +174,8 @@ const parsePublicBugBundleMetadata = (payload: unknown): SubmissionPublicMetadat
     title: trimmedString(submission.title, MAX_PUBLIC_BUNDLE_TITLE_LENGTH),
     targetKind: rawTargetKind && isTargetKind(rawTargetKind) ? rawTargetKind : null,
     targetReference: trimmedString(target.reference, MAX_PUBLIC_BUNDLE_TARGET_LENGTH),
-    errorMessage: null
+    errorMessage: null,
+    status: "ready"
   };
 };
 
@@ -186,12 +191,15 @@ export const loadPublicBugBundleMetadata = async (
       const storage = activeStorageProvider();
       return parsePublicBugBundleMetadata(await downloadJson<unknown>(storage, publicSubmission.encryptedPayloadCid));
     } catch (error) {
-      return emptyPublicMetadata(error instanceof Error ? error.message : "BugBundle public metadata could not be loaded.");
+      return emptyPublicMetadata(
+        error instanceof Error ? error.message : "BugBundle public metadata could not be loaded.",
+        "loading"
+      );
     }
   })();
   const timeout = new Promise<SubmissionPublicMetadata>((resolve) => {
     window.setTimeout(
-      () => resolve(emptyPublicMetadata("BugBundle public metadata load timed out.")),
+      () => resolve(emptyPublicMetadata("BugBundle public metadata load timed out.", "loading")),
       PUBLIC_BUNDLE_METADATA_TIMEOUT_MS
     );
   });

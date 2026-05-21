@@ -94,6 +94,7 @@ export type SubmissionPublicMetadata = {
   targetKind: TargetKind | null;
   targetReference: string | null;
   errorMessage: string | null;
+  status: "ready" | "loading" | "unavailable";
 };
 
 export type SubmissionPrivate = {
