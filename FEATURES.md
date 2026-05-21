@@ -108,13 +108,14 @@ cheapbugs/
   - Current bonded addresses are enumerable with `bondedAddressCount`, `bondedAddressAt`, and `bondedAddressList`.
   - The `/stake` route is labeled `bond` in the UI and lets connected users approve BUGZ for the bond vault, bond BUGZ, request the two-step withdrawal, and withdraw when the 7-day delay has elapsed.
   - The bond UI shows wallet BUGZ, allowance, active bond, pending withdrawal, current level, next-level threshold, and a live countdown/progress bar for step-2 withdrawal readiness without showing raw bond-vault or BUGZ-token contract addresses.
+  - After a withdrawal request transaction confirms, the bond UI keeps a session-scoped local pending-withdrawal hint and countdown visible if the next public Base read still returns stale vault state. The hint clears once chain reads show pending state, or after a later bond/withdraw action.
   - The add-bond form has one primary action button. It says `approve bugz` when the entered amount is above the current allowance, and `bond bugz` when current allowance is sufficient.
   - The bond dashboard keeps RPC reads conservative: it reads `accountOf`, computes the displayed level client-side from active whole BUGZ, uses the fixed 7-day withdrawal delay, and skips nonessential balance or allowance reads during a Base RPC cooldown.
 - **Test Criteria**:
   - [x] Forge unit tests cover bonding, two-step withdrawal, withdrawal cancellation, pending-withdrawal slashing, slasher permissions, full slash removal, and address enumeration.
   - [x] Forge fuzz tests cover level math and percentage slash accounting.
   - [x] Forge invariant tests prove the vault's BUGZ balance equals the listed active-plus-pending bond exposure across randomized bond, withdrawal, cancellation, and slash sequences.
-  - [x] Playwright covers the bond route dashboard, level display, allowance display, one-button approve/bond behavior, hidden contract addresses, pending-withdrawal warning, withdrawal countdown state, and Base RPC rate-limit backoff with mocked Base RPC.
+  - [x] Playwright covers the bond route dashboard, level display, allowance display, one-button approve/bond behavior, hidden contract addresses, pending-withdrawal warning, withdrawal countdown state, local stale-read withdrawal hint, and Base RPC rate-limit backoff with mocked Base RPC.
 
 ### Owner Manage Console
 

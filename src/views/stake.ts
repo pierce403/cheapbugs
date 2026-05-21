@@ -11,6 +11,24 @@ import { escapeHtml, formatTokenAmount, shortHash } from "../lib/utils";
 
 import type { AppViewContext, ViewResult } from "./types";
 
+type PendingWithdrawalHint = {
+  version: 1;
+  account: string;
+  vaultAddress: string;
+  active: string;
+  pendingWithdrawal: string;
+  withdrawAvailableAt: number;
+  txHash: string | null;
+  createdAt: number;
+};
+
+type StakeDashboard = BondVaultDashboard & {
+  pendingWithdrawalHint?: boolean;
+  pendingWithdrawalTxHash?: string | null;
+};
+
+const withdrawalHintKey = (dashboard: Pick<BondVaultDashboard, "account" | "vaultAddress">): string =>
+  `cheapbugs.bondWithdrawalHint.v1:${dashboard.vaultAddress.toLowerCase()}:${dashboard.account.toLowerCase()}`;
 const wholeBugz = (decimals: number): bigint => 10n ** BigInt(decimals);
 
 const pow10 = (exponent: number): bigint => {
@@ -22,6 +40,17 @@ const pow10 = (exponent: number): bigint => {
 };
 
 const nextLevelThreshold = (level: number): bigint => pow10(Math.max(1, level + 1));
+
+const levelFromActive = (active: bigint, decimals: number): number => {
+  const whole = active / wholeBugz(decimals);
+  let level = 0;
+  let threshold = 10n;
+  while (whole >= threshold) {
+    level += 1;
+    threshold *= 10n;
+  }
+  return level;
+};
 
 const levelProgressPercent = (active: bigint, level: number, decimals: number): number => {
   const whole = active / wholeBugz(decimals);
@@ -79,6 +108,104 @@ const countdownProgress = (dashboard: BondVaultDashboard): number => {
 const token = (value: bigint | null, dashboard: Pick<BondVaultDashboard, "decimals" | "symbol">): string =>
   value === null ? "-" : `${formatTokenAmount(value, dashboard.decimals)} ${dashboard.symbol}`;
 
+const readWithdrawalHint = (dashboard: BondVaultDashboard): PendingWithdrawalHint | null => {
+  if (typeof window === "undefined" || !dashboard.vaultAddress) {
+    return null;
+  }
+  const key = withdrawalHintKey(dashboard);
+  const raw = window.sessionStorage.getItem(key);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<PendingWithdrawalHint>;
+    const matches =
+      parsed.version === 1 &&
+      parsed.account?.toLowerCase() === dashboard.account.toLowerCase() &&
+      parsed.vaultAddress?.toLowerCase() === dashboard.vaultAddress.toLowerCase() &&
+      typeof parsed.pendingWithdrawal === "string" &&
+      typeof parsed.active === "string" &&
+      typeof parsed.withdrawAvailableAt === "number" &&
+      typeof parsed.createdAt === "number";
+    if (!matches) {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    const withdrawAvailableAt = Number(parsed.withdrawAvailableAt);
+    const expiredAt = withdrawAvailableAt + 24 * 60 * 60;
+    if (expiredAt < Math.floor(Date.now() / 1000)) {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    return parsed as PendingWithdrawalHint;
+  } catch {
+    window.sessionStorage.removeItem(key);
+    return null;
+  }
+};
+
+const clearWithdrawalHint = (dashboard: Pick<BondVaultDashboard, "account" | "vaultAddress">): void => {
+  if (typeof window === "undefined" || !dashboard.vaultAddress) {
+    return;
+  }
+  window.sessionStorage.removeItem(withdrawalHintKey(dashboard));
+};
+
+const saveWithdrawalHint = (
+  dashboard: BondVaultDashboard,
+  requestedAmount: bigint,
+  txHash: string | null | undefined
+): void => {
+  if (typeof window === "undefined" || !dashboard.vaultAddress) {
+    return;
+  }
+  const pendingWithdrawal = dashboard.pendingWithdrawal + requestedAmount;
+  const active = dashboard.active > requestedAmount ? dashboard.active - requestedAmount : 0n;
+  const now = Math.floor(Date.now() / 1000);
+  const hint: PendingWithdrawalHint = {
+    version: 1,
+    account: dashboard.account,
+    vaultAddress: dashboard.vaultAddress,
+    active: active.toString(),
+    pendingWithdrawal: pendingWithdrawal.toString(),
+    withdrawAvailableAt: now + dashboard.withdrawalDelaySeconds,
+    txHash: txHash ?? null,
+    createdAt: now
+  };
+  window.sessionStorage.setItem(withdrawalHintKey(dashboard), JSON.stringify(hint));
+};
+
+const dashboardWithWithdrawalHint = (dashboard: BondVaultDashboard): StakeDashboard => {
+  const hint = readWithdrawalHint(dashboard);
+  if (!hint) {
+    return dashboard;
+  }
+  if (dashboard.pendingWithdrawal > 0n) {
+    clearWithdrawalHint(dashboard);
+    return dashboard;
+  }
+
+  let pendingWithdrawal: bigint;
+  let active: bigint;
+  try {
+    pendingWithdrawal = BigInt(hint.pendingWithdrawal);
+    active = BigInt(hint.active);
+  } catch {
+    clearWithdrawalHint(dashboard);
+    return dashboard;
+  }
+  return {
+    ...dashboard,
+    active,
+    pendingWithdrawal,
+    totalBond: active + pendingWithdrawal,
+    withdrawAvailableAt: hint.withdrawAvailableAt,
+    level: levelFromActive(active, dashboard.decimals),
+    pendingWithdrawalHint: true,
+    pendingWithdrawalTxHash: hint.txHash
+  };
+};
+
 const parseDisplayAmount = (rawAmount: string, decimals: number): bigint | null => {
   const raw = rawAmount.trim().replace(/,/g, "");
   if (!raw || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) {
@@ -115,7 +242,7 @@ const renderConnect = (): string => `
   </section>
 `;
 
-const renderStake = (dashboard: BondVaultDashboard): string => {
+const renderStake = (dashboard: StakeDashboard): string => {
   if (!dashboard.isConfigured) {
     return `
       <section class="panel">
@@ -134,6 +261,15 @@ const renderStake = (dashboard: BondVaultDashboard): string => {
   const withdrawDisabled = withdrawal.ready ? "" : "disabled";
   const initialBondAction = bondFormAction("", dashboard.allowance, dashboard.decimals);
   const encodedAllowance = dashboard.allowance === null ? "" : dashboard.allowance.toString();
+  const pendingNotice = withdrawal.hasPending
+    ? dashboard.pendingWithdrawalHint
+      ? `<p class="warning-copy">Withdrawal request is in flight on this page. ${escapeHtml(
+          token(dashboard.pendingWithdrawal, dashboard)
+        )} is shown locally until Base RPC reflects the pending queue.${
+          dashboard.pendingWithdrawalTxHash ? ` tx ${escapeHtml(shortHash(dashboard.pendingWithdrawalTxHash, 12, 8))}` : ""
+        }</p>`
+      : `<p class="helper-copy">Pending withdrawals remain slashable until the countdown finishes.</p>`
+    : "";
 
   return `
     <section class="panel stake-page-panel" data-testid="stake-panel">
@@ -193,6 +329,7 @@ const renderStake = (dashboard: BondVaultDashboard): string => {
           <div class="stake-meter-fill countdown-fill" data-countdown-fill style="width: ${countdownPercent.toFixed(2)}%"></div>
         </div>
       </div>
+      ${pendingNotice}
       <form id="stake-withdraw-request-form" class="stack-form narrow-form">
         <label>
           amount to request
@@ -252,7 +389,7 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
     };
   }
 
-  const dashboard = await loadBondVaultDashboard(context.session.address);
+  const dashboard = dashboardWithWithdrawalHint(await loadBondVaultDashboard(context.session.address));
   return {
     title: "Bond",
     html: renderStake(dashboard),
@@ -310,6 +447,9 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
               : `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
             setStatus(message);
             context.notify("success", message);
+            if (action === "bond") {
+              clearWithdrawalHint(dashboard);
+            }
             await context.rerender();
           } catch (error) {
             appLog.warn("stake: bond action failed", { error });
@@ -324,6 +464,7 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
         event.preventDefault();
         const form = event.currentTarget as HTMLFormElement;
         const amount = String(new FormData(form).get("amount") ?? "");
+        const requestedAmount = parseDisplayAmount(amount, dashboard.decimals);
         await withButtonsDisabled(async () => {
           setStatus("waiting for withdrawal request transaction...");
           try {
@@ -331,6 +472,9 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
             const message = `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
             setStatus(message);
             context.notify("success", message);
+            if (requestedAmount && requestedAmount > 0n) {
+              saveWithdrawalHint(dashboard, requestedAmount, result.txHash);
+            }
             await context.rerender();
           } catch (error) {
             appLog.warn("stake: withdrawal request failed", { error });
@@ -349,6 +493,7 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
             const message = `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
             setStatus(message);
             context.notify("success", message);
+            clearWithdrawalHint(dashboard);
             await context.rerender();
           } catch (error) {
             appLog.warn("stake: withdraw failed", { error });

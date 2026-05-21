@@ -71,6 +71,38 @@ const seedLocalIdentity = async (page: Page): Promise<void> => {
   }, localIdentity);
 };
 
+const seedPendingWithdrawalHint = async (
+  page: Page,
+  hint: { active: bigint; pendingWithdrawal: bigint; withdrawAvailableAt: number; txHash: string }
+): Promise<void> => {
+  await page.addInitScript(
+    ({ account, vault, active, pendingWithdrawal, withdrawAvailableAt, txHash }) => {
+      const key = `cheapbugs.bondWithdrawalHint.v1:${vault.toLowerCase()}:${account.toLowerCase()}`;
+      window.sessionStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 1,
+          account,
+          vaultAddress: vault,
+          active,
+          pendingWithdrawal,
+          withdrawAvailableAt,
+          txHash,
+          createdAt: Math.floor(Date.now() / 1000)
+        })
+      );
+    },
+    {
+      account: ownerAddress,
+      vault: bondVaultAddress,
+      active: hint.active.toString(),
+      pendingWithdrawal: hint.pendingWithdrawal.toString(),
+      withdrawAvailableAt: hint.withdrawAvailableAt,
+      txHash: hint.txHash
+    }
+  );
+};
+
 const encodeOwner = (owner: string): string => ownableInterface.encodeFunctionResult("owner", [owner]);
 
 const mockEnsRpc = async (page: Page): Promise<void> => {
@@ -92,9 +124,20 @@ const mockEnsRpc = async (page: Page): Promise<void> => {
 
 const mockBaseRpc = async (
   page: Page,
-  options: { owner: string; withdrawAvailableAt?: number }
+  options: {
+    owner: string;
+    activeBond?: bigint;
+    pendingWithdrawal?: bigint;
+    withdrawAvailableAt?: number;
+    allowance?: bigint;
+  }
 ): Promise<void> => {
-  const withdrawAvailableAt = BigInt(options.withdrawAvailableAt ?? Math.floor(Date.now() / 1000) + 3_700);
+  const activeBond = options.activeBond ?? token(250n);
+  const pendingWithdrawal = options.pendingWithdrawal ?? token(50n);
+  const withdrawAvailableAt = BigInt(
+    options.withdrawAvailableAt ?? (pendingWithdrawal > 0n ? Math.floor(Date.now() / 1000) + 3_700 : 0)
+  );
+  const allowance = options.allowance ?? token(25n);
 
   await page.route("https://mainnet.base.org/**", async (route) => {
     const payload = JSON.parse(route.request().postData() || "{}") as RpcRequest | RpcRequest[];
@@ -133,7 +176,7 @@ const mockBaseRpc = async (
                   : selector === tokenInterface.getFunction("balanceOf")?.selector
                     ? tokenInterface.encodeFunctionResult("balanceOf", [token(1_500n)])
                     : selector === tokenInterface.getFunction("allowance")?.selector
-                      ? tokenInterface.encodeFunctionResult("allowance", [token(25n)])
+                      ? tokenInterface.encodeFunctionResult("allowance", [allowance])
                       : "0x";
         return { id: request.id, jsonrpc: "2.0", result };
       }
@@ -175,7 +218,7 @@ const mockBaseRpc = async (
           selector === bondInterface.getFunction("treasury")?.selector
             ? bondInterface.encodeFunctionResult("treasury", [treasuryVaultAddress])
             : selector === bondInterface.getFunction("accountOf")?.selector
-              ? bondInterface.encodeFunctionResult("accountOf", [[token(250n), token(50n), withdrawAvailableAt]])
+              ? bondInterface.encodeFunctionResult("accountOf", [[activeBond, pendingWithdrawal, withdrawAvailableAt]])
               : selector === bondInterface.getFunction("getLevel")?.selector
                 ? bondInterface.encodeFunctionResult("getLevel", [2])
                 : selector === bondInterface.getFunction("WITHDRAWAL_DELAY")?.selector
@@ -221,6 +264,36 @@ test("shows bonding level, allowance, and pending-withdrawal countdown", async (
   await expect(page.locator("[data-countdown-label]")).not.toHaveText("-");
   await expect(page.getByRole("button", { name: "withdraw pending BUGZ" })).toBeDisabled();
   await expect(page.getByText("Adding a new bond cancels your pending withdrawal")).toBeVisible();
+});
+
+test("keeps a confirmed withdrawal request visible while the vault read is stale", async ({ page }) => {
+  const withdrawAvailableAt = Math.floor(Date.now() / 1000) + 604_800;
+  await seedLocalIdentity(page);
+  await seedPendingWithdrawalHint(page, {
+    active: token(250n),
+    pendingWithdrawal: token(1_000n),
+    withdrawAvailableAt,
+    txHash: `0x${"7".repeat(64)}`
+  });
+  await mockEnsRpc(page);
+  await mockBaseRpc(page, {
+    owner: otherOwnerAddress,
+    activeBond: token(1_250n),
+    pendingWithdrawal: 0n,
+    withdrawAvailableAt: 0
+  });
+
+  await page.goto("/stake");
+
+  const stakePanel = page.getByTestId("stake-panel");
+  await expect(stakePanel).toContainText("250 BUGZ active");
+  await expect(stakePanel).toContainText("pending withdrawal");
+  await expect(stakePanel).toContainText("1,000 BUGZ");
+  await expect(page.getByText("step 2: waiting period")).toBeVisible();
+  await expect(page.locator("[data-countdown-label]")).not.toHaveText("-");
+  await expect(page.getByText("Withdrawal request is in flight on this page.")).toBeVisible();
+  await expect(page.getByText("tx 0x7777777777...77777777")).toBeVisible();
+  await expect(page.getByRole("button", { name: "withdraw pending BUGZ" })).toBeDisabled();
 });
 
 test("backs off from bond reads when Base RPC rate-limits", async ({ page }) => {
