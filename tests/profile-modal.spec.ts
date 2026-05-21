@@ -257,7 +257,7 @@ test("exports cheapbugs-key.json from the embedded wallet profile", async ({ pag
   expect(exported.privateKey).toBe(localIdentity.privateKey);
 });
 
-test("shows loading and logs a loud console error when header BUGZ balance fails", async ({ page }) => {
+test("shows loading and logs a loud console error when header BUGZ balance fails outside rate limits", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {

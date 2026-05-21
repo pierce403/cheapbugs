@@ -11,6 +11,7 @@ import {
 } from "../contracts/bugzToken";
 import { resolveEnsProfile } from "./ens";
 import { appLog } from "./logger";
+import { isRateLimitError } from "./rpcReadCache";
 
 import type { PatronLeaderboard, TokenDashboard } from "../types/token";
 
@@ -33,13 +34,12 @@ const holderApiFields = () => ({
 
 const retryDelay = (ms: number): Promise<void> => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 
-const isRateLimitError = (error: unknown): boolean => {
-  const raw = error instanceof Error ? error.message : String(error);
-  return /\b429\b|too many requests|rate.?limit/i.test(raw);
-};
-
 const tokenReadErrorMessage = (label: string, error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error);
+  if (isRateLimitError(error)) {
+    return `${label} failed: Base RPC is temporarily rate-limiting reads. Try again shortly.`;
+  }
+
   if (
     raw.includes("CALL_EXCEPTION") ||
     raw.includes("missing revert data") ||

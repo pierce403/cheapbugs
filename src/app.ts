@@ -125,27 +125,55 @@ const bugzHeaderErrorDetails = (
   address: `0x${string}`,
   errorMessage: string,
   error?: unknown
-): Record<string, unknown> => ({
-  address: shortHash(address, 10, 6),
-  errorMessage,
-  error,
-  rpcUrl: chainConfig.rpcUrl,
-  chainId: chainConfig.id,
-  bugzTokenAddress: chainConfig.bugzTokenAddress,
-  guidance: "Check that VITE_CHAIN_RPC_URL points to Base mainnet and VITE_BUGZ_TOKEN_ADDRESS is the live BUGZ token."
-});
+): Record<string, unknown> => {
+  const details: Record<string, unknown> = {
+    address: shortHash(address, 10, 6),
+    errorMessage,
+    rpcUrl: chainConfig.rpcUrl,
+    chainId: chainConfig.id,
+    bugzTokenAddress: chainConfig.bugzTokenAddress,
+    guidance: "Check that VITE_CHAIN_RPC_URL points to Base mainnet and VITE_BUGZ_TOKEN_ADDRESS is the live BUGZ token."
+  };
+  if (error !== undefined) {
+    details.error = error;
+  }
+  return details;
+};
+
+const isBaseRateLimitMessage = (message: string): boolean =>
+  /\b429\b|too many requests|rate.?limit|temporarily rate-limiting/i.test(message);
+
+const BUGZ_HEADER_RATE_LIMIT_LOG_COOLDOWN_MS = 60_000;
+const lastBugzHeaderRateLimitLogAt = new Map<string, number>();
+
+const logBugzHeaderReadProblem = (
+  address: `0x${string}`,
+  errorMessage: string,
+  error?: unknown
+): void => {
+  const details = bugzHeaderErrorDetails(address, errorMessage, error);
+  if (isBaseRateLimitMessage(errorMessage)) {
+    const now = Date.now();
+    const key = address.toLowerCase();
+    if (now - (lastBugzHeaderRateLimitLogAt.get(key) ?? 0) < BUGZ_HEADER_RATE_LIMIT_LOG_COOLDOWN_MS) {
+      return;
+    }
+    lastBugzHeaderRateLimitLogAt.set(key, now);
+    appLog.warn("token: header BUGZ status rate-limited", details);
+    return;
+  }
+
+  appLog.error("token: header BUGZ status load failed", details);
+};
 
 const logBugzHeaderDashboardFailure = (address: `0x${string}`, balance: HeaderBugzBalance): void => {
   if (!balance.errorMessage && balance.connectedBalance !== null) {
     return;
   }
 
-  appLog.error(
-    "token: header BUGZ status load failed",
-    bugzHeaderErrorDetails(
-      address,
-      balance.errorMessage ?? "BUGZ balance read returned no value for the connected wallet."
-    )
+  logBugzHeaderReadProblem(
+    address,
+    balance.errorMessage ?? "BUGZ balance read returned no value for the connected wallet."
   );
 };
 
@@ -160,7 +188,7 @@ const loadBugzHeaderDashboard = async (
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "BUGZ dashboard read failed before a dashboard could be built.";
-    appLog.error("token: header BUGZ status load threw", bugzHeaderErrorDetails(address, errorMessage, error));
+    logBugzHeaderReadProblem(address, errorMessage, error);
     onResult({ status: "error", address, errorMessage });
   }
 };

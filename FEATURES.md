@@ -60,9 +60,10 @@ cheapbugs/
   - The first screen is the usable app, not a landing page.
   - The home intro describes CheapBugs as a public goods crowdfunding protocol and summarizes the static GitHub/IPFS/XMTP/Base architecture without listing raw contract addresses, a patrons preview, or a footer in the first screen.
   - Header login/session controls remain compact and do not reintroduce old chain/storage/wallet/SIWE debug rows.
-  - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete and logs a high-visibility console error if the read resolves unavailable.
+  - Connected-wallet header BUGZ status shows `bugz: loading` before balance reads complete. Temporary Base RPC rate-limit failures are logged as throttled warnings; non-rate-limit failures still log high-visibility console errors.
   - Header BUGZ status only reads the connected wallet BUGZ balance; it must not load token metadata, treasury BUGZ, or treasury native ETH on ordinary route changes.
   - Browser contract adapters disable ethers' automatic HTTP 429 retry loop, dedupe in-flight Base RPC reads, cache successful reads briefly, serialize public Base reads through a shared queue, use exponential global cooldown after rate-limit errors, and persist public bug-index reads where useful.
+  - Routine `[cheapbugs]` info logs are opt-in through `VITE_DEBUG_LOGS=1` or `localStorage.setItem("cheapbugs.debugLogs", "1")`; warnings and errors remain visible.
   - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows `VITE_BUILD_ID`/`VITE_BUILD_TIME` when provided, otherwise falls back to the bundle commit hash and current build time, and formats build time in the viewer's local timezone.
   - The development banner text is centralized in `src/app.ts`, and success/ready status styling uses the orange warning/brand palette instead of the green success palette.
@@ -84,6 +85,7 @@ cheapbugs/
   - External wallet reconnect hints are stored in `cheapbugs.walletSession.v1`; SIWE proofs are stored in `cheapbugs.siweSession.v1`.
   - Embedded CheapBugs wallets are stored in `cheapbugs.localXmtpIdentity.v1` and can sign XMTP messages, `PublishBug` authorizations, and Base smart-contract transactions.
   - When login would otherwise open a WalletConnect QR path, the app first shows a CheapBugs modal with `connect with WalletConnect` and `I don't have a crypto wallet` options.
+  - The frontend filters the known harmless Thirdweb/WalletConnect `session_request ... without any listeners` console-noise case unless debug logs are enabled.
   - The no-crypto-wallet path opens an embedded-wallet modal that can generate a new browser-stored wallet or import `cheapbugs-key.json`.
   - Embedded-wallet profiles expose an `export cheapbugs-key.json` action. The exported JSON contains the embedded wallet address, private key, optional mnemonic, derivation path, and metadata, and must be treated as private key material.
   - ENS avatars are read from the raw `avatar` text record and sanitized to HTTPS or IPFS gateway URLs.

@@ -8,6 +8,7 @@ Frontend values:
 
 - `VITE_BUG_INDEX_ADDRESS`
 - `VITE_BUGZ_TOKEN_ADDRESS` only if token-aware frontend features should override the live Base BUGZ default
+- `VITE_CHAIN_RPC_URL` for frontend Base reads. The committed default `https://mainnet.base.org` is useful for local smoke tests, but production should use a dedicated Base RPC endpoint to avoid public-RPC `429`/rate-limit cooldowns in the header, index, bond, treasury, token, and patrons views.
 - `VITE_BUGZ_TREASURY_ADDRESS` only when overriding the committed Base treasury vault used for token-manager treasury stats
 - `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` when the patrons leaderboard should use the Etherscan V2 holder API for Base. Generate it from the Etherscan API Dashboard at `https://etherscan.io/myapikey`; Etherscan documents `tokenholderlist` as a paid holder endpoint.
 - `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK` when the patrons leaderboard should fall back to reconstructing holder balances from Transfer logs
@@ -18,6 +19,7 @@ Frontend values:
 - `VITE_REVIEWER_ADDRESSES`
 - `VITE_THIRDWEB_CLIENT_ID` only if you want to override the committed public Thirdweb client id used for wallet login and WalletConnect QR
 - `VITE_ENS_RPC_URL` only if you want to override the default Ethereum mainnet ENS RPC endpoint
+- `VITE_DEBUG_LOGS=1` only when debugging wallet/session flow. By default, CheapBugs suppresses routine `[cheapbugs]` info logs and a known Thirdweb WalletConnect `session_request ... without any listeners` console-noise case.
 
 Launcher values:
 
@@ -149,3 +151,5 @@ If you publish the app itself to IPFS, validate your gateway and asset-path beha
 - The token manager and patrons leaderboard use the live Base BUGZ token by default and only need `VITE_BUGZ_*` overrides for alternate deployments or optional display rows. The patrons board prefers the Etherscan V2 holder API and falls back to Transfer-log reconstruction from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`.
 - Pinata should only be enabled when `VITE_PINATA_PRESIGN_ENDPOINT` points to a helper that returns presigned upload URLs.
 - This repo no longer deploys a BUGZ token contract; the vaults hardcode the live Base BUGZ address.
+- If you see repeated `Base RPC is temporarily rate-limiting reads` messages, set `VITE_CHAIN_RPC_URL` to a less restrictive Base endpoint and rebuild. The frontend backs off automatically, but a public RPC can still make connected-wallet BUGZ balance and index refreshes look noisy or stale.
+- If a wallet keeps printing Thirdweb/WalletConnect `session_request ... without any listeners` messages after reconnects, clear site data for the CheapBugs origin or remove stale WalletConnect pairings in the wallet. The app filters the known harmless console noise unless `VITE_DEBUG_LOGS=1` or `localStorage.setItem("cheapbugs.debugLogs", "1")` is enabled.

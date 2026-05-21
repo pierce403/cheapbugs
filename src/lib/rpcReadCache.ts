@@ -20,8 +20,40 @@ let baseRpcNextReadAt = 0;
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-export const isRateLimitError = (error: unknown): boolean =>
-  /\b429\b|too many requests|rate.?limit/i.test(errorMessage(error));
+const rateLimitPattern = /\b429\b|too many requests|rate.?limit/i;
+
+const collectErrorText = (error: unknown, seen = new Set<unknown>(), depth = 0): string => {
+  if (error === null || error === undefined || depth > 4) {
+    return "";
+  }
+  if (typeof error === "string" || typeof error === "number" || typeof error === "boolean") {
+    return String(error);
+  }
+  if (error instanceof Error) {
+    return [
+      error.name,
+      error.message,
+      collectErrorText((error as Error & { code?: unknown }).code, seen, depth + 1),
+      collectErrorText((error as Error & { cause?: unknown }).cause, seen, depth + 1),
+      ...Object.entries(error).map(([, value]) => collectErrorText(value, seen, depth + 1))
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (typeof error !== "object") {
+    return String(error);
+  }
+  if (seen.has(error)) {
+    return "";
+  }
+  seen.add(error);
+  return Object.entries(error)
+    .map(([key, value]) => `${key} ${collectErrorText(value, seen, depth + 1)}`)
+    .filter(Boolean)
+    .join(" ");
+};
+
+export const isRateLimitError = (error: unknown): boolean => rateLimitPattern.test(collectErrorText(error));
 
 const rateLimitCooldownError = (retryAt: number): Error => {
   const retrySeconds = Math.max(1, Math.ceil((retryAt - Date.now()) / 1_000));

@@ -20,7 +20,8 @@ type RpcRequest = {
 type RpcResponse = {
   id: number | string | null;
   jsonrpc: "2.0";
-  result: unknown;
+  result?: unknown;
+  error?: { code: number; message: string };
 };
 
 const seedLocalIdentity = async (page: Page): Promise<void> => {
@@ -85,6 +86,12 @@ const mockBaseRpc = async (page: Page): Promise<{ counts: { balanceOf: number; n
 };
 
 test("header BUGZ status avoids treasury dashboard reads on ordinary routes", async ({ page }) => {
+  const consoleInfos: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "info") {
+      consoleInfos.push(message.text());
+    }
+  });
   await seedLocalIdentity(page);
   await mockEnsRpc(page);
   const { counts } = await mockBaseRpc(page);
@@ -94,4 +101,41 @@ test("header BUGZ status avoids treasury dashboard reads on ordinary routes", as
   await expect(page.locator(".bugz-chip")).toContainText("1,234 BUGZ");
   expect(counts.balanceOf).toBe(1);
   expect(counts.nativeBalance).toBe(0);
+  expect(consoleInfos.some((text) => text.includes("[cheapbugs] app: rendered route"))).toBe(false);
+});
+
+test("header BUGZ rate limits warn without loud console errors", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  const consoleWarnings: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+    if (message.type() === "warning") {
+      consoleWarnings.push(message.text());
+    }
+  });
+
+  await seedLocalIdentity(page);
+  await mockEnsRpc(page);
+  await fulfillRpc(page, "https://mainnet.base.org/**", (request) => {
+    switch (request.method) {
+      case "eth_chainId":
+        return { id: request.id, jsonrpc: "2.0", result: "0x2105" };
+      case "net_version":
+        return { id: request.id, jsonrpc: "2.0", result: "8453" };
+      case "eth_call":
+        return { id: request.id, jsonrpc: "2.0", error: { code: 429, message: "Too Many Requests" } };
+      default:
+        return { id: request.id, jsonrpc: "2.0", result: "0x" };
+    }
+  });
+
+  await page.goto("/submit");
+
+  await expect(page.locator(".bugz-chip")).toContainText("unavailable");
+  await expect
+    .poll(() => consoleWarnings.some((text) => text.includes("[cheapbugs] token: header BUGZ status rate-limited")))
+    .toBe(true);
+  expect(consoleErrors.some((text) => text.includes("[cheapbugs] token: header BUGZ status load failed"))).toBe(false);
 });
