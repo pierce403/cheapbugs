@@ -21,6 +21,15 @@ Frontend values:
 - `VITE_ENS_RPC_URL` only if you want to override the default Ethereum mainnet ENS RPC endpoint
 - `VITE_DEBUG_LOGS=1` only when debugging wallet/session flow. By default, CheapBugs suppresses routine `[cheapbugs]` info logs and a known Thirdweb WalletConnect `session_request ... without any listeners` console-noise case.
 
+Recommended Base RPC choices for `VITE_CHAIN_RPC_URL`:
+
+- Best production path: generate a keyed Base endpoint from Alchemy, Chainstack, QuickNode, or a similar provider and paste that full HTTPS endpoint into `VITE_CHAIN_RPC_URL`.
+- Alchemy Base mainnet endpoint format is `https://base-mainnet.g.alchemy.com/v2/<API_KEY>`.
+- Chainstack and QuickNode provide per-project/per-endpoint HTTPS URLs from their dashboards; copy the provider URL directly.
+- Base also exposes `https://mainnet-preconf.base.org`, but that is still a public Base endpoint. It can be useful for testing Base Flashblocks behavior, not as the main answer to public-RPC 429s.
+- `VITE_ETHERSCAN_API_KEY` or `VITE_BASESCAN_API_KEY` helps the patrons holder list, but it does not replace `VITE_CHAIN_RPC_URL` for contract reads such as `balanceOf`, `getReport`, or treasury reward math.
+- The treasury page stores successful BUGZ/USD quotes in browser localStorage for 10 minutes and keeps expired quotes as a stale fallback when fresh pricing fails. Users should not lose the last seen USD estimate just because the next Dex Screener or Base request is rate-limited.
+
 Launcher values:
 
 - `BASE_RPC_URL`

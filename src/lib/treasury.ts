@@ -4,7 +4,7 @@ import { chainConfig } from "../config/chains";
 import { getEthUsdPrice } from "../contracts/priceFeeds";
 import { getTreasuryPayoutSnapshot } from "../contracts/treasuryVault";
 import {
-  getBugzTokenMetadata,
+  getCachedBugzTokenMetadata,
   getBugzTreasuryTokenBalance,
   isBugzTokenConfigured
 } from "../contracts/bugzToken";
@@ -29,6 +29,7 @@ export type BugzUsdQuote = {
   sourceLabel: string;
   sourceUrl: string;
   fetchedAt: number;
+  isStale?: boolean;
   feedAddress?: `0x${string}`;
   feedUpdatedAt?: number;
 };
@@ -122,6 +123,11 @@ const deserializeBugzUsdQuote = (quote: SerializedBugzUsdQuote): BugzUsdQuote =>
   referenceUsdValue: BigInt(quote.referenceUsdValue)
 });
 
+const markStaleBugzUsdQuote = (quote: BugzUsdQuote): BugzUsdQuote => ({
+  ...quote,
+  isStale: true
+});
+
 const readCachedBugzUsdQuote = (allowStale = false): BugzUsdQuote | null => {
   if (typeof window === "undefined") {
     return null;
@@ -137,7 +143,10 @@ const readCachedBugzUsdQuote = (allowStale = false): BugzUsdQuote | null => {
     if (!allowStale && Date.now() - quote.fetchedAt > USD_QUOTE_TTL_MS) {
       return null;
     }
-    return quote;
+    return {
+      ...quote,
+      isStale: false
+    };
   } catch {
     window.localStorage.removeItem(usdQuoteStorageKey());
     return null;
@@ -145,16 +154,20 @@ const readCachedBugzUsdQuote = (allowStale = false): BugzUsdQuote | null => {
 };
 
 const writeCachedBugzUsdQuote = (quote: BugzUsdQuote): BugzUsdQuote => {
+  const freshQuote = {
+    ...quote,
+    isStale: false
+  };
   if (typeof window === "undefined") {
-    return quote;
+    return freshQuote;
   }
 
   try {
-    window.localStorage.setItem(usdQuoteStorageKey(), JSON.stringify(serializeBugzUsdQuote(quote)));
+    window.localStorage.setItem(usdQuoteStorageKey(), JSON.stringify(serializeBugzUsdQuote(freshQuote)));
   } catch {
     // Keep the dashboard usable even when browser storage is unavailable.
   }
-  return quote;
+  return freshQuote;
 };
 
 const parseUsdDecimal = (raw: string): bigint => {
@@ -284,6 +297,11 @@ const loadBugzUsdQuote = async (
       async () => writeCachedBugzUsdQuote(await loadDexScreenerBugzUsdQuote(tokenDecimals))
     );
   } catch (dexError) {
+    const staleQuote = readCachedBugzUsdQuote(true);
+    if (staleQuote?.tokenDecimals === tokenDecimals) {
+      return markStaleBugzUsdQuote(staleQuote);
+    }
+
     if (!options.allowOnchainFallback) {
       throw dexError;
     }
@@ -329,22 +347,26 @@ const unconfiguredDashboard = (): TreasuryDashboard => ({
   errorMessage: null
 });
 
-const loadingDashboard = (): TreasuryDashboard => ({
-  isConfigured: true,
-  tokenAddress: chainConfig.bugzTokenAddress,
-  treasuryAddress: chainConfig.bugzTreasuryAddress,
-  symbol: "BUGZ",
-  decimals: 18,
-  treasuryBalance: null,
-  minPayout: null,
-  maxPayout: null,
-  standardPayoutDivisor: DEFAULT_PAYOUT_DIVISOR,
-  usdQuote: null,
-  priceSourceLabel: "BUGZ/USD price loading",
-  priceSourceUrl: chainConfig.ethUsdFeedUrl,
-  marketUrl: chainConfig.bugzMarketUrl,
-  errorMessage: "Treasury data is loading from Base with throttled background reads."
-});
+const loadingDashboard = (): TreasuryDashboard => {
+  const cachedQuote = readCachedBugzUsdQuote(true);
+  const usdQuote = cachedQuote ? markStaleBugzUsdQuote(cachedQuote) : null;
+  return {
+    isConfigured: true,
+    tokenAddress: chainConfig.bugzTokenAddress,
+    treasuryAddress: chainConfig.bugzTreasuryAddress,
+    symbol: "BUGZ",
+    decimals: 18,
+    treasuryBalance: null,
+    minPayout: null,
+    maxPayout: null,
+    standardPayoutDivisor: DEFAULT_PAYOUT_DIVISOR,
+    usdQuote,
+    priceSourceLabel: usdQuote ? `${usdQuote.sourceLabel} (cached)` : "BUGZ/USD price loading",
+    priceSourceUrl: usdQuote?.sourceUrl ?? chainConfig.ethUsdFeedUrl,
+    marketUrl: chainConfig.bugzMarketUrl,
+    errorMessage: "Treasury data is loading from Base with throttled background reads."
+  };
+};
 
 const buildTreasuryDashboard = async (): Promise<TreasuryDashboard> => {
   if (!isBugzTokenConfigured() || !chainConfig.bugzTreasuryAddress) {
@@ -354,11 +376,10 @@ const buildTreasuryDashboard = async (): Promise<TreasuryDashboard> => {
   const earlyUsdReadPromise = readTreasuryValue("BUGZ/USD price read", () =>
     loadBugzUsdQuote(18, { allowOnchainFallback: false })
   );
-  const metadataRead = await readTreasuryValue("BUGZ metadata read", getBugzTokenMetadata);
   const balanceRead = await readTreasuryValue("treasury BUGZ balance read", getBugzTreasuryTokenBalance);
   const payoutRead = await readTreasuryValue("treasury payout read", getTreasuryPayoutSnapshot);
   const earlyUsdRead = await earlyUsdReadPromise;
-  const metadata = metadataRead.value;
+  const metadata = getCachedBugzTokenMetadata();
   const decimals = metadata?.decimals ?? 18;
   const symbol = metadata?.symbol ?? "BUGZ";
   const treasuryBalance = balanceRead.value?.tokenBalance ?? null;
@@ -369,9 +390,9 @@ const buildTreasuryDashboard = async (): Promise<TreasuryDashboard> => {
       ? earlyUsdRead
       : await readTreasuryValue("BUGZ/USD price read", () => loadBugzUsdQuote(decimals, { allowOnchainFallback: true }));
   const staleUsdQuote = usdRead.value ? null : readCachedBugzUsdQuote(true);
-  const usdQuote = usdRead.value ?? (staleUsdQuote?.tokenDecimals === decimals ? staleUsdQuote : null);
+  const usdQuote =
+    usdRead.value ?? (staleUsdQuote?.tokenDecimals === decimals ? markStaleBugzUsdQuote(staleUsdQuote) : null);
   const errorMessages = [
-    metadataRead.errorMessage,
     balanceRead.errorMessage,
     payoutRead.errorMessage,
     usdRead.value ? null : usdRead.errorMessage
@@ -389,7 +410,7 @@ const buildTreasuryDashboard = async (): Promise<TreasuryDashboard> => {
     standardPayoutDivisor: payout?.standardPayoutDivisor ?? payoutFallback.standardPayoutDivisor,
     usdQuote,
     priceSourceLabel: usdQuote
-      ? `${usdQuote.sourceLabel}${usdRead.value ? "" : " (cached)"}`
+      ? `${usdQuote.sourceLabel}${usdQuote.isStale ? " (cached)" : ""}`
       : "BUGZ/USD price unavailable",
     priceSourceUrl: usdQuote?.sourceUrl ?? chainConfig.ethUsdFeedUrl,
     marketUrl: chainConfig.bugzMarketUrl,

@@ -5,6 +5,7 @@ const tokenAddress = "0x60df4a0c9a5050c337010cb29c9694ce4d8fbb07";
 const treasuryVaultAddress = "0x4a080668d9848928dc6d48921cbdc4273fe27a9d";
 const chainlinkEthUsdFeed = "0x71041dddad3595f9ced3dccfbe3d1f4b0a16bb70";
 const uniswapV4Quoter = "0x0d5e0f971ed27fbff6c2837bf31316121532048d";
+const bugzUsdQuoteCacheKey = `cheapbugs.bugzUsdQuote.v1:8453:${tokenAddress}`;
 const token = (amount: bigint) => amount * 10n ** 18n;
 const abiCoder = AbiCoder.defaultAbiCoder();
 const treasuryInterface = new Interface([
@@ -88,7 +89,14 @@ const mockDexScreener = async (
   });
 };
 
-const mockBaseRpc = async (page: Page, options: { rejectQuote?: boolean } = {}): Promise<void> => {
+type BaseRpcCounts = {
+  tokenMetadataReads: number;
+};
+
+const mockBaseRpc = async (
+  page: Page,
+  options: { rejectQuote?: boolean; counts?: BaseRpcCounts } = {}
+): Promise<void> => {
   await page.route("https://mainnet.base.org/**", async (route: Route) => {
     const payload = JSON.parse(route.request().postData() || "{}") as RpcRequest | RpcRequest[];
     const requests = Array.isArray(payload) ? payload : [payload];
@@ -105,6 +113,17 @@ const mockBaseRpc = async (page: Page, options: { rejectQuote?: boolean } = {}):
           const selector = call.data?.slice(0, 10).toLowerCase();
 
           if (target === tokenAddress) {
+            if (
+              selector === "0x06fdde03" ||
+              selector === "0x95d89b41" ||
+              selector === "0x313ce567" ||
+              selector === "0x18160ddd"
+            ) {
+              if (options.counts) {
+                options.counts.tokenMetadataReads += 1;
+              }
+            }
+
             const result =
               selector === "0x06fdde03"
                 ? abiCoder.encode(["string"], ["CheapBugs"])
@@ -188,8 +207,9 @@ const mockBaseRpc = async (page: Page, options: { rejectQuote?: boolean } = {}):
 };
 
 test("treasury shows BUGZ value and USD payout range", async ({ page }) => {
+  const counts = { tokenMetadataReads: 0 };
   await mockDexScreener(page);
-  await mockBaseRpc(page);
+  await mockBaseRpc(page, { counts });
 
   await page.goto("/treasury");
 
@@ -203,6 +223,7 @@ test("treasury shows BUGZ value and USD payout range", async ({ page }) => {
   await expect(panel).toContainText("0.1% - 1%");
   await expect(panel).toContainText("Dex Screener BUGZ/USD token-pairs API");
   await expect(page.getByRole("button", { name: "copy treasury address" })).toBeEnabled();
+  expect(counts.tokenMetadataReads).toBe(0);
 });
 
 test("treasury falls back to onchain pricing when Dex Screener is unavailable", async ({ page }) => {
@@ -229,6 +250,33 @@ test("treasury caches BUGZ price for ten minutes", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("treasury-value")).toContainText("$1,500,000.00");
   expect(counts.requests).toBe(1);
+});
+
+test("treasury reuses stale cached BUGZ price when fresh pricing is unavailable", async ({ page }) => {
+  const staleQuote = {
+    referenceBugzAmount: (10n ** 18n).toString(),
+    referenceUsdValue: "150000000",
+    usdDecimals: 8,
+    tokenDecimals: 18,
+    sourceLabel: "Dex Screener BUGZ/USD token-pairs API",
+    sourceUrl: "https://dexscreener.com/base/bugz-weth",
+    fetchedAt: Date.now() - 11 * 60_000
+  };
+  await page.addInitScript(
+    ([key, quote]) => {
+      window.localStorage.setItem(key, JSON.stringify(quote));
+    },
+    [bugzUsdQuoteCacheKey, staleQuote] as const
+  );
+  await mockDexScreener(page, { rejectDexScreener: true });
+  await mockBaseRpc(page, { rejectQuote: true });
+
+  await page.goto("/treasury");
+
+  const panel = page.getByTestId("treasury-panel");
+  await expect(page.getByTestId("treasury-value")).toContainText("$1,500,000.00");
+  await expect(page.getByTestId("treasury-payout-range")).toContainText("$1,500.00 - $15,000.00");
+  await expect(panel).toContainText("Dex Screener BUGZ/USD token-pairs API (cached)");
 });
 
 test("treasury keeps BUGZ amounts visible when USD pricing is unavailable", async ({ page }) => {

@@ -153,7 +153,8 @@ cheapbugs/
   - Broker multipliers are capped at 10. A multiplier of 0 records a zero-payout completion.
   - The `/treasury` route encourages users to fund the treasury, exposes a copyable treasury address, and shows the current treasury BUGZ balance.
   - The `/treasury` route shows the current base payout range per valid bug by reading `calculateRewardAmount(1)` through `calculateRewardAmount(10)`, which is normally 0.1% to 1% of treasury funds.
-  - Treasury USD estimates prefer the Dex Screener Base token-pairs API for BUGZ/USD, cache successful browser quotes for 10 minutes, and fall back to a BUGZ/WETH Uniswap v4 quote plus the Chainlink Base mainnet ETH/USD standard feed. If pricing fails, the route keeps BUGZ-denominated values visible and shows an informative warning.
+  - Treasury USD estimates prefer the Dex Screener Base token-pairs API for BUGZ/USD, cache successful browser quotes for 10 minutes, keep expired quotes as a stale fallback marked `(cached)` when fresh pricing fails, and fall back to a BUGZ/WETH Uniswap v4 quote plus the Chainlink Base mainnet ETH/USD standard feed when no cached price is available. If pricing fails entirely, the route keeps BUGZ-denominated values visible and shows an informative warning.
+  - The treasury route avoids token metadata RPC reads on page load. It uses cached metadata if some other route already loaded it, otherwise defaults to `BUGZ` with 18 decimals for the live token.
   - The `/treasury` route renders cached or placeholder data immediately and refreshes values through throttled background Base reads so visiting the page does not launch a burst of concurrent RPC calls.
 - **Test Criteria**:
   - [x] Forge unit tests cover deposits, detail-key purchase accounting, broker list management, index-only payouts, treasury broker checks, divisor changes, multiplier caps, and reward transfers.
