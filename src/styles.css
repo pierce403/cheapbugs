@@ -662,7 +662,19 @@ button:disabled,
 }
 
 .bug-listing-table .title-column a {
+  color: #ffb06d;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 176, 109, 0.72);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
   overflow-wrap: anywhere;
+}
+
+.bug-listing-table .title-column a:hover,
+.bug-listing-table .title-column a:focus-visible {
+  color: #ffd0a3;
+  text-decoration-color: currentColor;
 }
 
 .bug-listing-table th:nth-child(3),
