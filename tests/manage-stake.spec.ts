@@ -242,8 +242,9 @@ test("shows bonding level, allowance, and pending-withdrawal countdown", async (
   await mockEnsRpc(page);
   await mockBaseRpc(page, { owner: otherOwnerAddress });
 
-  await page.goto("/stake");
+  await page.goto("/bond");
 
+  await expect(page).toHaveURL(/\/bond$/);
   await expect(page.getByRole("link", { name: "bond" })).toBeVisible();
   const stakePanel = page.getByTestId("stake-panel");
   await expect(stakePanel).not.toContainText(bondVaultAddress);
@@ -285,7 +286,7 @@ test("keeps a confirmed withdrawal request visible while the vault read is stale
     withdrawAvailableAt: 0
   });
 
-  await page.goto("/stake");
+  await page.goto("/bond");
 
   const stakePanel = page.getByTestId("stake-panel");
   await expect(stakePanel).toContainText("250 BUGZ active");
@@ -318,7 +319,7 @@ test("backs off from bond reads when Base RPC rate-limits", async ({ page }) => 
     });
   });
 
-  await page.goto("/stake");
+  await page.goto("/bond");
 
   const stakePanel = page.getByTestId("stake-panel");
   await expect(stakePanel).toContainText(/rate-limiting|Too Many Requests|Base RPC/i);

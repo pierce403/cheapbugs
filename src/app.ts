@@ -444,7 +444,7 @@ export class CheapBugsApp {
         return renderProfileView(context);
       case "review":
         return renderReviewView(context);
-      case "stake":
+      case "bond":
         return renderStakeView(context);
       case "manage":
         return renderManageView(context);
@@ -553,7 +553,7 @@ export class CheapBugsApp {
       ["/", "index"],
       ["/submit", "submit"],
       ["/review", "review"],
-      ["/stake", "bond"],
+      ["/bond", "bond"],
       ["/treasury", "treasury"],
       ["/token", "token"],
       ["/patrons", "patrons"]

@@ -220,7 +220,7 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
       });
       root.querySelector<HTMLButtonElement>("#vote-level-stake")?.addEventListener("click", () => {
         closeLevelModal();
-        viewContext.router.navigate("/stake");
+        viewContext.router.navigate("/bond");
       });
 
       root.querySelectorAll<HTMLButtonElement>("[data-report-vote]").forEach((button) => {

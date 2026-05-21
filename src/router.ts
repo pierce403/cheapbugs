@@ -28,8 +28,8 @@ const matchRoute = (path: string): RouteMatch => {
     return { name: "review", path: normalized, params: {} };
   }
 
-  if (normalized === "/stake") {
-    return { name: "stake", path: normalized, params: {} };
+  if (normalized === "/bond" || normalized === "/stake") {
+    return { name: "bond", path: normalized, params: {} };
   }
 
   if (normalized === "/manage") {

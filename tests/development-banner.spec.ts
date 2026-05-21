@@ -127,6 +127,7 @@ test("mobile header keeps navigation as stable tap targets", async ({ page }) =>
   expect(boxes.map((box) => box.text)).toEqual(["index", "submit", "review", "bond", "treasury", "token", "patrons", "about"]);
   expect(Math.max(...Array.from(rows.values()).map((row) => row.length))).toBeLessThanOrEqual(2);
   expect(Math.min(...Array.from(rows.values()).map((row) => row.length))).toBe(2);
+  await expect(page.getByRole("link", { name: "bond" })).toHaveAttribute("href", "/bond");
 });
 
 test("about route explains lifecycle, contracts, stack, and tokenomics", async ({ page }) => {

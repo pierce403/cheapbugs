@@ -689,6 +689,11 @@ button:disabled,
   overflow-wrap: normal;
 }
 
+.bug-listing-table th:nth-child(5),
+.bug-listing-table .unlock-column {
+  text-align: right;
+}
+
 .bug-listing-table td:nth-child(3) a {
   display: inline-block;
   max-width: 100%;
@@ -761,8 +766,9 @@ button:disabled,
 }
 
 .unlock-cell-inner {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   white-space: nowrap;
 }

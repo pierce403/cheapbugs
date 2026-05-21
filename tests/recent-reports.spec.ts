@@ -368,6 +368,7 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await expect(reportRow.locator("td").nth(2)).toContainText("alice.eth");
   await expect(reportRow.locator("td").nth(3)).toContainText("May 18, 2026");
   await expect(reportRow.locator("td").nth(4)).toHaveText("2d 4h");
+  await expect(reportRow.locator("td").nth(4)).toHaveCSS("text-align", "right");
   await expect(reportRow.getByRole("button", { name: "buy early access to Live parser exploit" })).toBeVisible();
   await expect(recentReports.getByText("No onchain bug reports resolved yet.")).toHaveCount(0);
 
@@ -463,7 +464,7 @@ test("shows bonded vote totals and sends level-zero voters to bonding", async ({
   await expect(dialog).toContainText("Voting requires bonded BUGZ");
 
   await dialog.getByRole("button", { name: "go to bond" }).click();
-  await expect(page).toHaveURL(/\/stake$/);
+  await expect(page).toHaveURL(/\/bond$/);
 });
 
 test("renders stale cached report and BugBundle details when providers rate limit", async ({ page }) => {

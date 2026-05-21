@@ -7,7 +7,7 @@ export type RouteName =
   | "report"
   | "profile"
   | "review"
-  | "stake"
+  | "bond"
   | "manage"
   | "treasury"
   | "token"
