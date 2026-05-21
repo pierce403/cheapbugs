@@ -261,6 +261,8 @@ test("shows bonding level, allowance, and pending-withdrawal countdown", async (
   await page.getByLabel("amount", { exact: true }).fill("10");
   await expect(page.getByRole("button", { name: "bond bugz" })).toBeVisible();
   await expect(page.getByText("step 2: waiting period")).toBeVisible();
+  await expect(page.getByTestId("withdrawal-in-flight")).toContainText("in flight");
+  await expect(page.getByTestId("withdrawal-in-flight")).toContainText("50 BUGZ");
   await expect(page.locator("[data-countdown-label]")).not.toHaveText("-");
   await expect(page.getByRole("button", { name: "withdraw pending BUGZ" })).toBeDisabled();
   await expect(page.getByText("Adding a new bond cancels your pending withdrawal")).toBeVisible();
@@ -290,6 +292,8 @@ test("keeps a confirmed withdrawal request visible while the vault read is stale
   await expect(stakePanel).toContainText("pending withdrawal");
   await expect(stakePanel).toContainText("1,000 BUGZ");
   await expect(page.getByText("step 2: waiting period")).toBeVisible();
+  await expect(page.getByTestId("withdrawal-in-flight")).toContainText("in flight");
+  await expect(page.getByTestId("withdrawal-in-flight")).toContainText("1,000 BUGZ");
   await expect(page.locator("[data-countdown-label]")).not.toHaveText("-");
   await expect(page.getByText("Withdrawal request is in flight on this page.")).toBeVisible();
   await expect(page.getByText("tx 0x7777777777...77777777")).toBeVisible();

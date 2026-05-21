@@ -261,10 +261,11 @@ const renderStake = (dashboard: StakeDashboard): string => {
   const withdrawDisabled = withdrawal.ready ? "" : "disabled";
   const initialBondAction = bondFormAction("", dashboard.allowance, dashboard.decimals);
   const encodedAllowance = dashboard.allowance === null ? "" : dashboard.allowance.toString();
+  const inFlightAmount = token(dashboard.pendingWithdrawal, dashboard);
   const pendingNotice = withdrawal.hasPending
     ? dashboard.pendingWithdrawalHint
       ? `<p class="warning-copy">Withdrawal request is in flight on this page. ${escapeHtml(
-          token(dashboard.pendingWithdrawal, dashboard)
+          inFlightAmount
         )} is shown locally until Base RPC reflects the pending queue.${
           dashboard.pendingWithdrawalTxHash ? ` tx ${escapeHtml(shortHash(dashboard.pendingWithdrawalTxHash, 12, 8))}` : ""
         }</p>`
@@ -325,6 +326,14 @@ const renderStake = (dashboard: StakeDashboard): string => {
           <span>step 2: ${escapeHtml(withdrawal.ready ? "withdrawal ready" : withdrawal.hasPending ? "waiting period" : "no pending withdrawal")}</span>
           <span data-countdown-label>${escapeHtml(withdrawal.hasPending ? countdown : "-")}</span>
         </div>
+        ${
+          withdrawal.hasPending
+            ? `<div class="stake-meter-row withdrawal-in-flight-row" data-testid="withdrawal-in-flight">
+                <span>in flight</span>
+                <strong>${escapeHtml(inFlightAmount)}</strong>
+              </div>`
+            : ""
+        }
         <div class="stake-meter" aria-label="withdrawal countdown">
           <div class="stake-meter-fill countdown-fill" data-countdown-fill style="width: ${countdownPercent.toFixed(2)}%"></div>
         </div>

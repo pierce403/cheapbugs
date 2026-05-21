@@ -1047,6 +1047,17 @@ button:disabled,
   text-align: right;
 }
 
+.withdrawal-in-flight-row {
+  align-items: baseline;
+  color: var(--text);
+}
+
+.withdrawal-in-flight-row strong {
+  color: var(--warning);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .stake-meter {
   height: 12px;
   border: 1px solid rgba(255, 106, 0, 0.36);
