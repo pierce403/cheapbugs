@@ -380,11 +380,13 @@ cheapbugs/
   - BUGZ defaults to Base token `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`.
   - Base contract read providers disable JSON-RPC batching and use a static network so public Base RPC endpoints do not reject oversized batches during concurrent header/token reads.
   - Buy/sell uses the Clanker-created Uniswap v4 WETH/BUGZ pool key, v4 Quoter, and Universal Router 2.1.1.
+  - Buy/sell quote previews refresh automatically after a short pause in amount or slippage edits. Quote reads do not require a connected wallet; submitting trades still requires a connected wallet and re-quotes before sending.
   - Buy wraps ETH through the router; sell requires ERC20 plus Permit2 approvals.
   - Trading does not depend on `VITE_BUGZ_TREASURY_ADDRESS`.
 - **Test Criteria**:
   - [x] `npm run build` type-checks trade adapters.
-  - [ ] Add mocked router/quote Playwright coverage for buy/sell form states.
+  - [x] Playwright covers debounced automatic quote refresh for the token trade form with mocked Base RPC.
+  - [ ] Add mocked router Playwright coverage for buy/sell transaction submission states.
 
 ### Patrons Leaderboard
 

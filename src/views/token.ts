@@ -5,6 +5,8 @@ import { escapeHtml, formatTokenAmount, shortHash, textOrDash } from "../lib/uti
 
 import type { AppViewContext, ViewResult } from "./types";
 
+const AUTO_QUOTE_DELAY_MS = 650;
+
 const tradeDisabled = (context: AppViewContext): string => (context.session.address ? "" : "disabled");
 
 const tokenAmount = (value: bigint | null, decimals: number, symbol: string): string =>
@@ -97,7 +99,7 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
             </label>
             <div id="bugz-buy-preview" class="buy-preview">Quote before buying.</div>
             <div class="button-row">
-              <button class="button secondary" type="button" data-quote="buy" ${tradeDisabled(context)}>quote</button>
+              <button class="button secondary" type="button" data-quote="buy">quote</button>
               <button class="button" type="submit" ${tradeDisabled(context)}>buy onchain</button>
             </div>
           </form>
@@ -114,7 +116,7 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
             </label>
             <div id="bugz-sell-preview" class="buy-preview">Quote before selling.</div>
             <div class="button-row">
-              <button class="button secondary" type="button" data-quote="sell" ${tradeDisabled(context)}>quote</button>
+              <button class="button secondary" type="button" data-quote="sell">quote</button>
               <button class="button" type="submit" ${tradeDisabled(context)}>sell onchain</button>
             </div>
           </form>
@@ -132,31 +134,83 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
 
         const amountInput = form.querySelector<HTMLInputElement>('input[name="amount"]');
         const slippageInput = form.querySelector<HTMLInputElement>('input[name="slippage"]');
-        const buttons = Array.from(form.querySelectorAll<HTMLButtonElement>("button"));
+        const submitButton = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+        const quoteButtons = Array.from(form.querySelectorAll<HTMLButtonElement>('[data-quote]'));
+        let quoteTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+        let inputVersion = 0;
+        let isTrading = false;
 
         const setBusy = (busy: boolean) => {
-          buttons.forEach((button) => {
-            button.disabled = busy || !appContext.session.address;
+          quoteButtons.forEach((button) => {
+            button.disabled = busy;
           });
+          if (submitButton) {
+            submitButton.disabled = busy || !appContext.session.address;
+          }
         };
 
-        const resolveQuote = async (): Promise<BugzTradeQuote | null> => {
+        const clearQuoteTimer = () => {
+          if (quoteTimer) {
+            globalThis.clearTimeout(quoteTimer);
+            quoteTimer = null;
+          }
+        };
+
+        const currentAmount = (): string => amountInput?.value.trim() ?? "";
+
+        const canAutoQuote = (): boolean => {
+          const parsed = Number(currentAmount());
+          return Number.isFinite(parsed) && parsed > 0;
+        };
+
+        const resolveQuote = async (options: { notifyOnError?: boolean } = {}): Promise<BugzTradeQuote | null> => {
+          if (isTrading) {
+            return null;
+          }
+          const quoteVersion = inputVersion;
           try {
             preview.textContent = "Reading pool quote...";
             const quote = await quoteBugzTrade(side, amountInput?.value ?? "", slippageInput?.value ?? "5");
+            if (quoteVersion !== inputVersion || isTrading) {
+              return null;
+            }
             preview.innerHTML = quoteHtml(quote);
             return quote;
           } catch (error) {
+            if (quoteVersion !== inputVersion || isTrading) {
+              return null;
+            }
             const message = error instanceof Error ? error.message : "Quote failed.";
             preview.textContent = message;
-            appContext.notify("error", message);
+            if (options.notifyOnError) {
+              appContext.notify("error", message);
+            }
             return null;
           }
         };
 
+        const scheduleQuote = () => {
+          inputVersion += 1;
+          clearQuoteTimer();
+          if (!canAutoQuote()) {
+            preview.textContent = side === "buy" ? "Enter an ETH amount to quote." : "Enter a BUGZ amount to quote.";
+            return;
+          }
+
+          preview.textContent = "Quote updates after you pause typing.";
+          quoteTimer = globalThis.setTimeout(() => {
+            quoteTimer = null;
+            void resolveQuote();
+          }, AUTO_QUOTE_DELAY_MS);
+        };
+
         quoteButton?.addEventListener("click", () => {
-          void resolveQuote();
+          clearQuoteTimer();
+          void resolveQuote({ notifyOnError: true });
         });
+        amountInput?.addEventListener("input", scheduleQuote);
+        slippageInput?.addEventListener("input", scheduleQuote);
+        scheduleQuote();
 
         form.addEventListener("submit", async (event) => {
           event.preventDefault();
@@ -166,6 +220,9 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
             return;
           }
 
+          inputVersion += 1;
+          clearQuoteTimer();
+          isTrading = true;
           setBusy(true);
           try {
             preview.textContent = side === "buy" ? "Buying BUGZ..." : "Selling BUGZ...";
@@ -185,6 +242,7 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
           } catch (error) {
             appContext.notify("error", error instanceof Error ? error.message : "BUGZ trade failed.");
           } finally {
+            isTrading = false;
             setBusy(false);
           }
         });
