@@ -8,6 +8,7 @@ import {
 } from "../contracts/bondVault";
 import { appLog } from "../lib/logger";
 import { escapeHtml, formatTokenAmount, shortHash } from "../lib/utils";
+import { isWalletActionCancelled } from "../lib/walletAction";
 
 import type { AppViewContext, ViewResult } from "./types";
 
@@ -450,7 +451,23 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
         await withButtonsDisabled(async () => {
           setStatus(action === "approve" ? "waiting for approval transaction..." : "waiting for bond transaction...");
           try {
-            const result = action === "approve" ? await approveBondVault(amount) : await bondBugz(amount);
+            const result =
+              action === "approve"
+                ? await context.runWalletAction(
+                    {
+                      title: "approve bugz",
+                      message:
+                        "Approve the BUGZ allowance transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+                    },
+                    () => approveBondVault(amount)
+                  )
+                : await context.runWalletAction(
+                    {
+                      title: "bond bugz",
+                      message: "Approve the bond transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+                    },
+                    () => bondBugz(amount)
+                  );
             const message = result.skipped
               ? "Bond vault already has enough allowance."
               : `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
@@ -461,6 +478,10 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
             }
             await context.rerender();
           } catch (error) {
+            if (isWalletActionCancelled(error)) {
+              setStatus("Wallet request cancelled.");
+              return;
+            }
             appLog.warn("stake: bond action failed", { error });
             const message = error instanceof Error ? error.message : "Bond action failed.";
             setStatus(message);
@@ -477,7 +498,14 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
         await withButtonsDisabled(async () => {
           setStatus("waiting for withdrawal request transaction...");
           try {
-            const result = await requestBondWithdrawal(amount);
+            const result = await context.runWalletAction(
+              {
+                title: "request withdrawal",
+                message:
+                  "Approve the withdrawal-request transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+              },
+              () => requestBondWithdrawal(amount)
+            );
             const message = `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
             setStatus(message);
             context.notify("success", message);
@@ -486,6 +514,10 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
             }
             await context.rerender();
           } catch (error) {
+            if (isWalletActionCancelled(error)) {
+              setStatus("Wallet request cancelled.");
+              return;
+            }
             appLog.warn("stake: withdrawal request failed", { error });
             const message = error instanceof Error ? error.message : "Withdrawal request failed.";
             setStatus(message);
@@ -498,13 +530,23 @@ export const renderStakeView = async (context: AppViewContext): Promise<ViewResu
         await withButtonsDisabled(async () => {
           setStatus("waiting for withdrawal transaction...");
           try {
-            const result = await withdrawBond();
+            const result = await context.runWalletAction(
+              {
+                title: "withdraw bond",
+                message: "Approve the withdrawal transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+              },
+              () => withdrawBond()
+            );
             const message = `${result.label} confirmed: ${shortHash(result.txHash ?? "0x", 12, 8)}`;
             setStatus(message);
             context.notify("success", message);
             clearWithdrawalHint(dashboard);
             await context.rerender();
           } catch (error) {
+            if (isWalletActionCancelled(error)) {
+              setStatus("Wallet request cancelled.");
+              return;
+            }
             appLog.warn("stake: withdraw failed", { error });
             const message = error instanceof Error ? error.message : "Withdrawal failed.";
             setStatus(message);

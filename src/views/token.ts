@@ -2,6 +2,7 @@ import { chainConfig } from "../config/chains";
 import { buyBugzOnchain, quoteBugzTrade, sellBugzOnchain, type BugzTradeQuote } from "../contracts/bugzTrade";
 import { loadTokenDashboard } from "../lib/token";
 import { escapeHtml, formatTokenAmount, shortHash, textOrDash } from "../lib/utils";
+import { isWalletActionCancelled } from "../lib/walletAction";
 
 import type { AppViewContext, ViewResult } from "./types";
 
@@ -228,8 +229,21 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
             preview.textContent = side === "buy" ? "Buying BUGZ..." : "Selling BUGZ...";
             const result =
               side === "buy"
-                ? await buyBugzOnchain(amountInput?.value ?? "", slippageInput?.value ?? "5")
-                : await sellBugzOnchain(amountInput?.value ?? "", slippageInput?.value ?? "5");
+                ? await appContext.runWalletAction(
+                    {
+                      title: "buy bugz",
+                      message: "Approve the buy transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+                    },
+                    () => buyBugzOnchain(amountInput?.value ?? "", slippageInput?.value ?? "5")
+                  )
+                : await appContext.runWalletAction(
+                    {
+                      title: "sell bugz",
+                      message:
+                        "Approve any BUGZ, Permit2, and sell transactions in your wallet. CheapBugs will wait for Base confirmations."
+                    },
+                    () => sellBugzOnchain(amountInput?.value ?? "", slippageInput?.value ?? "5")
+                  );
             preview.innerHTML = quoteHtml(result.quote);
             const approvals = result.approvalTxHashes?.length
               ? ` Approvals ${result.approvalTxHashes.map((hash) => shortHash(hash, 12, 6)).join(", ")}.`
@@ -240,6 +254,10 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
             );
             await appContext.rerender();
           } catch (error) {
+            if (isWalletActionCancelled(error)) {
+              preview.textContent = "Wallet request cancelled.";
+              return;
+            }
             appContext.notify("error", error instanceof Error ? error.message : "BUGZ trade failed.");
           } finally {
             isTrading = false;

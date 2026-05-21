@@ -382,11 +382,12 @@ cheapbugs/
   - Buy/sell uses the Clanker-created Uniswap v4 WETH/BUGZ pool key, v4 Quoter, and Universal Router 2.1.1.
   - Buy/sell quote previews refresh automatically after a short pause in amount or slippage edits. Quote reads do not require a connected wallet; submitting trades still requires a connected wallet and re-quotes before sending.
   - Buy wraps ETH through the router; sell requires ERC20 plus Permit2 approvals.
+  - Buy/sell and other onchain write flows show a shared wallet-request modal while CheapBugs is waiting for wallet approval and Base confirmation. The modal has a cancel button that stops the app from waiting; users still need to reject any open wallet prompt to cancel the wallet request itself.
   - Trading does not depend on `VITE_BUGZ_TREASURY_ADDRESS`.
 - **Test Criteria**:
   - [x] `npm run build` type-checks trade adapters.
   - [x] Playwright covers debounced automatic quote refresh for the token trade form with mocked Base RPC.
-  - [ ] Add mocked router Playwright coverage for buy/sell transaction submission states.
+  - [x] Playwright covers the token buy transaction opening the shared wallet-request modal and local cancel behavior with mocked Base RPC.
 
 ### Patrons Leaderboard
 

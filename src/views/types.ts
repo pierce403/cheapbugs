@@ -3,6 +3,7 @@ import type { RouteMatch, SessionState } from "../types/app";
 import type { AppRouter } from "../router";
 import type { StorageProvider } from "../types/storage";
 import type { ContractOwnerAccess } from "../contracts/cheapbugsSuite";
+import type { WalletActionOptions } from "../lib/walletAction";
 
 export type ContractOwnerViewState =
   | { status: "idle"; address: null }
@@ -20,6 +21,7 @@ export type AppViewContext = {
   notify: (tone: AppNotice["tone"], message: string) => void;
   dismissNotice: (id: string) => void;
   openWalletOnboarding: (mode?: "walletconnect" | "embedded") => void;
+  runWalletAction: <T>(options: WalletActionOptions, work: () => Promise<T>) => Promise<T>;
   rerender: () => Promise<void>;
 };
 

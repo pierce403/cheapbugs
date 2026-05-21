@@ -6,6 +6,7 @@ import { saveReportAccessKey } from "../lib/report-access";
 import { toGatewayUrl } from "../lib/ipfs";
 import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate, newlineToBreaks, shortHash, textOrDash } from "../lib/utils";
+import { isWalletActionCancelled } from "../lib/walletAction";
 import type { ReviewVerdict } from "../types/review";
 
 import { bindDetailUnlockFlow, renderDetailUnlockModal } from "./detailUnlock";
@@ -275,17 +276,27 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
         event.preventDefault();
         const formData = new FormData(reviewForm);
         try {
-          const result = await submitReviewVerdict(reportHash, {
-            validity: String(formData.get("validity") || "unconfirmed") as never,
-            impact: String(formData.get("impact") || "none") as never,
-            rewardClass: String(formData.get("rewardClass") || "none") as never,
-            confidence: Number(formData.get("confidence") || 0),
-            note: String(formData.get("note") || "")
-          });
+          const result = await appContext.runWalletAction(
+            {
+              title: "attest verdict",
+              message: "Approve the EAS attestation transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+            },
+            () =>
+              submitReviewVerdict(reportHash, {
+                validity: String(formData.get("validity") || "unconfirmed") as never,
+                impact: String(formData.get("impact") || "none") as never,
+                rewardClass: String(formData.get("rewardClass") || "none") as never,
+                confidence: Number(formData.get("confidence") || 0),
+                note: String(formData.get("note") || "")
+              })
+          );
 
           appContext.notify("success", `Review verdict attested: ${shortHash(result.attestationUid, 14, 8)}.`);
           await appContext.rerender();
         } catch (error) {
+          if (isWalletActionCancelled(error)) {
+            return;
+          }
           appContext.notify("error", error instanceof Error ? error.message : "Review attestation failed.");
         }
       });

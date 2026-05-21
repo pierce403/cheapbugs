@@ -9,6 +9,7 @@ import {
 import { getFeaturedReportHashes } from "../lib/eas";
 import { reportDetailsUnlockText, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate } from "../lib/utils";
+import { isWalletActionCancelled } from "../lib/walletAction";
 
 import { bindDetailUnlockFlow, renderDetailUnlockModal } from "./detailUnlock";
 import type { AppViewContext, ViewResult } from "./types";
@@ -242,10 +243,22 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
           });
 
           try {
-            await submitBugBondVote(reportHash, support);
+            await viewContext.runWalletAction(
+              {
+                title: support ? "upvote bug" : "downvote bug",
+                message: "Approve the bonded vote transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+              },
+              () => submitBugBondVote(reportHash, support)
+            );
             viewContext.notify("success", support ? "Upvote recorded." : "Downvote recorded.");
             await viewContext.rerender();
           } catch (error) {
+            if (isWalletActionCancelled(error)) {
+              siblingButtons.forEach((entry) => {
+                entry.disabled = false;
+              });
+              return;
+            }
             if (error instanceof NoBondVotingPowerError) {
               showLevelModal();
             } else {

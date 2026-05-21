@@ -1,6 +1,7 @@
 import { approveTreasuryForDetailKeyPayment, purchaseDetailKey } from "../contracts/treasuryVault";
 import { saveReportAccessKey } from "../lib/report-access";
 import { escapeHtml, formatTokenAmount, shortHash } from "../lib/utils";
+import { isWalletActionCancelled } from "../lib/walletAction";
 import { authController } from "../services";
 import { confirmDetailUnlockPayment, requestDetailUnlockQuote } from "../xmtp/broker";
 
@@ -114,9 +115,23 @@ export const bindDetailUnlockFlow = (root: HTMLElement, appContext: AppViewConte
           setUnlockActions("");
           try {
             setUnlockStatus("approving BUGZ", "checking treasury allowance.");
-            await approveTreasuryForDetailKeyPayment(quote.priceWei);
+            await appContext.runWalletAction(
+              {
+                title: "approve detail payment",
+                message:
+                  "Approve the BUGZ treasury allowance transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+              },
+              () => approveTreasuryForDetailKeyPayment(quote.priceWei)
+            );
             setUnlockStatus("paying treasury", "sending the detail-key payment to the treasury vault.");
-            const payment = await purchaseDetailKey(reportHash, quote.priceWei);
+            const payment = await appContext.runWalletAction(
+              {
+                title: "pay treasury",
+                message:
+                  "Approve the detail-key payment transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+              },
+              () => purchaseDetailKey(reportHash, quote.priceWei)
+            );
             setUnlockStatus("verifying payment", `payment confirmed: ${shortHash(payment.txHash, 12, 8)}. Asking broker for key.`);
             const key = await confirmDetailUnlockPayment(
               identity,
@@ -132,6 +147,12 @@ export const bindDetailUnlockFlow = (root: HTMLElement, appContext: AppViewConte
             closeUnlockModal();
             await appContext.rerender();
           } catch (error) {
+            if (isWalletActionCancelled(error)) {
+              setUnlockStatus("wallet request cancelled", "Reject any remaining wallet prompt if it is still open.");
+              setUnlockActions(`<button id="close-detail-unlock" class="button secondary" type="button">close</button>`);
+              root.querySelector<HTMLButtonElement>("#close-detail-unlock")?.addEventListener("click", closeUnlockModal);
+              return;
+            }
             setUnlockStatus("detail unlock failed", error instanceof Error ? error.message : "Detail unlock failed.");
             setUnlockActions(`<button id="close-detail-unlock" class="button secondary" type="button">close</button>`);
             root.querySelector<HTMLButtonElement>("#close-detail-unlock")?.addEventListener("click", closeUnlockModal);

@@ -3,6 +3,7 @@ import { authorDisplayFromMap, loadAuthorDisplayMap } from "../lib/authors";
 import { loadRecentBundles } from "../lib/reports";
 import { reportDetailsUnlockText, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate } from "../lib/utils";
+import { isWalletActionCancelled } from "../lib/walletAction";
 import type { BugIndexStatus } from "../types/domain";
 
 import type { AppViewContext, ViewResult } from "./types";
@@ -162,10 +163,23 @@ export const renderReviewView = async (context: AppViewContext): Promise<ViewRes
             status.textContent = `Flagging ${reportHash.slice(0, 10)} as ${selectedStatus}...`;
           }
           try {
-            const txHash = await flagBugReportStatus(reportHash, selectedStatus);
+            const txHash = await appContext.runWalletAction(
+              {
+                title: "flag report",
+                message:
+                  "Approve the report-status transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+              },
+              () => flagBugReportStatus(reportHash, selectedStatus)
+            );
             appContext.notify("success", `Report flagged as ${selectedStatus}: ${txHash}`);
             await appContext.rerender();
           } catch (error) {
+            if (isWalletActionCancelled(error)) {
+              if (status) {
+                status.textContent = "Wallet request cancelled.";
+              }
+              return;
+            }
             const message = error instanceof Error ? error.message : "Report status flag failed.";
             if (status) {
               status.textContent = message;

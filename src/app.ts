@@ -19,6 +19,7 @@ import { downloadTextFile } from "./lib/download";
 import { appLog } from "./lib/logger";
 import { loadBugzHeaderBalance, type HeaderBugzBalance } from "./lib/token";
 import { escapeHtml, formatTokenAmount, shortHash } from "./lib/utils";
+import { WalletActionCancelledError, type WalletActionOptions } from "./lib/walletAction";
 import { buildInfo, formatBuildTime } from "./buildInfo";
 import { chainConfig } from "./config/chains";
 import { env } from "./config/env";
@@ -93,6 +94,11 @@ type BugzHeaderState =
   | { status: "ready"; address: `0x${string}`; balance: HeaderBugzBalance }
   | { status: "error"; address: `0x${string}`; errorMessage: string };
 type WalletOnboardingMode = "walletconnect" | "embedded";
+type WalletActionState = {
+  id: number;
+  title: string;
+  message: string;
+};
 
 const renderBugzStatus = (session: SessionState, tokenHref: string, state: BugzHeaderState): string => {
   if (!session.address) {
@@ -291,6 +297,29 @@ const renderWalletOnboardingModal = (mode: WalletOnboardingMode | null): string 
   `;
 };
 
+const renderWalletActionModal = (state: WalletActionState | null): string => {
+  const hidden = state ? "" : "hidden";
+  const title = state?.title ?? "waiting for wallet";
+  const message = state?.message ?? "Approve or reject the wallet request.";
+  return `
+    <div id="wallet-action-modal" class="processing-modal-backdrop" ${hidden} role="dialog" aria-modal="true" aria-label="wallet request">
+      <div class="panel processing-modal wallet-action-modal">
+        <div class="signature-spinner" aria-hidden="true"></div>
+        <div class="signature-modal-copy">
+          <strong id="wallet-action-title">${escapeHtml(title)}</strong>
+          <p id="wallet-action-message">${escapeHtml(message)}</p>
+          <p class="helper-copy">
+            Reject the prompt in your wallet to cancel the wallet request. This button stops CheapBugs from waiting.
+          </p>
+          <div class="modal-actions">
+            <button id="wallet-action-cancel" class="button secondary" type="button">cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
 export class CheapBugsApp {
   private readonly router = new AppRouter();
   private notices: AppNotice[] = [];
@@ -301,6 +330,9 @@ export class CheapBugsApp {
   private ownerAccessState: ContractOwnerViewState = { status: "idle", address: null };
   private ownerAccessRequestId = 0;
   private walletOnboardingMode: WalletOnboardingMode | null = null;
+  private walletActionState: WalletActionState | null = null;
+  private walletActionRequestId = 0;
+  private cancelWalletAction: (() => void) | null = null;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -338,8 +370,66 @@ export class CheapBugsApp {
         this.walletOnboardingMode = mode;
         void this.render();
       },
+      runWalletAction: (options, work) => this.runWalletAction(options, work),
       rerender: () => this.render()
     };
+  }
+
+  private syncWalletActionModal(): void {
+    const modal = this.root.querySelector<HTMLElement>("#wallet-action-modal");
+    const title = this.root.querySelector<HTMLElement>("#wallet-action-title");
+    const message = this.root.querySelector<HTMLElement>("#wallet-action-message");
+    if (!modal || !title || !message) {
+      return;
+    }
+
+    if (!this.walletActionState) {
+      modal.setAttribute("hidden", "");
+      title.textContent = "waiting for wallet";
+      message.textContent = "Approve or reject the wallet request.";
+      return;
+    }
+
+    title.textContent = this.walletActionState.title;
+    message.textContent = this.walletActionState.message;
+    modal.removeAttribute("hidden");
+  }
+
+  private async runWalletAction<T>(options: WalletActionOptions, work: () => Promise<T>): Promise<T> {
+    const id = ++this.walletActionRequestId;
+    let rejectCancel: (error: WalletActionCancelledError) => void = () => {};
+    const cancelPromise = new Promise<never>((_resolve, reject) => {
+      rejectCancel = reject;
+    });
+
+    this.walletActionState = {
+      id,
+      title: options.title,
+      message: options.message
+    };
+    this.cancelWalletAction = () => {
+      if (this.walletActionState?.id !== id) {
+        return;
+      }
+      this.walletActionState = null;
+      this.cancelWalletAction = null;
+      this.syncWalletActionModal();
+      rejectCancel(new WalletActionCancelledError());
+    };
+    this.syncWalletActionModal();
+
+    const actionPromise = Promise.resolve().then(work);
+    actionPromise.catch(() => {});
+
+    try {
+      return await Promise.race([actionPromise, cancelPromise]);
+    } finally {
+      if (this.walletActionState?.id === id) {
+        this.walletActionState = null;
+        this.cancelWalletAction = null;
+        this.syncWalletActionModal();
+      }
+    }
   }
 
   private async resolveView(context: AppViewContext): Promise<ViewResult> {
@@ -447,6 +537,7 @@ export class CheapBugsApp {
     const bugzStatus = renderBugzStatus(session, context.router.href("/token"), this.bugzHeaderState);
     const profileModal = this.profileModalOpen ? renderProfileModal(session, bugzStatus) : "";
     const walletOnboardingModal = renderWalletOnboardingModal(this.walletOnboardingMode);
+    const walletActionModal = renderWalletActionModal(this.walletActionState);
     const notices = context.notices
       .map(
         (notice) => `
@@ -530,6 +621,7 @@ export class CheapBugsApp {
         <main class="main-column" data-view-root>${view.html}</main>
         ${profileModal}
         ${walletOnboardingModal}
+        ${walletActionModal}
       </div>
     `;
   }
@@ -615,6 +707,12 @@ export class CheapBugsApp {
         }
       });
     });
+
+    this.root.querySelector<HTMLButtonElement>("#wallet-action-cancel")?.addEventListener("click", () => {
+      appLog.info("ui: wallet action cancelled");
+      this.cancelWalletAction?.();
+    });
+    this.syncWalletActionModal();
 
     this.root.querySelector<HTMLButtonElement>("#connect-wallet")?.addEventListener("click", async () => {
       appLog.info("ui: header login click");

@@ -8,6 +8,7 @@ import {
 } from "../contracts/cheapbugsSuite";
 import { appLog } from "../lib/logger";
 import { escapeHtml, shortHash } from "../lib/utils";
+import { isWalletActionCancelled } from "../lib/walletAction";
 
 import type { AppViewContext, ContractOwnerViewState, ViewResult } from "./types";
 
@@ -217,12 +218,20 @@ export const renderManageView = async (context: AppViewContext): Promise<ViewRes
           }
 
           try {
-            const result = await executeManageAction({
-              action,
-              address: String(data.get("address") ?? ""),
-              divisor: String(data.get("divisor") ?? ""),
-              allowed: String(data.get("allowed") ?? "false") === "true"
-            });
+            const result = await context.runWalletAction(
+              {
+                title: "owner action",
+                message:
+                  "Approve the contract-management transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+              },
+              () =>
+                executeManageAction({
+                  action,
+                  address: String(data.get("address") ?? ""),
+                  divisor: String(data.get("divisor") ?? ""),
+                  allowed: String(data.get("allowed") ?? "false") === "true"
+                })
+            );
             const hashCopy = shortHash(result.txHash, 12, 8);
             if (status) {
               status.textContent = `${result.label} confirmed: ${hashCopy}`;
@@ -231,6 +240,12 @@ export const renderManageView = async (context: AppViewContext): Promise<ViewRes
             form.reset();
             await context.rerender();
           } catch (error) {
+            if (isWalletActionCancelled(error)) {
+              if (status) {
+                status.textContent = "Wallet request cancelled.";
+              }
+              return;
+            }
             appLog.warn("manage: owner action failed", { error });
             const message = error instanceof Error ? error.message : "Owner action failed.";
             if (status) {

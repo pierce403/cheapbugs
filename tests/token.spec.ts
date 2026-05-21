@@ -4,7 +4,15 @@ import { AbiCoder, Interface, parseEther } from "ethers";
 const tokenAddress = "0x60df4a0c9a5050c337010cb29c9694ce4d8fbb07";
 const treasuryVaultAddress = "0x4a080668d9848928dc6d48921cbdc4273fe27a9d";
 const uniswapV4Quoter = "0x0d5e0f971ed27fbff6c2837bf31316121532048d";
+const localIdentity = {
+  address: "0x47e727b6fd24efd9cc74eb5d9153e94c82681d3c",
+  privateKey: "0x59c6995e998f97a5a0044966f0945383e9dade06e38b2b0b020a74d5cc78a4f3",
+  mnemonic: "test test test test test test test test test test test junk",
+  derivationPath: "m/44'/60'/0'/0/0",
+  createdAt: "2026-05-17T00:00:00.000Z"
+};
 const token = (amount: bigint) => amount * 10n ** 18n;
+const quantity = (value: bigint | number): string => `0x${BigInt(value).toString(16)}`;
 const abiCoder = AbiCoder.defaultAbiCoder();
 const quoterInterface = new Interface([
   "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)"
@@ -23,20 +31,108 @@ type RpcResponse = {
   result: unknown;
 };
 
-const mockBaseRpc = async (page: Page): Promise<{ quoteCalls: () => number }> => {
+const seedLocalIdentity = async (page: Page): Promise<void> => {
+  await page.addInitScript((identity) => {
+    window.localStorage.setItem("cheapbugs.localXmtpIdentity.v1", JSON.stringify(identity));
+  }, localIdentity);
+};
+
+const receiptHash = "0x1111111111111111111111111111111111111111111111111111111111111111";
+
+const mockBaseRpc = async (
+  page: Page,
+  options: { holdRawTransactions?: boolean } = {}
+): Promise<{ quoteCalls: () => number; releaseTransactions: () => void }> => {
   let quoteCount = 0;
+  let releaseTransactions: () => void = () => {};
+  const rawTransactionGate = new Promise<void>((resolve) => {
+    releaseTransactions = resolve;
+  });
+
   await page.route("https://mainnet.base.org/**", async (route: Route) => {
     const payload = JSON.parse(route.request().postData() || "{}") as RpcRequest | RpcRequest[];
     const requests = Array.isArray(payload) ? payload : [payload];
 
-    const responses = requests.map((request): RpcResponse => {
+    const responses = await Promise.all(requests.map(async (request): Promise<RpcResponse> => {
       switch (request.method) {
         case "eth_chainId":
           return { id: request.id, jsonrpc: "2.0", result: "0x2105" };
         case "net_version":
           return { id: request.id, jsonrpc: "2.0", result: "8453" };
         case "eth_getBalance":
-          return { id: request.id, jsonrpc: "2.0", result: "0x0" };
+          return { id: request.id, jsonrpc: "2.0", result: quantity(parseEther("10")) };
+        case "eth_getTransactionCount":
+          return { id: request.id, jsonrpc: "2.0", result: "0x1" };
+        case "eth_blockNumber":
+          return { id: request.id, jsonrpc: "2.0", result: "0x2" };
+        case "eth_gasPrice":
+        case "eth_maxPriorityFeePerGas":
+          return { id: request.id, jsonrpc: "2.0", result: quantity(1_000_000_000n) };
+        case "eth_estimateGas":
+          return { id: request.id, jsonrpc: "2.0", result: "0x100000" };
+        case "eth_getBlockByNumber":
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            result: {
+              number: "0x2",
+              hash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+              parentHash: "0x3333333333333333333333333333333333333333333333333333333333333333",
+              timestamp: quantity(Math.floor(Date.now() / 1000)),
+              nonce: "0x0000000000000000",
+              difficulty: "0x0",
+              gasLimit: "0x1c9c380",
+              gasUsed: "0x0",
+              miner: "0x0000000000000000000000000000000000000000",
+              extraData: "0x",
+              transactions: [],
+              baseFeePerGas: quantity(1_000_000_000n)
+            }
+          };
+        case "eth_sendRawTransaction":
+          if (options.holdRawTransactions) {
+            await rawTransactionGate;
+          }
+          return { id: request.id, jsonrpc: "2.0", result: receiptHash };
+        case "eth_getTransactionReceipt":
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            result: {
+              transactionHash: receiptHash,
+              blockHash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+              blockNumber: "0x2",
+              status: "0x1",
+              from: localIdentity.address,
+              to: "0xfdf682f51fe81aa4898f0ae2163d8a55c127fbc7",
+              cumulativeGasUsed: "0x5208",
+              gasUsed: "0x5208",
+              effectiveGasPrice: quantity(1_000_000_000n),
+              contractAddress: null,
+              logs: [],
+              logsBloom: `0x${"0".repeat(512)}`,
+              type: "0x2"
+            }
+          };
+        case "eth_getTransactionByHash":
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            result: {
+              hash: receiptHash,
+              blockHash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+              blockNumber: "0x2",
+              from: localIdentity.address,
+              to: "0xfdf682f51fe81aa4898f0ae2163d8a55c127fbc7",
+              nonce: "0x1",
+              gas: "0x100000",
+              gasPrice: quantity(1_000_000_000n),
+              value: "0x0",
+              input: "0x",
+              type: "0x2",
+              chainId: "0x2105"
+            }
+          };
         case "eth_call": {
           const call = (request.params?.[0] ?? {}) as { to?: string; data?: string };
           const target = call.to?.toLowerCase();
@@ -76,7 +172,7 @@ const mockBaseRpc = async (page: Page): Promise<{ quoteCalls: () => number }> =>
         default:
           return { id: request.id, jsonrpc: "2.0", result: "0x" };
       }
-    });
+    }));
 
     await route.fulfill({
       contentType: "application/json",
@@ -84,7 +180,7 @@ const mockBaseRpc = async (page: Page): Promise<{ quoteCalls: () => number }> =>
     });
   });
 
-  return { quoteCalls: () => quoteCount };
+  return { quoteCalls: () => quoteCount, releaseTransactions };
 };
 
 test("token trade quotes update automatically after the user pauses typing", async ({ page }) => {
@@ -102,4 +198,27 @@ test("token trade quotes update automatically after the user pauses typing", asy
 
   await expect(buyPreview).toContainText("quote: 0.02 ETH");
   expect(rpc.quoteCalls()).toBeGreaterThan(callsAfterInitialQuote);
+});
+
+test("token trades show a cancelable wallet request modal", async ({ page }) => {
+  await seedLocalIdentity(page);
+  const rpc = await mockBaseRpc(page, { holdRawTransactions: true });
+
+  await page.goto("/token");
+
+  const buyPreview = page.locator("#bugz-buy-preview");
+  await expect(page.getByRole("button", { name: "buy onchain" })).toBeEnabled();
+  await expect(buyPreview).toContainText("quote: 0.01 ETH");
+
+  await page.getByRole("button", { name: "buy onchain" }).click();
+  const modal = page.getByRole("dialog", { name: "wallet request" });
+  await expect(modal).toBeVisible();
+  await expect(modal).toContainText("buy bugz");
+  await expect(modal).toContainText("Approve the buy transaction in your wallet.");
+
+  await modal.getByRole("button", { name: "cancel" }).click();
+  await expect(modal).toBeHidden();
+  await expect(buyPreview).toContainText("Wallet request cancelled.");
+
+  rpc.releaseTransactions();
 });
