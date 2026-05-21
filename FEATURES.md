@@ -65,7 +65,7 @@ cheapbugs/
   - Browser contract adapters disable ethers' automatic HTTP 429 retry loop, dedupe in-flight Base RPC reads, cache successful reads briefly, serialize public Base reads through a shared queue, use exponential global cooldown after rate-limit errors, and persist public bug-index reads where useful.
   - Bug-index reads fail open after a short timeout so the app shell is not blocked by a slow public RPC.
   - Header build metadata shows `VITE_BUILD_ID`/`VITE_BUILD_TIME` when provided, otherwise falls back to the bundle commit hash and current build time, and formats build time in the viewer's local timezone.
-  - The development banner text is centralized in `src/app.ts`, and its status styling uses the orange warning/brand palette instead of the green success palette.
+  - The development banner text is centralized in `src/app.ts`, and success/ready status styling uses the orange warning/brand palette instead of the green success palette.
   - The `about` route is a static protocol explainer covering bug submission, broker publishing, judging, reveal, payouts, smart contract mechanics, the tech stack, and BUGZ tokenomics without making public RPC or IPFS reads.
   - The `bond` and `treasury` navigation items are always available; `bond` routes to `/stake` for compatibility. The `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
   - Index admin authority does not grant `manage` navigation; admins use `/review` for report status flagging.
@@ -73,7 +73,7 @@ cheapbugs/
   - On mobile widths, the shell stacks the banner/header content, keeps auth controls full-width, and renders navigation as stable equal-width two-column tap targets.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
-  - [x] `npm run test:e2e` covers the development banner text and orange status styling, GitHub brand icon, build metadata, mobile navigation layout, the about route, header BUGZ status states, owner-only manage navigation, and that ordinary routes do not trigger treasury dashboard reads.
+  - [x] `npm run test:e2e` covers the development banner text, submit XMTP ready/success orange status styling, GitHub brand icon, build metadata, mobile navigation layout, the about route, header BUGZ status states, owner-only manage navigation, and that ordinary routes do not trigger treasury dashboard reads.
 
 ### Wallet Auth And Embedded Wallet Identity
 
@@ -242,7 +242,7 @@ cheapbugs/
   - The private details field warns submitters that it must include full step-by-step instructions and/or PoC demonstrating impact or the broker may mark the report invalid.
   - The frontend sends schema `cheapbugs.bug_submission.v1`, version `1`, type `submission`, reporter address, broker address, `bug_type`, `severity`, `target_interest`, title, public summary, the form target reference with target kind `other`, client metadata, an encrypted `bug_bundle`, a reporter EIP-712 `publish_authorization`, and an out-of-bundle `details_key`.
   - The frontend generates the random details key, encrypts details into the BugBundle with AES-256-GCM, hashes the canonical BugBundle core, and signs the `PublishBug` EIP-712 message that the index verifies. The signed `revealAfter` is 7 days plus a 1-hour publish buffer after bundle creation.
-  - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure.
+  - The submit route shows an inline XMTP status indicator for wallet/signing readiness, send progress, success, and failure; ready and success states follow the orange app theme instead of green.
   - The submit route shows a processing-submission modal while broker XMTP submission work is in progress, keeps it open across broker status replies, treats IPFS pinning as progress, and only marks the submission complete after the broker confirms live onchain publication or an explicit broker dry run.
   - The submit route opens a wallet-signature waiting modal while an external wallet or WalletConnect device must approve either XMTP registration or the `PublishBug` authorization signature.
   - XMTP submission status persists across incidental app rerenders so wallet registration progress and failures are not hidden by header/session updates.

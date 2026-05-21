@@ -1,10 +1,45 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const expectedBannerText = [
   "development preview",
   "CheapBugs is under development, so some features might not work as expected.",
   "Expected launch: June 1, 2026."
 ];
+
+const localIdentity = {
+  address: "0x47e727b6fd24efd9cc74eb5d9153e94c82681d3c",
+  privateKey: "0x59c6995e998f97a5a0044966f0945383e9dade06e38b2b0b020a74d5cc78a4f3",
+  mnemonic: "test test test test test test test test test test test junk",
+  derivationPath: "m/44'/60'/0'/0/0",
+  createdAt: "2026-05-17T00:00:00.000Z"
+};
+
+const zeroUint256 = `0x${"0".repeat(64)}`;
+
+const seedLocalIdentity = async (page: Page): Promise<void> => {
+  await page.addInitScript((identity) => {
+    window.localStorage.setItem("cheapbugs.localXmtpIdentity.v1", JSON.stringify(identity));
+  }, localIdentity);
+};
+
+const mockBaseRpc = async (page: Page): Promise<void> => {
+  await page.route("https://mainnet.base.org/**", async (route) => {
+    const payload = JSON.parse(route.request().postData() || "{}") as
+      | { id?: number | string | null; jsonrpc?: "2.0"; method?: string }
+      | Array<{ id?: number | string | null; jsonrpc?: "2.0"; method?: string }>;
+    const requests = Array.isArray(payload) ? payload : [payload];
+    const responses = requests.map((request) => ({
+      id: request.id ?? null,
+      jsonrpc: "2.0",
+      result: request.method === "eth_chainId" ? "0x2105" : request.method === "net_version" ? "8453" : zeroUint256
+    }));
+
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(Array.isArray(payload) ? responses : responses[0])
+    });
+  });
+};
 
 test("shows the development banner across app routes", async ({ page }) => {
   for (const path of ["/", "/submit"]) {
@@ -18,6 +53,32 @@ test("shows the development banner across app routes", async ({ page }) => {
     await expect(banner.locator("strong")).toHaveCSS("color", "rgb(255, 154, 71)");
     await expect(banner).toHaveCSS("border-top-color", "rgba(255, 106, 0, 0.58)");
   }
+});
+
+test("submit ready and success status messages use the orange theme", async ({ page }) => {
+  await seedLocalIdentity(page);
+  await mockBaseRpc(page);
+  await page.goto("/submit");
+
+  const status = page.getByTestId("xmtp-status");
+  await expect(status).toContainText("xmtp: signer ready");
+  await expect(status).toHaveCSS("color", "rgb(255, 154, 71)");
+  await expect(status).toHaveCSS("border-top-color", "rgba(255, 106, 0, 0.5)");
+
+  await page.locator("[data-view-root]").evaluate((root) => {
+    root.dispatchEvent(
+      new CustomEvent("cheapbugs:xmtp-progress", {
+        detail: {
+          message:
+            "broker: Submission complete: Bug published onchain: report 0x1111111111111111111111111111111111111111111111111111111111111111 tx 0x2222222222222222222222222222222222222222222222222222222222222222."
+        }
+      })
+    );
+  });
+
+  await expect(status).toContainText("broker: onchain live");
+  await expect(status).toHaveCSS("color", "rgb(255, 154, 71)");
+  await expect(status).toHaveCSS("border-top-color", "rgba(255, 106, 0, 0.5)");
 });
 
 test("shows the GitHub repository icon link beside the brand", async ({ page }) => {
