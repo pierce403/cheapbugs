@@ -355,12 +355,24 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   expect(scoreHeaderBox?.width ?? 0).toBeLessThanOrEqual(110);
   expect(dateHeaderBox?.width ?? 0).toBeLessThanOrEqual(230);
   expect(unlockHeaderBox?.width ?? 0).toBeLessThanOrEqual(116);
+  await expect(recentReports.locator("thead th").nth(0)).toHaveCSS("text-align", "center");
   const authorHeader = recentReports.locator("thead th").nth(2);
   await expect(authorHeader).toHaveCSS("white-space", "nowrap");
   const authorHeaderBox = await authorHeader.boundingBox();
   expect(authorHeaderBox?.width ?? 0).toBeGreaterThan(160);
   const reportRow = recentReports.getByRole("row").filter({ hasText: "Live parser exploit" });
-  await expect(reportRow.locator("td").nth(0).locator(".bug-vote-score")).toHaveText("0");
+  const scoreCell = reportRow.locator("td").nth(0);
+  await expect(scoreCell).toHaveCSS("text-align", "center");
+  await expect(scoreCell.locator(".bug-vote-score")).toHaveText("0");
+  const scoreCellBox = await scoreCell.boundingBox();
+  const voteControlBox = await scoreCell.locator(".bug-vote-control").boundingBox();
+  expect(scoreCellBox).not.toBeNull();
+  expect(voteControlBox).not.toBeNull();
+  if (scoreCellBox && voteControlBox) {
+    const cellCenter = scoreCellBox.x + scoreCellBox.width / 2;
+    const controlCenter = voteControlBox.x + voteControlBox.width / 2;
+    expect(Math.abs(cellCenter - controlCenter)).toBeLessThanOrEqual(1);
+  }
   const titleLink = reportRow.getByRole("link", { name: "Live parser exploit" });
   await expect(titleLink).toBeVisible();
   await expect(titleLink).toHaveCSS("text-decoration-line", "underline");
