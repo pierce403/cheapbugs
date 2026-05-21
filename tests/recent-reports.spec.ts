@@ -341,6 +341,12 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
 
   const recentReports = page.locator("section").filter({ hasText: "[ recent reports ]" });
   await expect(recentReports.locator("thead th")).toHaveText(["score", "title", "author", "date", "unlock"]);
+  const scoreHeaderBox = await recentReports.locator("thead th").nth(0).boundingBox();
+  const dateHeaderBox = await recentReports.locator("thead th").nth(3).boundingBox();
+  const unlockHeaderBox = await recentReports.locator("thead th").nth(4).boundingBox();
+  expect(scoreHeaderBox?.width ?? 0).toBeLessThanOrEqual(110);
+  expect(dateHeaderBox?.width ?? 0).toBeLessThanOrEqual(230);
+  expect(unlockHeaderBox?.width ?? 0).toBeLessThanOrEqual(116);
   const authorHeader = recentReports.locator("thead th").nth(2);
   await expect(authorHeader).toHaveCSS("white-space", "nowrap");
   const authorHeaderBox = await authorHeader.boundingBox();

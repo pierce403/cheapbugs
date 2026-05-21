@@ -640,7 +640,7 @@ button:disabled,
 }
 
 .bug-listing-table .score-col {
-  width: 132px;
+  width: 96px;
 }
 
 .bug-listing-table .author-col {
@@ -648,11 +648,11 @@ button:disabled,
 }
 
 .bug-listing-table .date-col {
-  width: 280px;
+  width: 216px;
 }
 
 .bug-listing-table .unlock-col {
-  width: 128px;
+  width: 104px;
 }
 
 .bug-listing-table .score-column,
