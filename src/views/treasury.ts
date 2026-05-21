@@ -1,4 +1,3 @@
-import { chainConfig } from "../config/chains";
 import { loadTreasuryDashboard, usdValueForBugz } from "../lib/treasury";
 import { escapeHtml, formatDate, formatTokenAmount, textOrDash } from "../lib/utils";
 
@@ -39,7 +38,7 @@ export const renderTreasuryView = async (context: AppViewContext): Promise<ViewR
     background: true,
     onUpdate: context.rerender
   });
-  const quoteDecimals = dashboard.usdQuote?.ethUsdDecimals ?? null;
+  const quoteDecimals = dashboard.usdQuote?.usdDecimals ?? null;
   const treasuryUsd = usdValueForBugz(dashboard.treasuryBalance, dashboard.usdQuote);
   const minPayoutUsd = usdValueForBugz(dashboard.minPayout, dashboard.usdQuote);
   const maxPayoutUsd = usdValueForBugz(dashboard.maxPayout, dashboard.usdQuote);
@@ -110,10 +109,15 @@ export const renderTreasuryView = async (context: AppViewContext): Promise<ViewR
             <tr><th>USD source</th><td><a href="${escapeHtml(dashboard.priceSourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(
               dashboard.priceSourceLabel
             )}</a></td></tr>
-            <tr><th>ETH/USD updated</th><td>${escapeHtml(
-              dashboard.usdQuote ? formatDate(new Date(dashboard.usdQuote.feedUpdatedAt * 1000).toISOString()) : "-"
+            <tr><th>price updated</th><td>${escapeHtml(
+              dashboard.usdQuote ? formatDate(new Date(dashboard.usdQuote.fetchedAt).toISOString()) : "-"
             )}</td></tr>
-            <tr><th>price feed</th><td><code>${escapeHtml(dashboard.usdQuote?.feedAddress ?? chainConfig.ethUsdFeedAddress ?? "-")}</code></td></tr>
+            <tr><th>ETH/USD updated</th><td>${escapeHtml(
+              dashboard.usdQuote?.feedUpdatedAt
+                ? formatDate(new Date(dashboard.usdQuote.feedUpdatedAt * 1000).toISOString())
+                : "-"
+            )}</td></tr>
+            <tr><th>price feed</th><td><code>${escapeHtml(dashboard.usdQuote?.feedAddress ?? "-")}</code></td></tr>
           </tbody>
         </table>
       </section>

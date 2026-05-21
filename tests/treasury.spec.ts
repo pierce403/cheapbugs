@@ -41,6 +41,53 @@ type RpcResponse =
       };
     };
 
+const dexScreenerPairs = (priceUsd = "1.5") => [
+  {
+    chainId: "base",
+    dexId: "uniswap",
+    url: "https://dexscreener.com/base/bugz-weth",
+    pairAddress: "0x1111111111111111111111111111111111111111",
+    baseToken: {
+      address: tokenAddress,
+      name: "CheapBugs",
+      symbol: "BUGZ"
+    },
+    quoteToken: {
+      address: "0x4200000000000000000000000000000000000006",
+      name: "Wrapped Ether",
+      symbol: "WETH"
+    },
+    priceUsd,
+    liquidity: {
+      usd: 100_000
+    }
+  }
+];
+
+const mockDexScreener = async (
+  page: Page,
+  options: { rejectDexScreener?: boolean; priceUsd?: string; counts?: { requests: number } } = {}
+): Promise<void> => {
+  await page.route("https://api.dexscreener.com/**", async (route: Route) => {
+    if (options.counts) {
+      options.counts.requests += 1;
+    }
+    if (options.rejectDexScreener) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "price unavailable" })
+      });
+      return;
+    }
+
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(dexScreenerPairs(options.priceUsd))
+    });
+  });
+};
+
 const mockBaseRpc = async (page: Page, options: { rejectQuote?: boolean } = {}): Promise<void> => {
   await page.route("https://mainnet.base.org/**", async (route: Route) => {
     const payload = JSON.parse(route.request().postData() || "{}") as RpcRequest | RpcRequest[];
@@ -141,6 +188,7 @@ const mockBaseRpc = async (page: Page, options: { rejectQuote?: boolean } = {}):
 };
 
 test("treasury shows BUGZ value and USD payout range", async ({ page }) => {
+  await mockDexScreener(page);
   await mockBaseRpc(page);
 
   await page.goto("/treasury");
@@ -153,11 +201,38 @@ test("treasury shows BUGZ value and USD payout range", async ({ page }) => {
   await expect(page.getByTestId("treasury-payout-range")).toContainText("1,000 BUGZ - 10,000 BUGZ");
   await expect(page.getByTestId("treasury-payout-range")).toContainText("$1,500.00 - $15,000.00");
   await expect(panel).toContainText("0.1% - 1%");
-  await expect(panel).toContainText("Uniswap v4 BUGZ/WETH quote plus Chainlink ETH/USD");
+  await expect(panel).toContainText("Dex Screener BUGZ/USD token-pairs API");
   await expect(page.getByRole("button", { name: "copy treasury address" })).toBeEnabled();
 });
 
+test("treasury falls back to onchain pricing when Dex Screener is unavailable", async ({ page }) => {
+  await mockDexScreener(page, { rejectDexScreener: true });
+  await mockBaseRpc(page);
+
+  await page.goto("/treasury");
+
+  const panel = page.getByTestId("treasury-panel");
+  await expect(page.getByTestId("treasury-value")).toContainText("$1,500,000.00");
+  await expect(page.getByTestId("treasury-payout-range")).toContainText("$1,500.00 - $15,000.00");
+  await expect(panel).toContainText("Uniswap v4 BUGZ/WETH quote plus Chainlink ETH/USD");
+});
+
+test("treasury caches BUGZ price for ten minutes", async ({ page }) => {
+  const counts = { requests: 0 };
+  await mockDexScreener(page, { counts });
+  await mockBaseRpc(page);
+
+  await page.goto("/treasury");
+  await expect(page.getByTestId("treasury-value")).toContainText("$1,500,000.00");
+  expect(counts.requests).toBe(1);
+
+  await page.reload();
+  await expect(page.getByTestId("treasury-value")).toContainText("$1,500,000.00");
+  expect(counts.requests).toBe(1);
+});
+
 test("treasury keeps BUGZ amounts visible when USD pricing is unavailable", async ({ page }) => {
+  await mockDexScreener(page, { rejectDexScreener: true });
   await mockBaseRpc(page, { rejectQuote: true });
 
   await page.goto("/treasury");

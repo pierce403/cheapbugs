@@ -153,7 +153,7 @@ cheapbugs/
   - Broker multipliers are capped at 10. A multiplier of 0 records a zero-payout completion.
   - The `/treasury` route encourages users to fund the treasury, exposes a copyable treasury address, and shows the current treasury BUGZ balance.
   - The `/treasury` route shows the current base payout range per valid bug by reading `calculateRewardAmount(1)` through `calculateRewardAmount(10)`, which is normally 0.1% to 1% of treasury funds.
-  - Treasury USD estimates use a BUGZ/WETH Uniswap v4 quote plus the Chainlink Base mainnet ETH/USD standard feed, defaulting to `0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70`. If pricing fails, the route keeps BUGZ-denominated values visible and shows an informative warning.
+  - Treasury USD estimates prefer the Dex Screener Base token-pairs API for BUGZ/USD, cache successful browser quotes for 10 minutes, and fall back to a BUGZ/WETH Uniswap v4 quote plus the Chainlink Base mainnet ETH/USD standard feed. If pricing fails, the route keeps BUGZ-denominated values visible and shows an informative warning.
   - The `/treasury` route renders cached or placeholder data immediately and refreshes values through throttled background Base reads so visiting the page does not launch a burst of concurrent RPC calls.
 - **Test Criteria**:
   - [x] Forge unit tests cover deposits, detail-key purchase accounting, broker list management, index-only payouts, treasury broker checks, divisor changes, multiplier caps, and reward transfers.
@@ -444,7 +444,7 @@ cheapbugs/
 - **EAS**: reviewer verdict attestations and indexed reads.
 - **XMTP**: browser-to-broker report submission and broker status messages.
 - **Signal**: private reviewer channel relay and reaction source.
-- **Uniswap v4 / Clanker**: browser-signed BUGZ market trading.
+- **Dex Screener / Uniswap v4 / Clanker**: treasury BUGZ/USD price display and browser-signed BUGZ market trading.
 - **Foundry**: contract builds, tests, and Solidity-native deployment.
 
 ## Verification Commands

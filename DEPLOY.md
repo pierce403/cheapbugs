@@ -149,6 +149,7 @@ If you publish the app itself to IPFS, validate your gateway and asset-path beha
 - Review trust is currently driven by the configured reviewer allowlist.
 - The bug index contract supports bonded onchain vote records for contract-level testing and future extensions, but the current frontend still computes live review state from EAS.
 - The token manager and patrons leaderboard use the live Base BUGZ token by default and only need `VITE_BUGZ_*` overrides for alternate deployments or optional display rows. The patrons board prefers the Etherscan V2 holder API and falls back to Transfer-log reconstruction from `VITE_BUGZ_TOKEN_DEPLOYMENT_BLOCK`.
+- The treasury page pulls BUGZ/USD from Dex Screener first and caches a successful browser quote for 10 minutes, then falls back to the configured Base RPC plus Chainlink ETH/USD path if Dex Screener is unavailable.
 - Pinata should only be enabled when `VITE_PINATA_PRESIGN_ENDPOINT` points to a helper that returns presigned upload URLs.
 - This repo no longer deploys a BUGZ token contract; the vaults hardcode the live Base BUGZ address.
 - If you see repeated `Base RPC is temporarily rate-limiting reads` messages, set `VITE_CHAIN_RPC_URL` to a less restrictive Base endpoint and rebuild. The frontend backs off automatically, but a public RPC can still make connected-wallet BUGZ balance and index refreshes look noisy or stale.
