@@ -27,6 +27,17 @@ BUG_INDEX_ABI = [
         "outputs": [{"name": "", "type": "bool"}],
     },
     {
+        "name": "completePayout",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "reportHash", "type": "bytes32"},
+            {"name": "multiplier", "type": "uint8"},
+            {"name": "detailsKey", "type": "bytes32"},
+        ],
+        "outputs": [],
+    },
+    {
         "name": "publishBug",
         "type": "function",
         "stateMutability": "nonpayable",
@@ -236,6 +247,73 @@ class BugIndexClient:
             block_number=int(block_number) if block_number is not None else None,
             index_address=self.index_address,
         )
+
+    def complete_payout(self, report_hash: str, multiplier: int, details_key: bytes) -> str:
+        if not self.index_address:
+            raise BugIndexPublishError("BROKER_BUG_INDEX_ADDRESS or VITE_BUG_INDEX_ADDRESS is required for payout completion.")
+        if multiplier < 0 or multiplier > 10:
+            raise BugIndexPublishError("Payout multiplier must be between 0 and 10.")
+        if len(details_key) != 32:
+            raise BugIndexPublishError("Payout details key must be exactly 32 bytes.")
+        if self.dry_run:
+            return f"dry-run:completePayout:{report_hash}:{multiplier}"
+
+        account = self.account
+        try:
+            chain_id = int(self.web3.eth.chain_id)
+        except Exception as exc:
+            raise BugIndexPublishError(f"Could not read Base chain id from RPC {self.rpc_url}: {_rpc_error(exc)}") from exc
+        if chain_id != self.chain_id:
+            raise BugIndexPublishError(f"RPC chain id mismatch: expected {self.chain_id}, got {chain_id}. Check BASE_RPC_URL.")
+
+        broker_address = self.web3.to_checksum_address(account.address)
+        function = self.contract.functions.completePayout(report_hash, multiplier, details_key)
+        try:
+            gas_estimate = int(function.estimate_gas({"from": broker_address}))
+        except Exception as exc:
+            raise BugIndexPublishError(
+                "completePayout gas estimation failed. The report may be out of order, unreviewed, before reveal time, "
+                f"missing its details key, or the broker may lack index/treasury permission. RPC said: {_rpc_error(exc)}"
+            ) from exc
+
+        gas_limit = max(100_000, int(gas_estimate * 1.25))
+        gas_price = int(self.web3.eth.gas_price)
+        balance = int(self.web3.eth.get_balance(broker_address))
+        required = gas_limit * gas_price
+        if balance < required:
+            raise BugIndexPublishError(
+                "Broker wallet has insufficient Base ETH for completePayout gas: "
+                f"balance={balance} wei, estimated_required={required} wei. Fund {broker_address} on Base."
+            )
+
+        try:
+            tx = function.build_transaction(
+                {
+                    "from": broker_address,
+                    "nonce": self.web3.eth.get_transaction_count(broker_address),
+                    "chainId": chain_id,
+                    "gas": gas_limit,
+                    "gasPrice": gas_price,
+                }
+            )
+            signed = account.sign_transaction(tx)
+            raw_tx = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
+            tx_hash_bytes = self.web3.eth.send_raw_transaction(raw_tx)
+            tx_hash = self.web3.to_hex(tx_hash_bytes)
+        except Exception as exc:
+            raise BugIndexPublishError(f"Failed to broadcast completePayout transaction: {_rpc_error(exc)}") from exc
+
+        try:
+            receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash, timeout=self.receipt_timeout_seconds)
+        except Exception as exc:
+            raise BugIndexPublishError(
+                f"completePayout transaction {tx_hash} was broadcast but no receipt arrived within "
+                f"{self.receipt_timeout_seconds}s: {_rpc_error(exc)}"
+            ) from exc
+        status = int(_receipt_value(receipt, "status") or 0)
+        if status != 1:
+            raise BugIndexPublishError(f"completePayout transaction {tx_hash} reverted onchain. Check BaseScan for the revert reason.")
+        return tx_hash
 
 
 def build_publish_bug_call_args(

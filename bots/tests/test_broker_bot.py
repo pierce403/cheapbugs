@@ -416,6 +416,52 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(updated.status, "paid")
             self.assertEqual(updated.payout_amount_wei, str(123 * 10**18))
 
+    def test_settlement_completes_index_treasury_payout_when_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "7" * 64,
+                now=100,
+            )
+            bug_index = FakeBugIndex()
+            token = FakeToken(balance=0)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=token,
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 1)
+            self.assertEqual(token.transfers, [])
+            self.assertEqual(bug_index.completed_payouts, [("0x" + "7" * 64, 1, DETAILS_KEY)])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "paid")
+            self.assertEqual(updated.payout_amount_wei, str(123 * 10**18))
+            self.assertEqual(updated.payout_tx_hash, "0x" + "b" * 64)
+
     def test_settlement_honors_explicit_base_reward_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")
@@ -1781,6 +1827,7 @@ class FakeBugIndex:
         self.error = error
         self.last_command: SubmissionCommand | None = None
         self.last_bundle: object | None = None
+        self.completed_payouts: list[tuple[str, int, bytes]] = []
 
     def publish_bug(self, command: SubmissionCommand, verified: VerifiedBugBundle, bug_bundle: object) -> BugIndexPublishResult:
         self.last_command = command
@@ -1795,6 +1842,12 @@ class FakeBugIndex:
             index_address=WALLET,
         )
 
+    def complete_payout(self, report_hash: str, multiplier: int, details_key: bytes) -> str:
+        self.completed_payouts.append((report_hash, multiplier, details_key))
+        if self.error is not None:
+            raise self.error
+        return "0x" + "b" * 64
+
 
 class FakeTreasury:
     def __init__(self, *, base_reward: int, paid_total: int = 0):
@@ -1803,8 +1856,11 @@ class FakeTreasury:
         self.verified_tx = ""
         self.payment_lookup: tuple[str, str] | None = None
 
+    def reward_amount(self, multiplier: int) -> int:
+        return self._base_reward * multiplier
+
     def base_reward(self) -> int:
-        return self._base_reward
+        return self.reward_amount(1)
 
     def verify_successful_payment_tx(self, tx_hash: str, buyer_address: str) -> None:
         self.verified_tx = tx_hash

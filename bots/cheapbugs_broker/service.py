@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import math
@@ -738,7 +739,16 @@ class BrokerBot:
             )
             amount_wei = tokens_to_wei(reward, decimals)
             try:
-                tx_hash = self.token.transfer(submission.reporter_address, amount_wei)
+                if self._use_index_treasury_payout():
+                    multiplier = self._settlement_multiplier(support_score)
+                    amount_wei = int(self.treasury.reward_amount(multiplier))
+                    tx_hash = self.bug_index.complete_payout(
+                        str(submission.report_hash),
+                        multiplier,
+                        _decode_details_key(str(submission.details_key_b64 or "")),
+                    )
+                else:
+                    tx_hash = self.token.transfer(submission.reporter_address, amount_wei)
             except Exception as exc:
                 self.store.mark_failed(submission.id, support_score, str(exc))
                 self.logger.exception("Failed to pay submission %s", submission.id)
@@ -760,6 +770,18 @@ class BrokerBot:
         base_reward_wei = int(self.treasury.base_reward())
         return Decimal(base_reward_wei) / (Decimal(10) ** decimals)
 
+    def _use_index_treasury_payout(self) -> bool:
+        return (
+            not self.config.reward_base_tokens_configured
+            and self.bug_index is not None
+            and self.treasury is not None
+            and hasattr(self.bug_index, "complete_payout")
+            and hasattr(self.treasury, "reward_amount")
+        )
+
+    def _settlement_multiplier(self, support_score: int) -> int:
+        return max(1, min(10, 1 + max(0, support_score)))
+
     async def poll_signal_forever(self) -> None:
         while True:
             try:
@@ -775,6 +797,16 @@ class BrokerBot:
             except Exception:
                 self.logger.exception("Settlement sweep failed.")
             await asyncio.sleep(max(self.config.poll_seconds, 60))
+
+
+def _decode_details_key(value: str) -> bytes:
+    if not value:
+        raise CommandError("submission is missing details key for payout completion.")
+    padded = value + "=" * (-len(value) % 4)
+    key = base64.urlsafe_b64decode(padded.encode("ascii"))
+    if len(key) != 32:
+        raise CommandError("submission details key is not 32 bytes.")
+    return key
 
 
 def _publish_progress_message(result: BugIndexPublishResult) -> str:

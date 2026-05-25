@@ -50,8 +50,11 @@ class TreasuryVaultClient:
             )
         return self._contract
 
+    def reward_amount(self, multiplier: int) -> int:
+        return int(self.contract.functions.calculateRewardAmount(multiplier).call())
+
     def base_reward(self) -> int:
-        return int(self.contract.functions.calculateRewardAmount(1).call())
+        return self.reward_amount(1)
 
     def detail_key_payment_total(self, report_hash: str, buyer_address: str) -> int:
         buyer = self.web3.to_checksum_address(buyer_address)
