@@ -6,6 +6,8 @@ import json
 import re
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,7 +29,28 @@ class SignalCli:
         self.account = account
         self.group_id = group_id
 
+    @property
+    def _http_rpc_url(self) -> str | None:
+        if self.cli_path.startswith("http://") or self.cli_path.startswith("https://"):
+            return self.cli_path.rstrip("/")
+        return None
+
     def send_group_message(self, message: str) -> SignalSendResult:
+        if self._http_rpc_url:
+            result = self._json_rpc(
+                "send",
+                {
+                    "account": self.account,
+                    "message": message,
+                    "groupId": [self.group_id],
+                },
+            )
+            stdout = json.dumps(result)
+            return SignalSendResult(
+                sent_timestamp=_find_timestamp(result) or int(time.time() * 1000),
+                stdout=stdout,
+            )
+
         completed = subprocess.run(
             [
                 self.cli_path,
@@ -51,6 +74,17 @@ class SignalCli:
         )
 
     def add_group_member(self, signal_recipient: str) -> str:
+        if self._http_rpc_url:
+            result = self._json_rpc(
+                "updateGroup",
+                {
+                    "account": self.account,
+                    "groupId": self.group_id,
+                    "member": [signal_recipient],
+                },
+            )
+            return json.dumps(result)
+
         completed = subprocess.run(
             [
                 self.cli_path,
@@ -69,6 +103,9 @@ class SignalCli:
         return completed.stdout
 
     def receive_json(self, timeout_seconds: int) -> list[dict[str, Any]]:
+        if self._http_rpc_url:
+            return self._receive_sse(timeout_seconds)
+
         completed = subprocess.run(
             [
                 self.cli_path,
@@ -98,6 +135,52 @@ class SignalCli:
                 events.append(value)
         return events
 
+    def _json_rpc(self, method: str, params: dict[str, Any]) -> Any:
+        assert self._http_rpc_url is not None
+        request_id = f"cheapbugs-{method}-{int(time.time() * 1000)}"
+        body = json.dumps({"jsonrpc": "2.0", "method": method, "id": request_id, "params": params}).encode("utf-8")
+        request = urllib.request.Request(
+            self._http_rpc_url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            value = json.loads(response.read().decode("utf-8"))
+        if isinstance(value, dict) and value.get("error"):
+            raise RuntimeError(f"signal-cli JSON-RPC {method} failed: {value['error']}")
+        return value.get("result") if isinstance(value, dict) else value
+
+    def _receive_sse(self, timeout_seconds: int) -> list[dict[str, Any]]:
+        url = self._http_rpc_url.rsplit("/api/v1/rpc", 1)[0] + "/api/v1/events"
+        request = urllib.request.Request(url, headers={"Accept": "text/event-stream"}, method="GET")
+        events: list[dict[str, Any]] = []
+        deadline = time.monotonic() + max(1, timeout_seconds)
+        try:
+            with urllib.request.urlopen(request, timeout=max(1, timeout_seconds)) as response:
+                while time.monotonic() < deadline:
+                    line = response.readline()
+                    if not line:
+                        break
+                    stripped = line.decode("utf-8", errors="replace").strip()
+                    if not stripped.startswith("data:"):
+                        continue
+                    payload = stripped.removeprefix("data:").strip()
+                    if not payload:
+                        continue
+                    try:
+                        value = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(value, dict):
+                        events.append(value)
+        except TimeoutError:
+            pass
+        except urllib.error.URLError as exc:
+            if not isinstance(exc.reason, TimeoutError):
+                raise
+        return events
+
 
 def parse_signal_timestamp(stdout: str) -> int | None:
     try:
@@ -117,7 +200,12 @@ def extract_reaction_events(raw_events: list[dict[str, Any]], fallback_group_id:
     events: list[SignalReactionEvent] = []
     observed_at = int(time.time())
     for raw in raw_events:
-        envelope = raw.get("envelope")
+        event = raw
+        params = raw.get("params")
+        if isinstance(params, dict):
+            result = params.get("result")
+            event = result if isinstance(result, dict) else params
+        envelope = event.get("envelope")
         if not isinstance(envelope, dict):
             continue
         data_message = envelope.get("dataMessage")

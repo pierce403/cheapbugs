@@ -318,6 +318,21 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.ipfs_gateway_url, "https://ipfs.io/ipfs")
         self.assertFalse(config.ipfs_prime_gateway)
         self.assertEqual(config.submission_min_balance_tokens, Decimal("0"))
+        self.assertFalse(config.reward_base_tokens_configured)
+
+    def test_from_env_marks_explicit_base_reward_override(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "BROKER_KEY": "0xbroker",
+                "BROKER_BUGZ_BASE_REWARD": "42.5",
+            },
+            clear=True,
+        ):
+            config = BrokerConfig.from_env()
+
+        self.assertEqual(config.reward_base_tokens, Decimal("42.5"))
+        self.assertTrue(config.reward_base_tokens_configured)
 
 
 class StoreTest(unittest.TestCase):
@@ -358,6 +373,90 @@ class StoreTest(unittest.TestCase):
             self.assertEqual(store.support_score("group", 1760000000123), 1)
             self.assertEqual(store.mature_unpaid_submissions(now=106), [])
             self.assertEqual([item.id for item in store.mature_unpaid_submissions(now=107)], [record.id])
+
+
+class SettlementRewardTest(unittest.TestCase):
+    def test_settlement_uses_treasury_base_reward_when_no_env_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                now=100,
+            )
+            token = FakeToken(balance=0)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=token,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 1)
+            self.assertEqual(token.transfers, [(WALLET, 123 * 10**18)])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "paid")
+            self.assertEqual(updated.payout_amount_wei, str(123 * 10**18))
+
+    def test_settlement_honors_explicit_base_reward_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                now=100,
+            )
+            config = BrokerConfig(
+                **{
+                    **test_config(Path(tmp) / "broker.sqlite").__dict__,
+                    "reward_base_tokens": Decimal("5"),
+                    "reward_base_tokens_configured": True,
+                }
+            )
+            token = FakeToken(balance=0)
+            bot = BrokerBot(
+                config=config,
+                store=store,
+                signal=FakeSignal(),
+                token=token,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 1)
+            self.assertEqual(token.transfers, [(WALLET, 5 * 10**18)])
 
 
 class BugIndexPublishTest(unittest.TestCase):
@@ -1592,6 +1691,7 @@ def test_config(
         submission_min_balance_tokens=submission_min_balance_tokens,
         reputation_blocklist=frozenset(),
         reward_base_tokens=Decimal("0"),
+        reward_base_tokens_configured=False,
         reward_per_reaction_tokens=Decimal("100"),
         reward_max_tokens=Decimal("5000"),
         review_window_seconds=7,
@@ -1604,6 +1704,7 @@ def test_config(
 class FakeToken:
     def __init__(self, balance: int):
         self.balance = balance
+        self.transfers: list[tuple[str, int]] = []
 
     def decimals(self) -> int:
         return 18
@@ -1613,6 +1714,7 @@ class FakeToken:
         return self.balance
 
     def transfer(self, to_address: str, amount_wei: int) -> str:
+        self.transfers.append((to_address, amount_wei))
         return f"dry-run:transfer:{to_address}:{amount_wei}"
 
 

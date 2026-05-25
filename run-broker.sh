@@ -202,7 +202,9 @@ if [[ "$COMMAND" != "init-db" ]]; then
       exit 2
     fi
 
-    if [[ "$BROKER_SIGNAL_CLI" == */* ]]; then
+    if [[ "$BROKER_SIGNAL_CLI" == http://* || "$BROKER_SIGNAL_CLI" == https://* ]]; then
+      : # HTTP JSON-RPC signal-cli daemon URL.
+    elif [[ "$BROKER_SIGNAL_CLI" == */* ]]; then
       if [[ ! -x "$BROKER_SIGNAL_CLI" ]]; then
         echo "BROKER_SIGNAL_CLI is not executable: $BROKER_SIGNAL_CLI" >&2
         exit 2

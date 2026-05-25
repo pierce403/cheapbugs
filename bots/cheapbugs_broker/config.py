@@ -80,6 +80,7 @@ class BrokerConfig:
     submission_min_balance_tokens: Decimal
     reputation_blocklist: frozenset[str]
     reward_base_tokens: Decimal
+    reward_base_tokens_configured: bool
     reward_per_reaction_tokens: Decimal
     reward_max_tokens: Decimal
     review_window_seconds: int
@@ -103,6 +104,7 @@ class BrokerConfig:
     @classmethod
     def from_env(cls) -> "BrokerConfig":
         xmtp_db_path = _env_first("BROKER_XMTP_DB_PATH") or None
+        reward_base_raw = _env_first("BROKER_BUGZ_BASE_REWARD")
         return cls(
             database_path=Path(_env_first("BROKER_DB_PATH", default=".broker/broker.sqlite")),
             log_path=Path(_env_first("BROKER_LOG_PATH", default="broker.log")),
@@ -130,6 +132,7 @@ class BrokerConfig:
             submission_min_balance_tokens=_env_decimal_any(("BROKER_SUBMISSION_MIN_BUGZ",), "0"),
             reputation_blocklist=_env_address_set_any(("BROKER_REPUTATION_BLOCKLIST",)),
             reward_base_tokens=_env_decimal_any(("BROKER_BUGZ_BASE_REWARD",), "0"),
+            reward_base_tokens_configured=bool(reward_base_raw),
             reward_per_reaction_tokens=_env_decimal_any(("BROKER_BUGZ_PER_REACTION",), "100"),
             reward_max_tokens=_env_decimal_any(("BROKER_BUGZ_MAX_REWARD",), "5000"),
             review_window_seconds=_env_int_any(("BROKER_REVIEW_WINDOW_SECONDS",), 7 * 24 * 60 * 60),

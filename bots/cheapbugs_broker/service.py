@@ -724,13 +724,14 @@ class BrokerBot:
             return 0
         paid = 0
         decimals = self.token.decimals()
+        base_reward_tokens = self._settlement_base_reward_tokens(decimals)
         for submission in self.store.mature_unpaid_submissions():
             support_score = self.store.support_score(
                 submission.signal_group_id,
                 submission.signal_message_timestamp,
             )
             reward = reward_tokens(
-                self.config.reward_base_tokens,
+                base_reward_tokens,
                 self.config.reward_per_reaction_tokens,
                 self.config.reward_max_tokens,
                 support_score,
@@ -752,6 +753,12 @@ class BrokerBot:
                 tx_hash,
             )
         return paid
+
+    def _settlement_base_reward_tokens(self, decimals: int) -> Decimal:
+        if self.config.reward_base_tokens_configured or self.treasury is None:
+            return self.config.reward_base_tokens
+        base_reward_wei = int(self.treasury.base_reward())
+        return Decimal(base_reward_wei) / (Decimal(10) ** decimals)
 
     async def poll_signal_forever(self) -> None:
         while True:
