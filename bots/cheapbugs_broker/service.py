@@ -789,6 +789,10 @@ class BrokerBot:
                 self.logger.exception("Failed to pay submission %s", submission.id)
                 continue
             self.store.mark_paid(submission.id, support_score, amount_wei, tx_hash)
+            try:
+                self.signal.send_group_message(_payout_completed_message(submission, amount_wei, decimals, tx_hash))
+            except Exception:
+                self.logger.exception("Failed to send payout notification for submission %s", submission.id)
             paid += 1
             self.logger.info(
                 "Paid submission %s score=%s amount_wei=%s tx=%s",
@@ -836,6 +840,22 @@ class BrokerBot:
             except Exception:
                 self.logger.exception("Settlement sweep failed.")
             await asyncio.sleep(max(self.config.poll_seconds, 60))
+
+
+def _payout_completed_message(submission, amount_wei: int, decimals: int, tx_hash: str) -> str:
+    amount = Decimal(amount_wei) / (Decimal(10) ** decimals)
+    amount_text = format(amount.normalize(), "f") if amount else "0"
+    lines = [
+        "✅ CheapBugs payout completed",
+        f"Report: {submission.title}",
+        f"Amount: {amount_text} BUGZ",
+        f"Report hash: {submission.report_hash}",
+    ]
+    if tx_hash.startswith("0x") and len(tx_hash) == 66:
+        lines.append(f"Tx: https://basescan.org/tx/{tx_hash}")
+    else:
+        lines.append(f"Tx: {tx_hash}")
+    return "\n".join(lines)
 
 
 def _unflagged_payout_alert_message(submission, now: int) -> str:

@@ -486,6 +486,10 @@ class SettlementRewardTest(unittest.TestCase):
 
             self.assertEqual(bot.settle_matured_once(), 1)
             self.assertEqual(token.transfers, [(WALLET, 123 * 10**18)])
+            self.assertEqual(len(bot.signal.messages), 1)
+            self.assertIn("✅ CheapBugs payout completed", bot.signal.messages[0])
+            self.assertIn("Amount: 123 BUGZ", bot.signal.messages[0])
+            self.assertIn("dry-run:transfer", bot.signal.messages[0])
             updated = store.get_submission(record.id)
             self.assertIsNotNone(updated)
             assert updated is not None
@@ -531,6 +535,10 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(bot.settle_matured_once(), 1)
             self.assertEqual(token.transfers, [])
             self.assertEqual(bug_index.completed_payouts, [("0x" + "7" * 64, 1, DETAILS_KEY)])
+            self.assertEqual(len(bot.signal.messages), 1)
+            self.assertIn("✅ CheapBugs payout completed", bot.signal.messages[0])
+            self.assertIn("Amount: 123 BUGZ", bot.signal.messages[0])
+            self.assertIn("https://basescan.org/tx/0x" + "b" * 64, bot.signal.messages[0])
             updated = store.get_submission(record.id)
             self.assertIsNotNone(updated)
             assert updated is not None
