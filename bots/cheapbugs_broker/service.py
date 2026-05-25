@@ -36,6 +36,8 @@ ReplyFn = Callable[[str], Awaitable[None]]
 BUG_INDEX_JUDGMENT_PERIOD_SECONDS = 7 * 24 * 60 * 60
 BUG_INDEX_REVEAL_PREFLIGHT_BUFFER_SECONDS = 60
 DETAIL_UNLOCK_QUOTE_TTL_SECONDS = 15 * 60
+UNFLAGGED_PAYOUT_ALERT_WINDOW_SECONDS = 24 * 60 * 60
+BUG_INDEX_STATUS_UNREVIEWED = 0
 
 
 class BrokerBot:
@@ -719,6 +721,39 @@ class BrokerBot:
             self.logger.info("Recorded %s Signal reaction event(s).", count)
         return count
 
+    def alert_unflagged_payouts_once(self) -> int:
+        if self.signal is None:
+            self.logger.warning("Signal is not configured; skipping unflagged payout alerts.")
+            return 0
+        if self.bug_index is None or not hasattr(self.bug_index, "report_status"):
+            self.logger.warning("Bug index is not configured; skipping unflagged payout alerts.")
+            return 0
+        alerted = 0
+        now = int(time.time())
+        for submission in self.store.pending_flag_alert_candidates(
+            now=now,
+            window_seconds=UNFLAGGED_PAYOUT_ALERT_WINDOW_SECONDS,
+        ):
+            if not submission.report_hash:
+                continue
+            try:
+                status = int(self.bug_index.report_status(submission.report_hash))
+            except Exception:
+                self.logger.exception("Failed to check onchain flag status for submission %s", submission.id)
+                continue
+            if status != BUG_INDEX_STATUS_UNREVIEWED:
+                continue
+            sent = self.signal.send_group_message(_unflagged_payout_alert_message(submission, now))
+            self.store.mark_flag_alert_sent(submission.id, now=now)
+            alerted += 1
+            self.logger.warning(
+                "Sent unflagged payout alert submission=%s report_hash=%s signal_timestamp=%s",
+                submission.id,
+                submission.report_hash,
+                sent.sent_timestamp,
+            )
+        return alerted
+
     def settle_matured_once(self) -> int:
         if self.signal is None:
             self.logger.warning("Signal is not configured; skipping reward settlement.")
@@ -793,10 +828,25 @@ class BrokerBot:
     async def settle_forever(self) -> None:
         while True:
             try:
+                self.alert_unflagged_payouts_once()
+            except Exception:
+                self.logger.exception("Unflagged payout alert check failed.")
+            try:
                 self.settle_matured_once()
             except Exception:
                 self.logger.exception("Settlement sweep failed.")
             await asyncio.sleep(max(self.config.poll_seconds, 60))
+
+
+def _unflagged_payout_alert_message(submission, now: int) -> str:
+    seconds_until = max(0, int(submission.matures_at) - now)
+    hours_until = math.ceil(seconds_until / 3600) if seconds_until else 0
+    return (
+        "⚠️ CheapBugs review needed before payout\n"
+        f"Report `{submission.title}` is due for payout in ~{hours_until}h but is still unflagged on-chain.\n"
+        f"Report hash: {submission.report_hash}\n"
+        "Please flag it Valid, Invalid, or Spam before the payout window so settlement is not blocked."
+    )
 
 
 def _decode_details_key(value: str) -> bytes:

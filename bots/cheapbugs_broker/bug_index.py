@@ -38,6 +38,41 @@ BUG_INDEX_ABI = [
         "outputs": [],
     },
     {
+        "name": "getReport",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [{"name": "reportHash", "type": "bytes32"}],
+        "outputs": [
+            {
+                "name": "",
+                "type": "tuple",
+                "components": [
+                    {"name": "reportHash", "type": "bytes32"},
+                    {"name": "reportId", "type": "string"},
+                    {"name": "reporter", "type": "address"},
+                    {"name": "createdAt", "type": "uint64"},
+                    {"name": "disclosureMode", "type": "uint8"},
+                    {"name": "publicSummary", "type": "string"},
+                    {"name": "encryptedPayloadCid", "type": "string"},
+                    {"name": "targetKind", "type": "uint8"},
+                    {"name": "targetRefHash", "type": "bytes32"},
+                    {"name": "tags", "type": "string"},
+                    {"name": "contentHash", "type": "bytes32"},
+                    {"name": "bugBundleHash", "type": "bytes32"},
+                    {"name": "encryptedDetailsHash", "type": "bytes32"},
+                    {"name": "detailsKeyCommitment", "type": "bytes32"},
+                    {"name": "revealAfter", "type": "uint64"},
+                    {"name": "detailsKey", "type": "bytes32"},
+                    {"name": "detailsKeyRevealed", "type": "bool"},
+                    {"name": "status", "type": "uint8"},
+                    {"name": "payoutCompleted", "type": "bool"},
+                    {"name": "payoutAmount", "type": "uint256"},
+                    {"name": "payoutMultiplier", "type": "uint8"},
+                ],
+            }
+        ],
+    },
+    {
         "name": "publishBug",
         "type": "function",
         "stateMutability": "nonpayable",
@@ -247,6 +282,10 @@ class BugIndexClient:
             block_number=int(block_number) if block_number is not None else None,
             index_address=self.index_address,
         )
+
+    def report_status(self, report_hash: str) -> int:
+        report = self.contract.functions.getReport(report_hash).call()
+        return int(report[17])
 
     def complete_payout(self, report_hash: str, multiplier: int, details_key: bytes) -> str:
         if not self.index_address:

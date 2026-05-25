@@ -376,6 +376,82 @@ class StoreTest(unittest.TestCase):
 
 
 class SettlementRewardTest(unittest.TestCase):
+    def test_unflagged_payout_alert_warns_once_inside_24h_window(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Needs review",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=24 * 60 * 60,
+                report_hash="0x" + "8" * 64,
+                now=100,
+            )
+            signal = FakeSignal()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=signal,
+                token=FakeToken(balance=0),
+                bug_index=FakeBugIndex(report_status=0),
+            )
+
+            self.assertEqual(bot.alert_unflagged_payouts_once(), 1)
+            self.assertEqual(len(signal.messages), 1)
+            self.assertIn("still unflagged on-chain", signal.messages[0])
+            self.assertIn(record.report_hash, signal.messages[0])
+            self.assertEqual(bot.alert_unflagged_payouts_once(), 0)
+            self.assertEqual(len(signal.messages), 1)
+
+    def test_unflagged_payout_alert_skips_already_flagged_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Already reviewed",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=24 * 60 * 60,
+                report_hash="0x" + "9" * 64,
+                now=100,
+            )
+            signal = FakeSignal()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=signal,
+                token=FakeToken(balance=0),
+                bug_index=FakeBugIndex(report_status=1),
+            )
+
+            self.assertEqual(bot.alert_unflagged_payouts_once(), 0)
+            self.assertEqual(signal.messages, [])
+
     def test_settlement_uses_treasury_base_reward_when_no_env_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")
@@ -1770,8 +1846,12 @@ class FakeSentMessage:
 
 
 class FakeSignal:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
     def send_group_message(self, message: str) -> FakeSentMessage:
         self.last_message = message
+        self.messages.append(message)
         return FakeSentMessage(sent_timestamp=1760000000123)
 
     def add_group_member(self, recipient: str) -> None:
@@ -1822,9 +1902,10 @@ def fake_pinned_bundle(added: IpfsAddResult) -> object:
 
 
 class FakeBugIndex:
-    def __init__(self, *, dry_run: bool = False, error: Exception | None = None):
+    def __init__(self, *, dry_run: bool = False, error: Exception | None = None, report_status: int = 1):
         self.dry_run = dry_run
         self.error = error
+        self._report_status = report_status
         self.last_command: SubmissionCommand | None = None
         self.last_bundle: object | None = None
         self.completed_payouts: list[tuple[str, int, bytes]] = []
@@ -1847,6 +1928,12 @@ class FakeBugIndex:
         if self.error is not None:
             raise self.error
         return "0x" + "b" * 64
+
+    def report_status(self, report_hash: str) -> int:
+        if self.error is not None:
+            raise self.error
+        self.last_status_report_hash = report_hash
+        return self._report_status
 
 
 class FakeTreasury:

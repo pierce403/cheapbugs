@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   report_hash TEXT,
   index_tx_hash TEXT,
   index_published_at INTEGER,
+  flag_alert_sent_at INTEGER,
   error TEXT,
   updated_at INTEGER NOT NULL
 );
@@ -373,6 +374,35 @@ class BrokerStore:
                 (support_score, error, now, record_id),
             )
 
+    def pending_flag_alert_candidates(self, now: int | None = None, window_seconds: int = 24 * 60 * 60) -> list[SubmissionRecord]:
+        observed_at = now or int(time.time())
+        cutoff = observed_at + window_seconds
+        with self.session() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM submissions
+                WHERE status = 'relayed'
+                  AND report_hash IS NOT NULL
+                  AND flag_alert_sent_at IS NULL
+                  AND matures_at <= ?
+                ORDER BY matures_at ASC
+                """,
+                (cutoff,),
+            ).fetchall()
+        return [_record_from_row(row) for row in rows]
+
+    def mark_flag_alert_sent(self, record_id: str, now: int | None = None) -> None:
+        observed_at = now or int(time.time())
+        with self.session() as conn:
+            conn.execute(
+                """
+                UPDATE submissions
+                SET flag_alert_sent_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (observed_at, observed_at, record_id),
+            )
+
 
 def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
     return SubmissionRecord(
@@ -452,3 +482,5 @@ def _ensure_submission_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE submissions ADD COLUMN index_tx_hash TEXT")
     if "index_published_at" not in columns:
         conn.execute("ALTER TABLE submissions ADD COLUMN index_published_at INTEGER")
+    if "flag_alert_sent_at" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN flag_alert_sent_at INTEGER")
