@@ -130,19 +130,20 @@ npm run dev
 npm run build
 ```
 
-## GitHub Pages
+## Cloudflare Pages
 
-This repo is intended to deploy through GitHub Actions to GitHub Pages.
+Production is hosted on Cloudflare Pages as the `cheapbugs` project, connected to the GitHub repo on `main`.
 
-Set these repository variables before relying on the Pages deploy:
+Cloudflare builds with `npm run build`, serves `dist/`, and uses [.node-version](.node-version) for the Node runtime.
+
+Set these Pages variables only when the hosted site should override committed defaults:
 
 - `VITE_BUG_INDEX_ADDRESS` when the Base bug index is deployed
 - `VITE_REVIEW_VERDICT_SCHEMA_UID` when the verdict schema is registered
 - optional chain and storage overrides from [.env.example](.env.example)
 
-The workflow lives at [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml).
-It builds with `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain and `hash` routing so GitHub Pages can serve SPA routes without a custom origin server.
-Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site should use a different Thirdweb client id.
+The Cloudflare project sets `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain and `VITE_ROUTER_MODE=hash`. [public/_redirects](public/_redirects) keeps direct visits to SPA routes working on static hosting.
+Set `VITE_THIRDWEB_CLIENT_ID` as a Pages variable only if the hosted site should use a different Thirdweb client id.
 
 ## How Reports Work
 
@@ -210,7 +211,7 @@ The CheapBugs contract launcher:
 - [src/storage/pinata.ts](src/storage/pinata.ts)
 - [src/attest/eas.ts](src/attest/eas.ts)
 - [src/lib/reports.ts](src/lib/reports.ts)
-- [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml)
+- [DEPLOY.md](DEPLOY.md)
 
 ## References
 

@@ -111,12 +111,22 @@ The site outputs to `dist/`.
 
 ## 6. Publish Static Assets
 
-### GitHub Pages
+### Cloudflare Pages
 
-The repo now includes a GitHub Actions workflow at [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml).
-In GitHub repository settings, Pages should be configured to deploy from `GitHub Actions`, not from a branch.
+Production is hosted on Cloudflare Pages as project `cheapbugs`, connected to the GitHub repo `pierce403/cheapbugs` on the `main` branch.
 
-Recommended repository variables:
+Cloudflare Pages builds with:
+
+- build command: `npm run build`
+- output directory: `dist`
+- root directory: `/`
+- build image: v3, with Node pinned by [.node-version](.node-version)
+- `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain
+- `VITE_ROUTER_MODE=hash`
+
+The `cheapbugs.net` Cloudflare zone routes the apex through a proxied CNAME to `cheapbugs.pages.dev`, and the Pages project has `cheapbugs.net` attached as its custom domain.
+
+Set these Pages project environment variables only when production should override committed defaults:
 
 - `VITE_BUG_INDEX_ADDRESS`
 - `VITE_REVIEW_VERDICT_SCHEMA_UID`
@@ -124,14 +134,10 @@ Recommended repository variables:
 - `VITE_REVIEWER_ADDRESSES`
 - any other `VITE_*` overrides you want from [.env.example](.env.example)
 
-The Pages workflow builds with:
+The Cloudflare project is Git-connected, so pushes to `main` trigger production deployments and other branches get preview deployments. The repo no longer needs a GitHub Pages workflow for frontend hosting.
 
-- `VITE_BASE_PATH=/` for the `cheapbugs.net` custom domain
-- `VITE_ROUTER_MODE=hash`
-- `.nojekyll` enabled through [public/.nojekyll](public/.nojekyll)
-
-That combination keeps asset URLs correct at the domain root and avoids SPA route breakage on GitHub Pages.
-Set `VITE_THIRDWEB_CLIENT_ID` as a repository variable only if the hosted site should use a different Thirdweb client id.
+The repo includes [public/_redirects](public/_redirects) with `/* /index.html 200`, which keeps direct visits to SPA routes working on Cloudflare Pages while the app continues to use hash routing.
+Set `VITE_THIRDWEB_CLIENT_ID` as a Pages variable only if the hosted site should use a different Thirdweb client id.
 
 If you ever deploy the same app under a repository subpath instead of the custom domain, override `VITE_BASE_PATH` for that environment explicitly.
 
@@ -139,11 +145,10 @@ If you ever deploy the same app under a repository subpath instead of the custom
 
 You can still deploy `dist/` to other static hosts, for example:
 
-- Cloudflare Pages
 - Netlify
 - Vercel static output
 
-The repo already includes `public/_redirects` for Netlify-style SPA routing.
+The repo already includes `public/_redirects` for static-host SPA routing.
 
 ## 7. Optional IPFS Publishing
 

@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
   const buildId =
     shortBuildId(env.VITE_BUILD_ID || process.env.VITE_BUILD_ID) ||
     shortBuildId(process.env.GITHUB_SHA) ||
+    shortBuildId(process.env.CF_PAGES_COMMIT_SHA) ||
     gitCommit() ||
     "dev";
   const buildTime = env.VITE_BUILD_TIME || process.env.VITE_BUILD_TIME || new Date().toISOString();

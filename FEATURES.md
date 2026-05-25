@@ -404,17 +404,19 @@ cheapbugs/
 - **Test Criteria**:
   - [x] Playwright covers RPC-safe paging, cache reuse, manual refresh, and API-key guidance.
 
-### GitHub Pages Deployment
+### Cloudflare Pages Deployment
 
 - **Stability**: stable
-- **Description**: GitHub Actions builds `dist/` and deploys to GitHub Pages for the `cheapbugs.net` custom domain.
+- **Description**: Cloudflare Pages builds `dist/` from the GitHub repo for the `cheapbugs.net` custom domain.
 - **Properties**:
-  - Pages uses workflow-based publishing, not legacy branch publishing.
+  - The Cloudflare Pages project is `cheapbugs`, connected to `pierce403/cheapbugs` on the `main` production branch.
+  - The build command is `npm run build`, the output directory is `dist`, and Node is pinned by `.node-version`.
+  - The Cloudflare `cheapbugs.net` zone routes the apex through a proxied CNAME to `cheapbugs.pages.dev`.
   - Production custom-domain deployments use root-relative Vite base paths.
   - Hash routing is supported for SPA compatibility.
   - Only set `VITE_BASE_PATH` when deploying under a non-root subpath.
 - **Test Criteria**:
-  - [x] `.github/workflows/deploy-pages.yml` builds the app with GitHub Pages settings.
+  - [x] Cloudflare Pages is connected to the GitHub repo with `VITE_BASE_PATH=/` and `VITE_ROUTER_MODE=hash`.
   - [x] `npm run build` validates local production assets.
 
 ### Development Tooling
