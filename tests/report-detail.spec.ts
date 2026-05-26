@@ -38,19 +38,20 @@ type ReportTupleOptions = {
   revealed?: boolean;
   encryptedDetailsHash?: string;
   detailsKeyCommitment?: string;
+  publicSummary?: string;
 };
 
 const base64Url = (value: Uint8Array): string => Buffer.from(value).toString("base64url");
 
-const encryptedBugBundle = () => {
+const encryptedBugBundle = (options: { details?: string; reproSteps?: string; evidence?: string; contactHints?: string } = {}) => {
   const iv = Buffer.from("202122232425262728292a2b", "hex");
   const aad = Buffer.from("cheapbugs report detail test", "utf8");
   const plaintext = Buffer.from(
     JSON.stringify({
-      details: "Use a malformed parser envelope to trigger arbitrary settlement.",
-      repro_steps: "Send the crafted envelope to the Base parser endpoint.",
-      evidence: "Crash log and trace attached out of band.",
-      contact_hints: "alice@example.test"
+      details: options.details ?? "Use a malformed parser envelope to trigger arbitrary settlement.",
+      repro_steps: options.reproSteps ?? "Send the crafted envelope to the Base parser endpoint.",
+      evidence: options.evidence ?? "Crash log and trace attached out of band.",
+      contact_hints: options.contactHints ?? "alice@example.test"
     }),
     "utf8"
   );
@@ -102,7 +103,7 @@ const reportTuple = (options: ReportTupleOptions = {}) => [
   reporterAddress,
   1_779_120_000n,
   2,
-  "Fresh broker-published bug from chain.",
+  options.publicSummary ?? "Fresh broker-published bug from chain.",
   "ipfs://bafyreportdetail",
   4,
   id("base-protocol"),
@@ -324,4 +325,78 @@ test("report detail stores revealed onchain key and decrypts details automatical
     return raw ? (JSON.parse(raw) as Record<string, string>)[hash] : null;
   }, reportHash);
   expect(storedKey).toBe(revealedBundle.accessKey);
+});
+
+test("report detail renders markdown summary and details with copyable code blocks", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (window as Window & { __copiedCode?: string }).__copiedCode = text;
+        }
+      }
+    });
+  });
+
+  const publicSummary = [
+    "**Critical summary**",
+    "",
+    "- parser accepts forged proof",
+    "",
+    "```ts",
+    'const result = "owned";',
+    "```",
+    "",
+    "<script>alert(1)</script>"
+  ].join("\n");
+  const details = [
+    "# Exploit details",
+    "",
+    "Run `forge test` then:",
+    "",
+    "```sh",
+    "curl -sS https://example.test/poc",
+    "```",
+    "",
+    "[docs](javascript:alert(1)) [safe](https://example.com/poc)"
+  ].join("\n");
+  const revealedBundle = encryptedBugBundle({ details });
+
+  await seedReviewSchema(page);
+  await mockBaseRpc(page, {
+    revealed: true,
+    encryptedDetailsHash: revealedBundle.encryptedDetailsHash,
+    detailsKeyCommitment: revealedBundle.detailsKeyCommitment,
+    publicSummary
+  });
+  await mockEnsRpc(page);
+  await mockBugBundleGateway(page, revealedBundle.payload);
+  await mockEasGraphql(page);
+
+  await page.goto(`/report/${reportHash}`);
+
+  const reportSection = page.locator("section").filter({ hasText: "[ Live parser exploit ]" });
+  await expect(reportSection.locator(".report-title-text").first()).toHaveCSS("font-weight", "700");
+
+  const summaryBlock = reportSection.locator(".report-text-block").filter({ hasText: "summary" });
+  await expect(summaryBlock.locator("strong")).toContainText("Critical summary");
+  await expect(summaryBlock.locator("li")).toContainText("parser accepts forged proof");
+  await expect(summaryBlock.locator("script")).toHaveCount(0);
+  await expect(summaryBlock).toContainText("<script>alert(1)</script>");
+  await summaryBlock.getByRole("button", { name: "copy" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { __copiedCode?: string }).__copiedCode))
+    .toBe('const result = "owned";');
+
+  const privateSection = page.locator("section").filter({ hasText: "[ private details ]" });
+  const detailsBlock = privateSection.locator(".report-text-block").filter({ hasText: "details" });
+  await expect(detailsBlock.locator("h1")).toHaveText("Exploit details");
+  await expect(detailsBlock.locator("code").filter({ hasText: "forge test" })).toBeVisible();
+  await expect(detailsBlock.getByRole("link", { name: "docs" })).toHaveCount(0);
+  await expect(detailsBlock.getByRole("link", { name: "safe" })).toHaveAttribute("href", "https://example.com/poc");
+  await detailsBlock.getByRole("button", { name: "copy" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { __copiedCode?: string }).__copiedCode))
+    .toBe("curl -sS https://example.test/poc");
 });

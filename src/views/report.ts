@@ -4,6 +4,7 @@ import { computeReviewDisplayState } from "../lib/eas";
 import { decryptPrivateSubmission, getStoredAccessKey, loadReviewVerdicts, loadSubmissionBundle, submitReviewVerdict } from "../lib/reports";
 import { detailsKeyHexToAccessKey, saveReportAccessKey } from "../lib/report-access";
 import { toGatewayUrl } from "../lib/ipfs";
+import { bindMarkdownCodeCopy, renderMarkdown } from "../lib/markdown";
 import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate, newlineToBreaks, shortHash, textOrDash } from "../lib/utils";
 import { isWalletActionCancelled } from "../lib/walletAction";
@@ -11,6 +12,13 @@ import type { ReviewVerdict } from "../types/review";
 
 import { bindDetailUnlockFlow, renderDetailUnlockModal } from "./detailUnlock";
 import type { AppViewContext, ViewResult } from "./types";
+
+const renderMarkdownTextArea = (label: string, value: string): string => `
+  <div class="report-text-block">
+    <div class="report-text-label">${escapeHtml(label)}</div>
+    <div class="report-markdown markdown-body">${renderMarkdown(value)}</div>
+  </div>
+`;
 
 export const renderReportView = async (context: AppViewContext): Promise<ViewResult> => {
   const reportHash = context.route.params.id as `0x${string}`;
@@ -70,19 +78,21 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
         bundle.publicSubmission
       );
       privateView = `
-        <table class="data-table">
-          <tbody>
-            <tr><th>bug type</th><td>${escapeHtml(textOrDash(privateSubmission.bugType))}</td></tr>
-            <tr><th>severity</th><td>${escapeHtml(textOrDash(privateSubmission.severity))}</td></tr>
-            <tr><th>target interest</th><td>${escapeHtml(textOrDash(privateSubmission.targetInterest))}</td></tr>
-            <tr><th>title</th><td>${escapeHtml(privateSubmission.title)}</td></tr>
-            <tr><th>private details</th><td>${newlineToBreaks(privateSubmission.details)}</td></tr>
-            <tr><th>repro</th><td>${newlineToBreaks(privateSubmission.reproSteps)}</td></tr>
-            <tr><th>evidence</th><td>${newlineToBreaks(textOrDash(privateSubmission.evidence))}</td></tr>
-            <tr><th>contact hints</th><td>${newlineToBreaks(textOrDash(privateSubmission.contactHints))}</td></tr>
-            <tr><th>target ref</th><td>${escapeHtml(privateSubmission.targetRef)}</td></tr>
-          </tbody>
-        </table>
+        <div class="report-private-content">
+          <table class="data-table">
+            <tbody>
+              <tr><th>bug type</th><td>${escapeHtml(textOrDash(privateSubmission.bugType))}</td></tr>
+              <tr><th>severity</th><td>${escapeHtml(textOrDash(privateSubmission.severity))}</td></tr>
+              <tr><th>target interest</th><td>${escapeHtml(textOrDash(privateSubmission.targetInterest))}</td></tr>
+              <tr><th>title</th><td><strong class="report-title-text">${escapeHtml(privateSubmission.title)}</strong></td></tr>
+              <tr><th>repro</th><td>${newlineToBreaks(textOrDash(privateSubmission.reproSteps))}</td></tr>
+              <tr><th>evidence</th><td>${newlineToBreaks(textOrDash(privateSubmission.evidence))}</td></tr>
+              <tr><th>contact hints</th><td>${newlineToBreaks(textOrDash(privateSubmission.contactHints))}</td></tr>
+              <tr><th>target ref</th><td>${escapeHtml(privateSubmission.targetRef)}</td></tr>
+            </tbody>
+          </table>
+          ${renderMarkdownTextArea("details", privateSubmission.details)}
+        </div>
       `;
     } catch {
       privateView = revealedAccessKey
@@ -123,11 +133,14 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
       <section class="panel">
         <div class="panel-title">[ ${escapeHtml(title)} ]</div>
         ${schemaWarning}
+        <div class="report-heading">
+          <strong class="report-title-text">${escapeHtml(title)}</strong>
+        </div>
+        ${renderMarkdownTextArea("summary", bundle.publicSubmission.publicSummary)}
         <table class="data-table">
           <tbody>
-            <tr><th>title</th><td>${escapeHtml(title)}</td></tr>
+            <tr><th>title</th><td><strong class="report-title-text">${escapeHtml(title)}</strong></td></tr>
             <tr><th>date</th><td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td></tr>
-            <tr><th>description</th><td>${newlineToBreaks(bundle.publicSubmission.publicSummary)}</td></tr>
             <tr><th>download</th><td><a href="${escapeHtml(
               toGatewayUrl(bundle.publicSubmission.encryptedPayloadCid)
             )}" target="_blank" rel="noreferrer">BugBundle</a></td></tr>
@@ -245,6 +258,11 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
       const revealButton = root.querySelector<HTMLButtonElement>("#reveal-access-key");
       const copyButton = root.querySelector<HTMLButtonElement>("#copy-access-key");
       const reviewForm = root.querySelector<HTMLFormElement>("#review-form");
+
+      bindMarkdownCodeCopy(root, {
+        onCopied: () => appContext.notify("success", "Code copied."),
+        onError: (message) => appContext.notify("error", message)
+      });
 
       revealButton?.addEventListener("click", () => {
         if (!accessInput) {

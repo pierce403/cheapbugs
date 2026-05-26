@@ -934,6 +934,142 @@ button:disabled,
   max-width: 720px;
 }
 
+.report-heading {
+  margin-bottom: 8px;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.report-title-text {
+  color: #f2e7dc;
+  font-weight: 700;
+}
+
+.report-text-block {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 10px;
+}
+
+.report-text-label {
+  color: var(--warning);
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+}
+
+.report-markdown {
+  min-height: 92px;
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid rgba(255, 106, 0, 0.32);
+  background: #070707;
+  color: var(--text);
+  padding: 10px;
+}
+
+.markdown-body {
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin: 10px 0 6px;
+  color: #ffb06d;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.markdown-body h1 {
+  font-size: 16px;
+}
+
+.markdown-body p {
+  margin: 0 0 8px;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0 0 8px;
+  padding-left: 22px;
+}
+
+.markdown-body li + li {
+  margin-top: 3px;
+}
+
+.markdown-body blockquote {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-left: 2px solid rgba(255, 106, 0, 0.62);
+  color: var(--muted);
+  background: rgba(255, 106, 0, 0.06);
+}
+
+.markdown-body code {
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  background: rgba(0, 0, 0, 0.34);
+  color: #ffd0a3;
+  padding: 1px 4px;
+}
+
+.markdown-code-block {
+  position: relative;
+  margin: 0 0 8px;
+  border: 1px solid rgba(255, 106, 0, 0.28);
+  background: #030303;
+}
+
+.markdown-code-block pre {
+  margin: 0;
+  padding: 34px 10px 10px;
+  overflow: auto;
+}
+
+.markdown-code-block code {
+  display: block;
+  border: 0;
+  background: transparent;
+  color: #f6d9bf;
+  padding: 0;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.copy-code-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: 1px solid rgba(255, 106, 0, 0.42);
+  background: #111;
+  color: var(--warning);
+  padding: 3px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.copy-code-button:hover,
+.copy-code-button:focus-visible {
+  border-color: rgba(255, 106, 0, 0.74);
+  color: #ffd0a3;
+}
+
+.report-private-content {
+  display: grid;
+  gap: 10px;
+}
+
 .private-view {
   margin-top: 10px;
 }

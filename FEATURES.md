@@ -285,6 +285,7 @@ cheapbugs/
   - The broker stores the out-of-bundle details key and bundle metadata in SQLite for later reveal work.
   - The bug index stores the bundle CID, bundle/content commitments, encrypted details hash, reveal time, and details-key commitment.
   - The frontend treats gateway-fetched BugBundle public metadata as untrusted display data: it validates shape and string fields, sanitizes rendered text, and falls back to onchain fields on timeout or malformed content.
+  - The report detail route renders public summary and decrypted private details as dedicated multi-line markdown areas. Titles are bold, raw HTML remains escaped, unsafe links are not activated, and fenced code blocks include a top-right copy button.
   - Browser IPFS reads cache the full encrypted BugBundle JSON in localStorage for 30 days, reuse in-flight fetches by CID, and fall back to the last cached BugBundle when a public gateway rate-limits or fails. Decrypted private details are not persisted in this cache.
   - After the 7-day judgment period, a broker adds the raw 32-byte details key to the bug index. The index verifies `sha256(rawKey) == detailsKeyCommitment`; browsers can then fetch the bundle from IPFS, read the key from the index, store it in the existing per-report access-key localStorage map, decrypt details locally, and render the bug as ordinary readable content.
 - **Test Criteria**:
@@ -296,7 +297,7 @@ cheapbugs/
   - [ ] Browser tests cover submitter-side bundle construction, details encryption, and key commitment generation against deterministic vectors.
   - [ ] Broker tests add dedicated cases for bad recovered signatures, mismatched details keys, and unintelligible decrypted details.
   - [x] Contract tests prove keys cannot be revealed before the judgment window and revealed keys must match the stored commitment.
-  - [x] Read-path tests cover automatic post-reveal IPFS fetch, local key storage, and browser decryption.
+  - [x] Read-path tests cover automatic post-reveal IPFS fetch, local key storage, browser decryption, markdown rendering, raw HTML escaping, unsafe-link rejection, and code-block copy buttons.
 
 ### Reporter-Signed Broker Relay
 
