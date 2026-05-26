@@ -82,6 +82,7 @@ cheapbugs/
 - **Description**: Thirdweb wallet login with injected-wallet SIWE, a CheapBugs WalletConnect handoff, session restore, ENS display, and site-generated embedded wallets that can sign both Base transactions and XMTP messages.
 - **Properties**:
   - `VITE_THIRDWEB_CLIENT_ID` has a committed public default for static deploys.
+  - `VITE_WALLETCONNECT_PROJECT_ID` can be set in deployment environments so WalletConnect QR/mobile pairing uses a CheapBugs-specific WalletConnect Cloud project id instead of Thirdweb's bundled default.
   - External wallet reconnect hints are stored in `cheapbugs.walletSession.v1`; SIWE proofs are stored in `cheapbugs.siweSession.v1`.
   - Embedded CheapBugs wallets are stored in `cheapbugs.localXmtpIdentity.v1` and can sign XMTP messages, `PublishBug` authorizations, and Base smart-contract transactions.
   - When login would otherwise open a WalletConnect QR path, the app first shows a CheapBugs modal with `connect with WalletConnect`, `reset WalletConnect`, and `I don't have a crypto wallet` options.

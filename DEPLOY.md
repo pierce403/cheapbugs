@@ -18,6 +18,7 @@ Frontend values:
 - `VITE_PAYOUT_RECORD_SCHEMA_UID` if you want the placeholder schema pinned now
 - `VITE_REVIEWER_ADDRESSES`
 - `VITE_THIRDWEB_CLIENT_ID` only if you want to override the committed public Thirdweb client id used for wallet login and WalletConnect QR
+- `VITE_WALLETCONNECT_PROJECT_ID` when production WalletConnect should use a project-specific WalletConnect Cloud project id instead of Thirdweb's bundled default
 - `VITE_ENS_RPC_URL` only if you want to override the default Ethereum mainnet ENS RPC endpoint
 - `VITE_DEBUG_LOGS=1` only when debugging wallet/session flow. By default, CheapBugs suppresses routine `[cheapbugs]` info logs and a known Thirdweb WalletConnect `session_request ... without any listeners` console-noise case.
 
@@ -138,6 +139,7 @@ The Cloudflare project is Git-connected, so pushes to `main` trigger production 
 
 The repo includes [public/_redirects](public/_redirects) with `/* /index.html 200`, which keeps direct visits to SPA routes working on Cloudflare Pages while the app continues to use hash routing.
 Set `VITE_THIRDWEB_CLIENT_ID` as a Pages variable only if the hosted site should use a different Thirdweb client id.
+Set `VITE_WALLETCONNECT_PROJECT_ID` as a Pages variable if WalletConnect mobile pairing needs a dedicated project id for the production origin.
 
 If you ever deploy the same app under a repository subpath instead of the custom domain, override `VITE_BASE_PATH` for that environment explicitly.
 

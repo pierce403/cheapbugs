@@ -111,6 +111,12 @@ const currentSiweUri = (): string => (typeof window === "undefined" ? APP_METADA
 
 const isExternalMode = (value: unknown): value is ExternalWalletMode => value === "external";
 
+const walletConnectOptions = (options: { showQrModal?: boolean } = {}) => ({
+  ...options,
+  appMetadata: APP_METADATA,
+  ...(env.walletConnectProjectId ? { projectId: env.walletConnectProjectId } : {})
+});
+
 const createNonce = (): string => {
   const bytes = new Uint8Array(16);
   const cryptoApi = globalThis.crypto;
@@ -1012,14 +1018,15 @@ export class ThirdwebAuthController {
     this.setLoading();
     try {
       if (wallet.id === "walletConnect") {
-        appLog.info("thirdweb: opening WalletConnect QR", { walletId: wallet.id, chainId: chainConfig.id });
+        appLog.info("thirdweb: opening WalletConnect QR", {
+          walletId: wallet.id,
+          chainId: chainConfig.id,
+          projectId: env.walletConnectProjectId ? "configured" : "thirdweb-default"
+        });
         await wallet.connect({
           client: requireThirdwebClient(),
           chain: appChain,
-          walletConnect: {
-            showQrModal: true,
-            appMetadata: APP_METADATA
-          }
+          walletConnect: walletConnectOptions({ showQrModal: true })
         });
       } else {
         appLog.info("thirdweb: connecting installed wallet", { walletId: wallet.id, chainId: chainConfig.id });

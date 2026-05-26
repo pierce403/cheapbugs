@@ -37,6 +37,7 @@ const configuredBugTreasuryVaultAddress =
 export const env = {
   appName: import.meta.env.VITE_APP_NAME || "CheapBugs",
   thirdwebClientId: import.meta.env.VITE_THIRDWEB_CLIENT_ID || "fabb9529082a9638fe2636bac941fb29",
+  walletConnectProjectId: (import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "").trim(),
   chainId: Number(import.meta.env.VITE_CHAIN_ID || 8453),
   chainName: import.meta.env.VITE_CHAIN_NAME || "Base Mainnet",
   chainRpcUrl: import.meta.env.VITE_CHAIN_RPC_URL || "https://mainnet.base.org",
