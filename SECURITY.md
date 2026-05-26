@@ -146,7 +146,7 @@ Current and required properties:
 - The browser displays vote totals and connected-user vote direction from chain reads, but those displays are not governance authority and can be stale until the next refresh.
 - The owner controls slashers, so slasher compromise can transfer bonded BUGZ to the treasury.
 - The `/stake` frontend must present pending withdrawals as still slashable and must not imply the countdown protects funds from slashing.
-- The `/bond` frontend presents the current operator policy that anti-social activity, including spam, harassment, or criminal activity related to platform bugs, can trigger immediate stake slashing into the treasury. This is presentation of slashing policy; the contract authority remains owner-managed slashers.
+- The `/bond` frontend presents the current operator policy that anti-social activity, including spam, harassment, or criminal activity related to platform bugs, can trigger immediate bond slashing into the treasury. This is presentation of slashing policy; the contract authority remains owner-managed slashers.
 
 ### CheapBugsTreasuryVault
 

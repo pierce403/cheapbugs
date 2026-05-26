@@ -112,7 +112,7 @@ cheapbugs/
   - Pending withdrawals are excluded from `getLevel`; balances below 10 whole BUGZ produce level 0 and cannot add nonzero vote weight.
   - Current bonded addresses are enumerable with `bondedAddressCount`, `bondedAddressAt`, and `bondedAddressList`.
   - The `/bond` route lets connected users approve BUGZ for the bond vault, bond BUGZ, request the two-step withdrawal, and withdraw when the 7-day delay has elapsed; legacy `/stake` is a compatibility alias.
-  - The `/bond` route prominently warns bonded users that anti-social activity, including spamming, harassment, or criminal activity related to platform bugs, can burn their stake immediately into the treasury.
+  - The `/bond` route prominently warns bonded users that anti-social activity, including spamming, harassment, or criminal activity related to platform bugs, can burn their bond immediately into the treasury.
   - The bond UI shows wallet BUGZ, allowance, active bond, pending withdrawal, current level, next-level threshold, and a live countdown/progress bar for step-2 withdrawal readiness without showing raw bond-vault or BUGZ-token contract addresses. During the waiting period, the withdraw panel explicitly labels the in-flight pending BUGZ amount next to the countdown.
   - After a withdrawal request transaction confirms, the bond UI keeps a session-scoped local pending-withdrawal hint and countdown visible if the next public Base read still returns stale vault state. The hint clears once chain reads show pending state, or after a later bond/withdraw action.
   - The add-bond form has one primary action button. It says `approve bugz` when the entered amount is above the current allowance, and `bond bugz` when current allowance is sufficient.

@@ -250,13 +250,13 @@ test("shows bonding level, allowance, and pending-withdrawal countdown", async (
   await expect(stakePanel).not.toContainText(bondVaultAddress);
   await expect(stakePanel).not.toContainText(bugzTokenAddress);
   await expect(stakePanel.getByRole("note", { name: "bond conduct warning" })).toContainText(
-    "ANTI-SOCIAL ACTIVITY BURNS YOUR STAKE"
+    "ANTI-SOCIAL ACTIVITY BURNS YOUR BOND"
   );
   await expect(stakePanel.getByRole("note", { name: "bond conduct warning" })).toContainText(
     "spamming, harassment, or any criminal activity"
   );
   await expect(stakePanel.getByRole("note", { name: "bond conduct warning" })).toContainText(
-    "will have their stake burned immediately and added to the treasury"
+    "will have their bond burned immediately and added to the treasury"
   );
   await expect(stakePanel.locator(".stake-level-badge strong")).toHaveText("2");
   await expect(stakePanel).toContainText("250 BUGZ active");

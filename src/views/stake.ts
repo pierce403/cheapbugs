@@ -238,10 +238,10 @@ const bondActionLabel = (action: "approve" | "bond"): string => (action === "app
 
 const renderBondConductWarning = (): string => `
   <div class="bond-conduct-warning" role="note" aria-label="bond conduct warning">
-    <strong>ANTI-SOCIAL ACTIVITY BURNS YOUR STAKE</strong>
+    <strong>ANTI-SOCIAL ACTIVITY BURNS YOUR BOND</strong>
     <p>
       Any bonded user who demonstrates anti-social activity, including spamming, harassment, or any criminal activity
-      related to bugs on this platform, will have their stake burned immediately and added to the treasury.
+      related to bugs on this platform, will have their bond burned immediately and added to the treasury.
     </p>
   </div>
 `;
