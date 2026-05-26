@@ -69,8 +69,8 @@ export const renderHomeView = async (context: AppViewContext): Promise<ViewResul
           class="unlock-lock-button"
           type="button"
           data-detail-unlock-report="${bundle.publicSubmission.reportHash}"
-          title="buy early access"
-          aria-label="buy early access to ${escapeHtml(title)}"
+          title="unlock early access"
+          aria-label="unlock early access to ${escapeHtml(title)}"
         >
           <span class="lock-icon" aria-hidden="true"></span>
         </button>

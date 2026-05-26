@@ -318,7 +318,7 @@ test("report detail stores revealed onchain key and decrypts details automatical
   await expect(privateSection).toContainText("Use a malformed parser envelope to trigger arbitrary settlement.");
   await expect(privateSection).toContainText("Send the crafted envelope to the Base parser endpoint.");
   await expect(privateSection).toContainText("alice@example.test");
-  await expect(privateSection.getByRole("button", { name: "buy early access" })).toHaveCount(0);
+  await expect(privateSection.getByRole("button", { name: "unlock early access" })).toHaveCount(0);
 
   const storedKey = await page.evaluate((hash) => {
     const raw = window.localStorage.getItem("cheapbugs.report-access");

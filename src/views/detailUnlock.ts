@@ -1,6 +1,10 @@
-import { approveTreasuryForDetailKeyPayment, purchaseDetailKey } from "../contracts/treasuryVault";
+import {
+  approveTreasuryForDetailKeyPayment,
+  getTreasuryDetailKeyAllowance,
+  purchaseDetailKey
+} from "../contracts/treasuryVault";
 import { saveReportAccessKey } from "../lib/report-access";
-import { escapeHtml, formatTokenAmount, shortHash } from "../lib/utils";
+import { formatTokenAmount, shortHash } from "../lib/utils";
 import { isWalletActionCancelled } from "../lib/walletAction";
 import { authController } from "../services";
 import { confirmDetailUnlockPayment, requestDetailUnlockQuote } from "../xmtp/broker";
@@ -72,7 +76,7 @@ export const bindDetailUnlockFlow = (root: HTMLElement, appContext: AppViewConte
       const identity = authController.getXmtpIdentity();
       const buyer = appContext.session.address;
       if (!buyer || !identity) {
-        setUnlockStatus("wallet required", "Connect a wallet before buying detail access.");
+        setUnlockStatus("wallet required", "Connect a wallet before unlocking early access.");
         setUnlockActions(`
           <button id="connect-detail-unlock-wallet" class="button" type="button">connect wallet</button>
           <button id="close-detail-unlock" class="button secondary" type="button">close</button>
@@ -100,10 +104,10 @@ export const bindDetailUnlockFlow = (root: HTMLElement, appContext: AppViewConte
         const priceLabel = `${formatTokenAmount(quote.priceWei, 18)} BUGZ`;
         setUnlockStatus(
           "detail unlock quote",
-          `${priceLabel} for ${quote.daysRemaining} day${quote.daysRemaining === 1 ? "" : "s"} of early access.`
+          `${priceLabel} to unlock ${quote.daysRemaining} day${quote.daysRemaining === 1 ? "" : "s"} of early access.`
         );
         setUnlockActions(`
-          <button id="confirm-detail-unlock" class="button" type="button">yes, pay ${escapeHtml(priceLabel)}</button>
+          <button id="confirm-detail-unlock" class="button" type="button">unlock early access</button>
           <button id="cancel-detail-unlock" class="button secondary" type="button">cancel</button>
         `);
         root.querySelector<HTMLButtonElement>("#cancel-detail-unlock")?.addEventListener("click", closeUnlockModal);
@@ -114,15 +118,29 @@ export const bindDetailUnlockFlow = (root: HTMLElement, appContext: AppViewConte
           }
           setUnlockActions("");
           try {
-            setUnlockStatus("approving BUGZ", "checking treasury allowance.");
-            await appContext.runWalletAction(
-              {
-                title: "approve detail payment",
-                message:
-                  "Approve the BUGZ treasury allowance transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
-              },
-              () => approveTreasuryForDetailKeyPayment(quote.priceWei)
-            );
+            setUnlockStatus("checking BUGZ approval", "checking treasury allowance before payment.");
+            const allowance = await getTreasuryDetailKeyAllowance(buyer);
+            let skipPaymentAllowancePreflight = false;
+            if (allowance < quote.priceWei) {
+              setUnlockStatus("approving BUGZ", `Approve ${priceLabel} for the treasury vault before payment.`);
+              const approval = await appContext.runWalletAction(
+                {
+                  title: "approve detail payment",
+                  message:
+                    "Approve the BUGZ treasury allowance transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
+                },
+                () => approveTreasuryForDetailKeyPayment(quote.priceWei)
+              );
+              if (approval.txHash) {
+                skipPaymentAllowancePreflight = true;
+                setUnlockStatus(
+                  "BUGZ approval confirmed",
+                  `approval confirmed: ${shortHash(approval.txHash, 12, 8)}. Continuing to payment.`
+                );
+              }
+            } else {
+              setUnlockStatus("BUGZ approval ready", "Existing BUGZ treasury approval is enough for this unlock.");
+            }
             setUnlockStatus("paying treasury", "sending the detail-key payment to the treasury vault.");
             const payment = await appContext.runWalletAction(
               {
@@ -130,7 +148,10 @@ export const bindDetailUnlockFlow = (root: HTMLElement, appContext: AppViewConte
                 message:
                   "Approve the detail-key payment transaction in your wallet. CheapBugs will wait for Base confirmation after signing."
               },
-              () => purchaseDetailKey(reportHash, quote.priceWei)
+              () =>
+                purchaseDetailKey(reportHash, quote.priceWei, {
+                  skipAllowancePreflight: skipPaymentAllowancePreflight
+                })
             );
             setUnlockStatus("verifying payment", `payment confirmed: ${shortHash(payment.txHash, 12, 8)}. Asking broker for key.`);
             const key = await confirmDetailUnlockPayment(

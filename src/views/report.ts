@@ -65,7 +65,7 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
     ? `
       <button id="buy-detail-unlock" type="button" class="button secondary lock-action" data-detail-unlock-report="${reportHash}">
         <span class="lock-icon" aria-hidden="true"></span>
-        buy early access
+        unlock early access
       </button>
     `
     : "";

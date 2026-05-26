@@ -381,17 +381,17 @@ test("renders newly indexed onchain bugs in recent reports", async ({ page }) =>
   await expect(reportRow.locator("td").nth(3)).toContainText("May 18, 2026");
   await expect(reportRow.locator("td").nth(4)).toHaveText("2d 4h");
   await expect(reportRow.locator("td").nth(4)).toHaveCSS("text-align", "right");
-  await expect(reportRow.getByRole("button", { name: "buy early access to Live parser exploit" })).toBeVisible();
+  await expect(reportRow.getByRole("button", { name: "unlock early access to Live parser exploit" })).toBeVisible();
   await expect(recentReports.getByText("No onchain bug reports resolved yet.")).toHaveCount(0);
 
   expect(counts.latest).toBeGreaterThan(0);
   expect(counts.getReport).toBeGreaterThan(0);
   expect(gateway.counts.bundle).toBe(1);
 
-  await reportRow.getByRole("button", { name: "buy early access to Live parser exploit" }).click();
+  await reportRow.getByRole("button", { name: "unlock early access to Live parser exploit" }).click();
   const unlockDialog = page.getByRole("dialog", { name: "detail unlock" });
   await expect(unlockDialog).toBeVisible();
-  await expect(unlockDialog).toContainText("Connect a wallet before buying detail access.");
+  await expect(unlockDialog).toContainText("Connect a wallet before unlocking early access.");
   await unlockDialog.getByRole("button", { name: "close" }).click();
   await expect(unlockDialog).toBeHidden();
 

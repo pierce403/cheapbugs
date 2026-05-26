@@ -102,7 +102,7 @@ const detailPaymentError = (label: string, error: unknown): Error => {
 const connectedAccount = (): HexString => {
   const account = authController.getSession().address;
   if (!account) {
-    throw new Error("Connect a wallet before buying detail access.");
+    throw new Error("Connect a wallet before unlocking early access.");
   }
   return account;
 };
@@ -121,6 +121,11 @@ const readTreasuryAllowance = async (account: HexString, runner: ContractRunner 
   scheduleBaseRpcRead("treasury BUGZ allowance", () =>
     readToken(runner).allowance(account, treasuryVaultAddress()) as Promise<bigint>
   );
+
+export const getTreasuryDetailKeyAllowance = async (buyer?: HexString): Promise<bigint> => {
+  const account = buyer ? normalizeAddress(buyer) : connectedAccount();
+  return readTreasuryAllowance(account);
+};
 
 const sendTx = async (
   label: string,
@@ -199,7 +204,8 @@ export const approveTreasuryForDetailKeyPayment = async (
 
 export const purchaseDetailKey = async (
   reportHash: HexString,
-  amount: bigint
+  amount: bigint,
+  options: { skipAllowancePreflight?: boolean } = {}
 ): Promise<{ txHash: HexString }> => {
   const { signer, account } = await connectedSigner();
   if (!/^0x[a-fA-F0-9]{64}$/.test(reportHash)) {
@@ -209,9 +215,11 @@ export const purchaseDetailKey = async (
     throw new Error("Detail-key payment amount must be greater than zero.");
   }
 
-  const currentAllowance = await readTreasuryAllowance(account, signer);
-  if (currentAllowance < amount) {
-    throw new Error("Detail-key payment needs a larger BUGZ approval for the treasury vault.");
+  if (!options.skipAllowancePreflight) {
+    const currentAllowance = await readTreasuryAllowance(account, signer);
+    if (currentAllowance < amount) {
+      throw new Error("Detail-key payment needs a larger BUGZ approval for the treasury vault.");
+    }
   }
 
   const vault = new Contract(treasuryVaultAddress(), treasuryVaultAbi, signer);

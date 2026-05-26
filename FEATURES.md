@@ -146,7 +146,7 @@ cheapbugs/
 - **Stability**: in-progress
 - **Description**: `CheapBugsTreasuryVault` holds live Base BUGZ treasury funds, records detail-key purchases, and pays reporter rewards when called by the index.
 - **Properties**:
-  - Users can deposit BUGZ into the treasury and buy detail-key access with `purchaseDetailKey(reportHash, amount)`.
+  - Users can deposit BUGZ into the treasury and unlock detail-key access with `purchaseDetailKey(reportHash, amount)`.
   - Detail-key purchases transfer BUGZ into the treasury, update `detailKeyPayments(reportHash, buyer)`, and append enumerable purchase records for broker verification.
   - The owner sets the authorized bug index with `setIndex`.
   - The owner manages treasury brokers independently from the index broker list.
@@ -173,8 +173,8 @@ cheapbugs/
   - Quote requests use strict JSON schema `cheapbugs.detail_unlock.v1`, type `detail_unlock_quote`, and include request id, buyer, broker, chain id, bug index, treasury vault, and report hash.
   - The broker binds the buyer to the authenticated XMTP sender; message-supplied `buyer_address` values that do not match sender identity are rejected before pricing or key release.
   - The broker computes the default quote as `CheapBugsTreasuryVault.calculateRewardAmount(1) * ceil(days remaining until the 7-day reveal window)`, stores the quote by request id for 15 minutes, and returns price wei, days remaining, and expiry over XMTP.
-  - The browser approves BUGZ for the treasury as needed, calls `CheapBugsTreasuryVault.purchaseDetailKey(reportHash, amount)`, waits for confirmation, then sends a `detail_unlock_paid` XMTP message with the original request id and transaction hash.
-  - Before approval or payment, the browser verifies the transaction signer matches the connected buyer session, checks BUGZ allowance against that signer, and decodes BUGZ custom errors such as `ERC20InsufficientAllowance` into user-facing approval guidance.
+  - The browser preflights BUGZ treasury allowance, requests a BUGZ approval transaction first only when the quote exceeds that allowance, calls `CheapBugsTreasuryVault.purchaseDetailKey(reportHash, amount)`, waits for confirmation, then sends a `detail_unlock_paid` XMTP message with the original request id and transaction hash.
+  - Before payment, the browser verifies the transaction signer matches the connected buyer session and decodes BUGZ custom errors such as `ERC20InsufficientAllowance` into user-facing approval guidance. After a confirmed approval transaction in the same unlock flow, the payment skips the immediate allowance re-read so lagging Base RPC state does not block a valid purchase.
   - The broker does not trust buyer-supplied amounts. It verifies the stored quote, report hash, buyer, expiry, transaction receipt success, transaction sender, transaction recipient, and `detailKeyPayments(reportHash, buyer) >= quoted price` before sending the details key.
   - After receiving the key, the browser stores it through the existing per-report access-key localStorage path and decrypts the encrypted BugBundle details locally.
 - **Test Criteria**:
