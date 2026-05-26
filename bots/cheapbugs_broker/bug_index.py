@@ -287,6 +287,10 @@ class BugIndexClient:
         report = self.contract.functions.getReport(report_hash).call()
         return int(report[17])
 
+    def report_reveal_after(self, report_hash: str) -> int:
+        report = self.contract.functions.getReport(report_hash).call()
+        return int(report[14])
+
     def complete_payout(self, report_hash: str, multiplier: int, details_key: bytes) -> str:
         if not self.index_address:
             raise BugIndexPublishError("BROKER_BUG_INDEX_ADDRESS or VITE_BUG_INDEX_ADDRESS is required for payout completion.")

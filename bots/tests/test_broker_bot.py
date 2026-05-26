@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import tempfile
+import time
 import unittest
 from dataclasses import dataclass
 from decimal import Decimal
@@ -487,7 +488,7 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(bot.settle_matured_once(), 1)
             self.assertEqual(token.transfers, [(WALLET, 123 * 10**18)])
             self.assertEqual(len(bot.signal.messages), 1)
-            self.assertIn("✅ CheapBugs payout completed", bot.signal.messages[0])
+            self.assertIn("✅ CheapBugs report completed", bot.signal.messages[0])
             self.assertIn("Amount: 123 BUGZ", bot.signal.messages[0])
             self.assertIn("dry-run:transfer", bot.signal.messages[0])
             updated = store.get_submission(record.id)
@@ -536,7 +537,7 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(token.transfers, [])
             self.assertEqual(bug_index.completed_payouts, [("0x" + "7" * 64, 1, DETAILS_KEY)])
             self.assertEqual(len(bot.signal.messages), 1)
-            self.assertIn("✅ CheapBugs payout completed", bot.signal.messages[0])
+            self.assertIn("✅ CheapBugs report completed", bot.signal.messages[0])
             self.assertIn("Amount: 123 BUGZ", bot.signal.messages[0])
             self.assertIn("https://basescan.org/tx/0x" + "b" * 64, bot.signal.messages[0])
             updated = store.get_submission(record.id)
@@ -545,6 +546,141 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(updated.status, "paid")
             self.assertEqual(updated.payout_amount_wei, str(123 * 10**18))
             self.assertEqual(updated.payout_tx_hash, "0x" + "b" * 64)
+
+    def test_settlement_uses_zero_multiplier_for_invalid_index_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Invalid Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "6" * 64,
+                now=100,
+            )
+            bug_index = FakeBugIndex(report_status=2)
+            token = FakeToken(balance=0)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=token,
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 1)
+            self.assertEqual(bug_index.completed_payouts, [("0x" + "6" * 64, 0, DETAILS_KEY)])
+            self.assertEqual(len(bot.signal.messages), 1)
+            self.assertIn("Amount: 0 BUGZ", bot.signal.messages[0])
+            self.assertIn("invalid — zero payout; details key revealed", bot.signal.messages[0])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "paid")
+            self.assertEqual(updated.payout_amount_wei, "0")
+
+    def test_settlement_skips_before_onchain_reveal_time_without_marking_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Not Ready Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "4" * 64,
+                now=100,
+            )
+            bug_index = FakeBugIndex(report_status=1, reveal_after=int(time.time()) + 60)
+            token = FakeToken(balance=0)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=token,
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 0)
+            self.assertEqual(bug_index.completed_payouts, [])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "relayed")
+            self.assertIsNone(updated.error)
+
+    def test_settlement_skips_unreviewed_index_reports_without_marking_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Unreviewed Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "5" * 64,
+                now=100,
+            )
+            bug_index = FakeBugIndex(report_status=0)
+            token = FakeToken(balance=0)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=token,
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 0)
+            self.assertEqual(bug_index.completed_payouts, [])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "relayed")
+            self.assertIsNone(updated.error)
 
     def test_settlement_honors_explicit_base_reward_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1910,10 +2046,18 @@ def fake_pinned_bundle(added: IpfsAddResult) -> object:
 
 
 class FakeBugIndex:
-    def __init__(self, *, dry_run: bool = False, error: Exception | None = None, report_status: int = 1):
+    def __init__(
+        self,
+        *,
+        dry_run: bool = False,
+        error: Exception | None = None,
+        report_status: int = 1,
+        reveal_after: int = 0,
+    ):
         self.dry_run = dry_run
         self.error = error
         self._report_status = report_status
+        self._reveal_after = reveal_after
         self.last_command: SubmissionCommand | None = None
         self.last_bundle: object | None = None
         self.completed_payouts: list[tuple[str, int, bytes]] = []
@@ -1942,6 +2086,12 @@ class FakeBugIndex:
             raise self.error
         self.last_status_report_hash = report_hash
         return self._report_status
+
+    def report_reveal_after(self, report_hash: str) -> int:
+        if self.error is not None:
+            raise self.error
+        self.last_reveal_after_report_hash = report_hash
+        return self._reveal_after
 
 
 class FakeTreasury:

@@ -38,6 +38,9 @@ BUG_INDEX_REVEAL_PREFLIGHT_BUFFER_SECONDS = 60
 DETAIL_UNLOCK_QUOTE_TTL_SECONDS = 15 * 60
 UNFLAGGED_PAYOUT_ALERT_WINDOW_SECONDS = 24 * 60 * 60
 BUG_INDEX_STATUS_UNREVIEWED = 0
+BUG_INDEX_STATUS_VALID = 1
+BUG_INDEX_STATUS_INVALID = 2
+BUG_INDEX_STATUS_SPAM = 3
 
 
 class BrokerBot:
@@ -775,10 +778,31 @@ class BrokerBot:
             amount_wei = tokens_to_wei(reward, decimals)
             try:
                 if self._use_index_treasury_payout():
-                    multiplier = self._settlement_multiplier(support_score)
+                    report_hash = str(submission.report_hash)
+                    if hasattr(self.bug_index, "report_reveal_after"):
+                        reveal_after = int(self.bug_index.report_reveal_after(report_hash))
+                        now = int(time.time())
+                        if now < reveal_after:
+                            self.logger.info(
+                                "Skipping payout before onchain reveal time submission=%s report_hash=%s reveal_after=%s now=%s",
+                                submission.id,
+                                submission.report_hash,
+                                reveal_after,
+                                now,
+                            )
+                            continue
+                    status = int(self.bug_index.report_status(report_hash))
+                    if status == BUG_INDEX_STATUS_UNREVIEWED:
+                        self.logger.warning(
+                            "Skipping payout for unreviewed submission %s report_hash=%s",
+                            submission.id,
+                            submission.report_hash,
+                        )
+                        continue
+                    multiplier = self._settlement_multiplier(support_score, status=status)
                     amount_wei = int(self.treasury.reward_amount(multiplier))
                     tx_hash = self.bug_index.complete_payout(
-                        str(submission.report_hash),
+                        report_hash,
                         multiplier,
                         _decode_details_key(str(submission.details_key_b64 or "")),
                     )
@@ -790,7 +814,15 @@ class BrokerBot:
                 continue
             self.store.mark_paid(submission.id, support_score, amount_wei, tx_hash)
             try:
-                self.signal.send_group_message(_payout_completed_message(submission, amount_wei, decimals, tx_hash))
+                self.signal.send_group_message(
+                    _payout_completed_message(
+                        submission,
+                        amount_wei,
+                        decimals,
+                        tx_hash,
+                        status=status if self._use_index_treasury_payout() else None,
+                    )
+                )
             except Exception:
                 self.logger.exception("Failed to send payout notification for submission %s", submission.id)
             paid += 1
@@ -818,7 +850,9 @@ class BrokerBot:
             and hasattr(self.treasury, "reward_amount")
         )
 
-    def _settlement_multiplier(self, support_score: int) -> int:
+    def _settlement_multiplier(self, support_score: int, *, status: int | None = None) -> int:
+        if status in (BUG_INDEX_STATUS_INVALID, BUG_INDEX_STATUS_SPAM):
+            return 0
         return max(1, min(10, 1 + max(0, support_score)))
 
     async def poll_signal_forever(self) -> None:
@@ -842,15 +876,29 @@ class BrokerBot:
             await asyncio.sleep(max(self.config.poll_seconds, 60))
 
 
-def _payout_completed_message(submission, amount_wei: int, decimals: int, tx_hash: str) -> str:
+def _payout_completed_message(
+    submission,
+    amount_wei: int,
+    decimals: int,
+    tx_hash: str,
+    *,
+    status: int | None = None,
+) -> str:
     amount = Decimal(amount_wei) / (Decimal(10) ** decimals)
     amount_text = format(amount.normalize(), "f") if amount else "0"
     lines = [
-        "✅ CheapBugs payout completed",
+        "✅ CheapBugs report completed",
         f"Report: {submission.title}",
         f"Amount: {amount_text} BUGZ",
-        f"Report hash: {submission.report_hash}",
     ]
+    if amount_wei == 0:
+        if status == BUG_INDEX_STATUS_INVALID:
+            lines.append("Result: invalid — zero payout; details key revealed")
+        elif status == BUG_INDEX_STATUS_SPAM:
+            lines.append("Result: spam — zero payout; details key revealed")
+        else:
+            lines.append("Result: zero payout; details key revealed")
+    lines.append(f"Report hash: {submission.report_hash}")
     if tx_hash.startswith("0x") and len(tx_hash) == 66:
         lines.append(f"Tx: https://basescan.org/tx/{tx_hash}")
     else:
