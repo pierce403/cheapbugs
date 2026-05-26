@@ -40,7 +40,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The broker sends staged plain text XMTP status messages after successful validation stages.
 - The broker pins the verified encrypted BugBundle through local Kubo without adding broker status fields to the payload.
 - The pinned bundle keeps the details key outside IPFS. The broker stores that key in SQLite for later reveal work.
-- The browser stores a purchased details key only after the broker returns it over XMTP, then decrypts the already pinned encrypted BugBundle locally. Decrypted private details are not written to the BugBundle/IPFS cache.
+- The browser stores a purchased details key only after the broker returns it over XMTP, or a revealed details key only after it appears in `CheapBugsBugIndex.getReport`, then decrypts the already pinned encrypted BugBundle locally. Decrypted private details are not written to the BugBundle/IPFS cache.
 - The browser detail-unlock payment path verifies the transaction signer matches the connected buyer session before approval or treasury payment. The broker still treats the onchain transaction sender and treasury purchase ledger as the authority before releasing a key.
 - Browser onchain write flows use a shared wallet-request modal while waiting for wallet approval and transaction confirmation. Its cancel button only stops the CheapBugs UI from waiting; users must reject the open wallet prompt to cancel the wallet request itself.
 - Home/index lock icons and report-page early-access buttons share the same browser detail-unlock flow; the listing UI does not add a separate payment or key-release trust path.

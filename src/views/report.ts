@@ -2,7 +2,7 @@ import { getSchemaUid } from "../lib/schema-overrides";
 import { loadAuthorDisplay } from "../lib/authors";
 import { computeReviewDisplayState } from "../lib/eas";
 import { decryptPrivateSubmission, getStoredAccessKey, loadReviewVerdicts, loadSubmissionBundle, submitReviewVerdict } from "../lib/reports";
-import { saveReportAccessKey } from "../lib/report-access";
+import { detailsKeyHexToAccessKey, saveReportAccessKey } from "../lib/report-access";
 import { toGatewayUrl } from "../lib/ipfs";
 import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
 import { escapeHtml, formatDate, newlineToBreaks, shortHash, textOrDash } from "../lib/utils";
@@ -40,7 +40,12 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
     reviewLoadError = error instanceof Error ? error.message : "Review verdicts could not be loaded.";
   }
   const reviewState = computeReviewDisplayState(reviews);
-  const accessKey = getStoredAccessKey(reportHash);
+  const revealedAccessKey = detailsKeyHexToAccessKey(bundle.publicSubmission.detailsKey);
+  const storedAccessKey = getStoredAccessKey(reportHash);
+  if (revealedAccessKey && revealedAccessKey !== storedAccessKey) {
+    saveReportAccessKey(reportHash, revealedAccessKey);
+  }
+  const accessKey = revealedAccessKey ?? storedAccessKey;
   const revealAt = bundle.publicSubmission.revealAfter ? Date.parse(bundle.publicSubmission.revealAfter) : NaN;
   const canBuyEarlyDetails =
     !accessKey &&
@@ -80,7 +85,9 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
         </table>
       `;
     } catch {
-      privateView = `<p class="warning-copy">Stored access key failed to decrypt this payload. Re-enter a valid review key below.</p>`;
+      privateView = revealedAccessKey
+        ? `<p class="warning-copy">Revealed onchain details key failed to decrypt this payload. The encrypted BugBundle may still be unavailable or malformed.</p>`
+        : `<p class="warning-copy">Stored access key failed to decrypt this payload. Re-enter a valid review key below.</p>`;
     }
   }
 

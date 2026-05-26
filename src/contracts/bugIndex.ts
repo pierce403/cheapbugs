@@ -4,6 +4,7 @@ import { chainConfig } from "../config/chains";
 import type { SubmissionPublic } from "../types/submission";
 import { authController } from "../services";
 import type { BugIndexStatus, HexString } from "../types/domain";
+import { ZERO_BYTES32 } from "../lib/constants";
 import {
   indexToDisclosureMode,
   indexToTargetKind,
@@ -143,6 +144,31 @@ const fromContractBondVote = (vote: ContractBondVote): Pick<BugVoteState, "voter
   };
 };
 
+const normalizeBytes32 = (value: unknown): `0x${string}` | undefined => {
+  if (typeof value !== "string" || !/^0x[a-fA-F0-9]{64}$/.test(value) || value.toLowerCase() === ZERO_BYTES32) {
+    return undefined;
+  }
+  return value.toLowerCase() as `0x${string}`;
+};
+
+const hasRevealedDetailsKey = (report: SubmissionPublic): boolean =>
+  Boolean(report.detailsKeyRevealed && normalizeBytes32(report.detailsKey));
+
+const isRevealDue = (report: SubmissionPublic): boolean => {
+  if (!report.revealAfter || report.detailsKeyRevealed) {
+    return false;
+  }
+  const revealAt = Date.parse(report.revealAfter);
+  return Number.isFinite(revealAt) && revealAt <= Date.now();
+};
+
+const isReportCacheFreshEnough = (report: SubmissionPublic): boolean => {
+  if (report.detailsKeyRevealed && !hasRevealedDetailsKey(report)) {
+    return false;
+  }
+  return !isRevealDue(report);
+};
+
 const indexToBugStatus = (value: number): BugIndexStatus => {
   switch (value) {
     case 1:
@@ -171,26 +197,32 @@ const bugStatusToIndex = (value: BugIndexStatus): number => {
   }
 };
 
-const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => ({
-  reportId: entry.reportId,
-  reportHash: entry.reportHash,
-  reporterAddress: normalizeAddress(entry.reporter),
-  createdAt: new Date(Number(entry.createdAt) * 1000).toISOString(),
-  disclosureMode: indexToDisclosureMode(Number(entry.disclosureMode)),
-  publicSummary: entry.publicSummary,
-  encryptedPayloadCid: entry.encryptedPayloadCid,
-  targetKind: indexToTargetKind(Number(entry.targetKind)),
-  targetRefHash: entry.targetRefHash,
-  tags: parseTags(entry.tags),
-  contentHash: entry.contentHash,
-  bugBundleHash: entry.bugBundleHash,
-  encryptedDetailsHash: entry.encryptedDetailsHash,
-  detailsKeyCommitment: entry.detailsKeyCommitment,
-  revealAfter: new Date(Number(entry.revealAfter) * 1000).toISOString(),
-  detailsKeyRevealed: entry.detailsKeyRevealed,
-  indexStatus: indexToBugStatus(Number(entry.status ?? 0)),
-  payoutCompleted: Boolean(entry.payoutCompleted)
-});
+const fromContractSubmission = (entry: ContractSubmission): SubmissionPublic => {
+  const detailsKey = normalizeBytes32(entry.detailsKey);
+  const detailsKeyRevealed = Boolean(entry.detailsKeyRevealed && detailsKey);
+
+  return {
+    reportId: entry.reportId,
+    reportHash: entry.reportHash,
+    reporterAddress: normalizeAddress(entry.reporter),
+    createdAt: new Date(Number(entry.createdAt) * 1000).toISOString(),
+    disclosureMode: indexToDisclosureMode(Number(entry.disclosureMode)),
+    publicSummary: entry.publicSummary,
+    encryptedPayloadCid: entry.encryptedPayloadCid,
+    targetKind: indexToTargetKind(Number(entry.targetKind)),
+    targetRefHash: entry.targetRefHash,
+    tags: parseTags(entry.tags),
+    contentHash: entry.contentHash,
+    bugBundleHash: entry.bugBundleHash,
+    encryptedDetailsHash: entry.encryptedDetailsHash,
+    detailsKeyCommitment: entry.detailsKeyCommitment,
+    revealAfter: new Date(Number(entry.revealAfter) * 1000).toISOString(),
+    detailsKey: detailsKeyRevealed ? detailsKey : undefined,
+    detailsKeyRevealed,
+    indexStatus: indexToBugStatus(Number(entry.status ?? 0)),
+    payoutCompleted: Boolean(entry.payoutCompleted)
+  };
+};
 
 export const loadBugIndexAdminAccess = async (
   account: HexString | null | undefined
@@ -226,8 +258,11 @@ export const getBugReport = async (reportHash: `0x${string}`): Promise<Submissio
   const key = `report:${bugIndexAddress()}:${reportHash}`;
   const stale = persistentCache.getStale<SubmissionPublic>(key);
   const cached = persistentCache.get<SubmissionPublic>(key);
-  if (cached) {
+  if (cached && isReportCacheFreshEnough(cached)) {
     return readCache.set(key, cached, REPORT_TTL_MS);
+  }
+  if ((cached && !isReportCacheFreshEnough(cached)) || (stale && !isReportCacheFreshEnough(stale))) {
+    readCache.delete(key);
   }
 
   try {

@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { createCipheriv, createHash } from "node:crypto";
 import { Interface, id, AbiCoder } from "ethers";
 
 import { bugIndexAbi } from "../src/contracts/bugIndexAbi";
@@ -17,6 +18,8 @@ const abiCoder = AbiCoder.defaultAbiCoder();
 const getReportSelector = bugIndexInterface.getFunction("getReport")?.selector;
 const reverseSelector = id("reverseWithGateways(bytes,uint256,string[])").slice(0, 10);
 const resolveSelector = id("resolveWithGateways(bytes,bytes,string[])").slice(0, 10);
+const revealedDetailsKeyBytes = Buffer.from("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", "hex");
+const revealedDetailsKey = `0x${revealedDetailsKeyBytes.toString("hex")}`;
 
 type RpcRequest = {
   id: number | string | null;
@@ -31,7 +34,69 @@ type RpcResponse = {
   result: unknown;
 };
 
-const reportTuple = () => [
+type ReportTupleOptions = {
+  revealed?: boolean;
+  encryptedDetailsHash?: string;
+  detailsKeyCommitment?: string;
+};
+
+const base64Url = (value: Uint8Array): string => Buffer.from(value).toString("base64url");
+
+const encryptedBugBundle = () => {
+  const iv = Buffer.from("202122232425262728292a2b", "hex");
+  const aad = Buffer.from("cheapbugs report detail test", "utf8");
+  const plaintext = Buffer.from(
+    JSON.stringify({
+      details: "Use a malformed parser envelope to trigger arbitrary settlement.",
+      repro_steps: "Send the crafted envelope to the Base parser endpoint.",
+      evidence: "Crash log and trace attached out of band.",
+      contact_hints: "alice@example.test"
+    }),
+    "utf8"
+  );
+  const cipher = createCipheriv("aes-256-gcm", revealedDetailsKeyBytes, iv);
+  cipher.setAAD(aad);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]);
+  const encryptedDetailsHash = `0x${createHash("sha256").update(ciphertext).digest("hex")}`;
+  const detailsKeyCommitment = `0x${createHash("sha256").update(revealedDetailsKeyBytes).digest("hex")}`;
+
+  return {
+    accessKey: base64Url(revealedDetailsKeyBytes),
+    encryptedDetailsHash,
+    detailsKeyCommitment,
+    payload: {
+      schema: "cheapbugs.bug_bundle.v1",
+      version: 1,
+      core: {
+        submission: {
+          bug_type: "web3",
+          severity: "critical",
+          target_interest: "high",
+          title: "Live parser exploit",
+          public_summary: "Fresh broker-published bug from chain.",
+          target: {
+            kind: "protocol",
+            reference: "Base protocol parser"
+          }
+        },
+        details: {
+          encrypted: true,
+          alg: "AES-256-GCM",
+          iv: base64Url(iv),
+          aad: base64Url(aad),
+          ciphertext: base64Url(ciphertext)
+        },
+        commitments: {
+          encrypted_details_sha256: encryptedDetailsHash,
+          details_key_commitment: detailsKeyCommitment,
+          details_key_commitment_alg: "sha256"
+        }
+      }
+    }
+  };
+};
+
+const reportTuple = (options: ReportTupleOptions = {}) => [
   reportHash,
   "CB-LIVE-0001",
   reporterAddress,
@@ -44,11 +109,11 @@ const reportTuple = () => [
   "base, parser",
   id("public-content"),
   id("bug-bundle"),
-  id("encrypted-details"),
-  id("details-key"),
+  options.encryptedDetailsHash ?? id("encrypted-details"),
+  options.detailsKeyCommitment ?? id("details-key"),
   BigInt(Math.floor(Date.now() / 1000) + 604_800),
-  zeroBytes32,
-  false,
+  options.revealed ? revealedDetailsKey : zeroBytes32,
+  Boolean(options.revealed),
   0,
   false,
   0n,
@@ -61,7 +126,7 @@ const seedReviewSchema = async (page: Page): Promise<void> => {
   }, reviewSchemaUid);
 };
 
-const mockBaseRpc = async (page: Page): Promise<void> => {
+const mockBaseRpc = async (page: Page, options: ReportTupleOptions = {}): Promise<void> => {
   await page.route("https://mainnet.base.org/**", async (route: Route) => {
     const payload = JSON.parse(route.request().postData() || "{}") as RpcRequest | RpcRequest[];
     const requests = Array.isArray(payload) ? payload : [payload];
@@ -80,7 +145,7 @@ const mockBaseRpc = async (page: Page): Promise<void> => {
           return {
             id: request.id,
             jsonrpc: "2.0",
-            result: bugIndexInterface.encodeFunctionResult("getReport", [reportTuple()])
+            result: bugIndexInterface.encodeFunctionResult("getReport", [reportTuple(options)])
           };
         }
       }
@@ -133,11 +198,11 @@ const mockEnsRpc = async (page: Page): Promise<void> => {
   });
 };
 
-const mockBugBundleGateway = async (page: Page): Promise<void> => {
+const mockBugBundleGateway = async (page: Page, payload?: unknown): Promise<void> => {
   await page.route("https://ipfs.io/ipfs/bafyreportdetail", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
+      body: JSON.stringify(payload ?? {
         schema: "cheapbugs.bug_bundle.v1",
         version: 1,
         core: {
@@ -232,4 +297,31 @@ test("report detail hides contract addresses and renders EAS review rows", async
   await expect(page.getByText("[ private details ]")).toBeVisible();
   await expect(page.getByRole("button", { name: "unlock details" })).toBeVisible();
   await expect(page.getByRole("button", { name: "unlock dossier" })).toHaveCount(0);
+});
+
+test("report detail stores revealed onchain key and decrypts details automatically", async ({ page }) => {
+  const revealedBundle = encryptedBugBundle();
+  await seedReviewSchema(page);
+  await mockBaseRpc(page, {
+    revealed: true,
+    encryptedDetailsHash: revealedBundle.encryptedDetailsHash,
+    detailsKeyCommitment: revealedBundle.detailsKeyCommitment
+  });
+  await mockEnsRpc(page);
+  await mockBugBundleGateway(page, revealedBundle.payload);
+  await mockEasGraphql(page);
+
+  await page.goto(`/report/${reportHash}`);
+
+  const privateSection = page.locator("section").filter({ hasText: "[ private details ]" });
+  await expect(privateSection).toContainText("Use a malformed parser envelope to trigger arbitrary settlement.");
+  await expect(privateSection).toContainText("Send the crafted envelope to the Base parser endpoint.");
+  await expect(privateSection).toContainText("alice@example.test");
+  await expect(privateSection.getByRole("button", { name: "buy early access" })).toHaveCount(0);
+
+  const storedKey = await page.evaluate((hash) => {
+    const raw = window.localStorage.getItem("cheapbugs.report-access");
+    return raw ? (JSON.parse(raw) as Record<string, string>)[hash] : null;
+  }, reportHash);
+  expect(storedKey).toBe(revealedBundle.accessKey);
 });

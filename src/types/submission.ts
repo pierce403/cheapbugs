@@ -84,6 +84,7 @@ export type SubmissionPublic = {
   encryptedDetailsHash: HexString;
   detailsKeyCommitment: HexString;
   revealAfter: string | null;
+  detailsKey?: HexString;
   detailsKeyRevealed: boolean;
   indexStatus?: BugIndexStatus;
   payoutCompleted?: boolean;
