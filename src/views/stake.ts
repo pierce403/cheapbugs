@@ -236,9 +236,20 @@ const bondFormAction = (rawAmount: string, allowance: bigint | null, decimals: n
 
 const bondActionLabel = (action: "approve" | "bond"): string => (action === "approve" ? "approve bugz" : "bond bugz");
 
+const renderBondConductWarning = (): string => `
+  <div class="bond-conduct-warning" role="note" aria-label="bond conduct warning">
+    <strong>ANTI-SOCIAL ACTIVITY BURNS YOUR STAKE</strong>
+    <p>
+      Any bonded user who demonstrates anti-social activity, including spamming, harassment, or any criminal activity
+      related to bugs on this platform, will have their stake burned immediately and added to the treasury.
+    </p>
+  </div>
+`;
+
 const renderConnect = (): string => `
   <section class="panel">
     <div class="panel-title">[ bond ]</div>
+    ${renderBondConductWarning()}
     <p class="warning-copy">Connect a wallet to bond BUGZ, see your level, or request a delayed withdrawal.</p>
   </section>
 `;
@@ -277,6 +288,7 @@ const renderStake = (dashboard: StakeDashboard): string => {
     <section class="panel stake-page-panel" data-testid="stake-panel">
       <div class="panel-title">[ bond ]</div>
       ${dashboard.errorMessage ? `<p class="warning-copy">${escapeHtml(dashboard.errorMessage)}</p>` : ""}
+      ${renderBondConductWarning()}
       <div class="stake-hero">
         <div class="stake-level-badge">
           <span>level</span>

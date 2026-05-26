@@ -249,6 +249,15 @@ test("shows bonding level, allowance, and pending-withdrawal countdown", async (
   const stakePanel = page.getByTestId("stake-panel");
   await expect(stakePanel).not.toContainText(bondVaultAddress);
   await expect(stakePanel).not.toContainText(bugzTokenAddress);
+  await expect(stakePanel.getByRole("note", { name: "bond conduct warning" })).toContainText(
+    "ANTI-SOCIAL ACTIVITY BURNS YOUR STAKE"
+  );
+  await expect(stakePanel.getByRole("note", { name: "bond conduct warning" })).toContainText(
+    "spamming, harassment, or any criminal activity"
+  );
+  await expect(stakePanel.getByRole("note", { name: "bond conduct warning" })).toContainText(
+    "will have their stake burned immediately and added to the treasury"
+  );
   await expect(stakePanel.locator(".stake-level-badge strong")).toHaveText("2");
   await expect(stakePanel).toContainText("250 BUGZ active");
   await expect(stakePanel).toContainText("pending withdrawal");
