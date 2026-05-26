@@ -271,12 +271,23 @@ test("report detail hides contract addresses and renders EAS review rows", async
   const reportSection = page.locator("section").filter({ hasText: "[ Live parser exploit ]" });
   await expect(reportSection).toContainText("Live parser exploit");
   await expect(reportSection).toContainText("alice.eth");
+  await expect(reportSection).toContainText("Base protocol parser");
+  await expect(reportSection).not.toContainText("report hash");
+  await expect(reportSection).not.toContainText("report id");
+  await expect(reportSection).not.toContainText("reporter address");
+  await expect(reportSection).not.toContainText("target ref hash");
+  await expect(reportSection).not.toContainText("content hash");
+  await expect(reportSection).not.toContainText("tags");
+  await expect(reportSection).not.toContainText(reportHash);
+  await expect(reportSection).not.toContainText(reporterAddress);
   await expect(reportSection).not.toContainText("bug index");
   await expect(reportSection).not.toContainText("bond vault");
   await expect(reportSection).not.toContainText("treasury vault");
   await expect(page.getByText(bugIndexAddress)).toHaveCount(0);
   await expect(page.getByText(bondVaultAddress)).toHaveCount(0);
   await expect(page.getByText(treasuryVaultAddress)).toHaveCount(0);
+  const panelTitles = await page.locator("section > .panel-title").allTextContents();
+  expect(panelTitles.indexOf("[ private details ]")).toBeLessThan(panelTitles.indexOf("[ trusted review state ]"));
 
   const reviewSection = page.locator("section").filter({ hasText: "[ trusted review state ]" });
   await expect(reviewSection.locator("thead th")).toHaveText([
@@ -316,8 +327,15 @@ test("report detail stores revealed onchain key and decrypts details automatical
 
   const privateSection = page.locator("section").filter({ hasText: "[ private details ]" });
   await expect(privateSection).toContainText("Use a malformed parser envelope to trigger arbitrary settlement.");
-  await expect(privateSection).toContainText("Send the crafted envelope to the Base parser endpoint.");
-  await expect(privateSection).toContainText("alice@example.test");
+  await expect(privateSection).not.toContainText("bug type");
+  await expect(privateSection).not.toContainText("severity");
+  await expect(privateSection).not.toContainText("target interest");
+  await expect(privateSection).not.toContainText("repro");
+  await expect(privateSection).not.toContainText("evidence");
+  await expect(privateSection).not.toContainText("contact hints");
+  await expect(privateSection).not.toContainText("target ref");
+  await expect(privateSection).not.toContainText("Send the crafted envelope to the Base parser endpoint.");
+  await expect(privateSection).not.toContainText("alice@example.test");
   await expect(privateSection.getByRole("button", { name: "unlock early access" })).toHaveCount(0);
 
   const storedKey = await page.evaluate((hash) => {

@@ -6,7 +6,7 @@ import { detailsKeyHexToAccessKey, saveReportAccessKey } from "../lib/report-acc
 import { toGatewayUrl } from "../lib/ipfs";
 import { bindMarkdownCodeCopy, renderMarkdown } from "../lib/markdown";
 import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
-import { escapeHtml, formatDate, newlineToBreaks, shortHash, textOrDash } from "../lib/utils";
+import { escapeHtml, formatDate, shortHash } from "../lib/utils";
 import { isWalletActionCancelled } from "../lib/walletAction";
 import type { ReviewVerdict } from "../types/review";
 
@@ -79,18 +79,6 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
       );
       privateView = `
         <div class="report-private-content">
-          <table class="data-table">
-            <tbody>
-              <tr><th>bug type</th><td>${escapeHtml(textOrDash(privateSubmission.bugType))}</td></tr>
-              <tr><th>severity</th><td>${escapeHtml(textOrDash(privateSubmission.severity))}</td></tr>
-              <tr><th>target interest</th><td>${escapeHtml(textOrDash(privateSubmission.targetInterest))}</td></tr>
-              <tr><th>title</th><td><strong class="report-title-text">${escapeHtml(privateSubmission.title)}</strong></td></tr>
-              <tr><th>repro</th><td>${newlineToBreaks(textOrDash(privateSubmission.reproSteps))}</td></tr>
-              <tr><th>evidence</th><td>${newlineToBreaks(textOrDash(privateSubmission.evidence))}</td></tr>
-              <tr><th>contact hints</th><td>${newlineToBreaks(textOrDash(privateSubmission.contactHints))}</td></tr>
-              <tr><th>target ref</th><td>${escapeHtml(privateSubmission.targetRef)}</td></tr>
-            </tbody>
-          </table>
           ${renderMarkdownTextArea("details", privateSubmission.details)}
         </div>
       `;
@@ -139,22 +127,31 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
         ${renderMarkdownTextArea("summary", bundle.publicSubmission.publicSummary)}
         <table class="data-table">
           <tbody>
-            <tr><th>title</th><td><strong class="report-title-text">${escapeHtml(title)}</strong></td></tr>
             <tr><th>date</th><td>${escapeHtml(formatDate(bundle.publicSubmission.createdAt))}</td></tr>
             <tr><th>download</th><td><a href="${escapeHtml(
               toGatewayUrl(bundle.publicSubmission.encryptedPayloadCid)
             )}" target="_blank" rel="noreferrer">BugBundle</a></td></tr>
             <tr><th>author</th><td><a href="${authorHref}" data-nav>${escapeHtml(author.label)}</a></td></tr>
-            <tr><th>report hash</th><td>${escapeHtml(bundle.publicSubmission.reportHash)}</td></tr>
-            <tr><th>report id</th><td>${escapeHtml(bundle.publicSubmission.reportId)}</td></tr>
-            <tr><th>reporter address</th><td>${escapeHtml(bundle.publicSubmission.reporterAddress)}</td></tr>
-            <tr><th>mode</th><td>${escapeHtml(bundle.publicSubmission.disclosureMode)}</td></tr>
             <tr><th>target</th><td>${escapeHtml(target)}</td></tr>
-            <tr><th>target ref hash</th><td>${escapeHtml(bundle.publicSubmission.targetRefHash)}</td></tr>
-            <tr><th>content hash</th><td>${escapeHtml(bundle.publicSubmission.contentHash)}</td></tr>
-            <tr><th>tags</th><td>${escapeHtml(textOrDash(bundle.publicSubmission.tags.join(", ")))}</td></tr>
           </tbody>
         </table>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">[ private details ]</div>
+        ${earlyUnlockCta}
+        <form id="access-key-form" class="stack-form narrow-form">
+          <label>
+            review access key
+            <div class="inline-input">
+              <input id="report-access-key" name="accessKey" type="password" value="${escapeHtml(accessKey ?? "")}" />
+              <button id="reveal-access-key" type="button" class="button secondary">reveal</button>
+              <button id="copy-access-key" type="button" class="button secondary">copy</button>
+            </div>
+          </label>
+          <button class="button secondary" type="submit">unlock details</button>
+        </form>
+        <div class="private-view">${privateView}</div>
       </section>
 
       <section class="panel">
@@ -180,23 +177,6 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
           </thead>
           <tbody>${reviewRows}</tbody>
         </table>
-      </section>
-
-      <section class="panel">
-        <div class="panel-title">[ private details ]</div>
-        ${earlyUnlockCta}
-        <form id="access-key-form" class="stack-form narrow-form">
-          <label>
-            review access key
-            <div class="inline-input">
-              <input id="report-access-key" name="accessKey" type="password" value="${escapeHtml(accessKey ?? "")}" />
-              <button id="reveal-access-key" type="button" class="button secondary">reveal</button>
-              <button id="copy-access-key" type="button" class="button secondary">copy</button>
-            </div>
-          </label>
-          <button class="button secondary" type="submit">unlock details</button>
-        </form>
-        <div class="private-view">${privateView}</div>
       </section>
 
       ${renderDetailUnlockModal()}
