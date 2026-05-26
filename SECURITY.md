@@ -82,6 +82,7 @@ Current and required properties:
 - Owner/manage UI visibility is presentation only. A hidden, stale, or manually opened `/manage` route must not be treated as authorization; contracts must enforce ownership.
 - Embedded CheapBugs wallet keys are browser-stored recovery material. A compromised browser profile compromises that wallet and anything it can sign.
 - Embedded wallets can be exported and imported as `cheapbugs-key.json`. That file contains private key material and must be kept private; it is the recovery path for the embedded wallet address.
+- WalletConnect reset and failed-session recovery clear this origin's WalletConnect transport/session state and Thirdweb reconnect hints, but they do not remove embedded CheapBugs wallet private keys.
 - External wallets and WalletConnect devices must show signature prompts clearly enough for users to detect unexpected signing requests.
 
 ### XMTP

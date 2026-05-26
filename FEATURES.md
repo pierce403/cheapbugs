@@ -84,7 +84,8 @@ cheapbugs/
   - `VITE_THIRDWEB_CLIENT_ID` has a committed public default for static deploys.
   - External wallet reconnect hints are stored in `cheapbugs.walletSession.v1`; SIWE proofs are stored in `cheapbugs.siweSession.v1`.
   - Embedded CheapBugs wallets are stored in `cheapbugs.localXmtpIdentity.v1` and can sign XMTP messages, `PublishBug` authorizations, and Base smart-contract transactions.
-  - When login would otherwise open a WalletConnect QR path, the app first shows a CheapBugs modal with `connect with WalletConnect` and `I don't have a crypto wallet` options.
+  - When login would otherwise open a WalletConnect QR path, the app first shows a CheapBugs modal with `connect with WalletConnect`, `reset WalletConnect`, and `I don't have a crypto wallet` options.
+  - Failed or disconnected WalletConnect sessions replace the in-memory WalletConnect wallet object and can clear this origin's stale WalletConnect transport state from localStorage, sessionStorage, and `WALLET_CONNECT_V2_INDEXED_DB`; the modal reset button exposes the same recovery path for stuck browser sessions.
   - The frontend filters the known harmless Thirdweb/WalletConnect `session_request ... without any listeners` console-noise case unless debug logs are enabled.
   - The no-crypto-wallet path opens an embedded-wallet modal that can generate a new browser-stored wallet or import `cheapbugs-key.json`.
   - Embedded-wallet profiles expose an `export cheapbugs-key.json` action. The exported JSON contains the embedded wallet address, private key, optional mnemonic, derivation path, and metadata, and must be treated as private key material.
@@ -92,7 +93,7 @@ cheapbugs/
   - ENS profile results cache in `cheapbugs.ensProfileCache.v1` for 24 hours so page reloads do not re-query mainnet ENS, with a profile-modal refresh button for manual cache bypass.
   - Report author links route to `/profile/:address`, display ENS names and avatars when available, show BUGZ balance, and list recent submissions found through the current bug-index read path.
 - **Test Criteria**:
-  - [x] Playwright covers ENS-backed profile modal behavior, avatar URL handling, local ENS cache reuse, manual ENS refresh, embedded-wallet creation, `cheapbugs-key.json` import, and embedded-wallet export from the profile surface.
+  - [x] Playwright covers ENS-backed profile modal behavior, avatar URL handling, local ENS cache reuse, manual ENS refresh, embedded-wallet creation, WalletConnect stale-state reset, `cheapbugs-key.json` import, and embedded-wallet export from the profile surface.
   - [x] `npm run build` catches Thirdweb/XMTP integration type drift.
 
 ### CheapBugs Bond Vault

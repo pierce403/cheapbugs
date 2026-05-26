@@ -287,6 +287,7 @@ const renderWalletOnboardingModal = (mode: WalletOnboardingMode | null): string 
           </div>
           <div class="button-row profile-actions">
             <button id="connect-walletconnect-modal" class="button" type="button">connect with WalletConnect</button>
+            <button id="reset-walletconnect-modal" class="button secondary" type="button">reset WalletConnect</button>
             <button id="open-embedded-wallet-modal" class="button secondary" type="button">I don't have a crypto wallet</button>
             <button class="button secondary" type="button" data-wallet-onboarding-close>cancel</button>
           </div>
@@ -789,6 +790,17 @@ export class CheapBugsApp {
       } catch (error) {
         appLog.error("ui: WalletConnect modal login failed", error);
         context.notify("error", error instanceof Error ? error.message : "WalletConnect login failed.");
+      }
+    });
+
+    this.root.querySelector<HTMLButtonElement>("#reset-walletconnect-modal")?.addEventListener("click", async () => {
+      appLog.info("ui: WalletConnect reset click");
+      try {
+        await authController.resetWalletConnectSession();
+        context.notify("info", "WalletConnect session reset. Try connecting again.");
+      } catch (error) {
+        appLog.error("ui: WalletConnect reset failed", error);
+        context.notify("error", error instanceof Error ? error.message : "WalletConnect reset failed.");
       }
     });
 

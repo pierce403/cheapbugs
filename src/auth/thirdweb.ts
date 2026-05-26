@@ -70,8 +70,10 @@ const THIRDWEB_CONNECTED_WALLET_IDS_KEY = "thirdweb:connected-wallet-ids";
 const THIRDWEB_ACTIVE_WALLET_ID_KEY = "thirdweb:active-wallet-id";
 const THIRDWEB_ACTIVE_CHAIN_KEY = "thirdweb:active-chain";
 const THIRDWEB_LAST_USED_WALLET_ID_KEY = "thirdweb:last-used-wallet-id";
+const THIRDWEB_CONNECTED_WALLET_PARAMS_KEY = "tw:connected-wallet-params";
+const WALLETCONNECT_INDEXED_DB_NAME = "WALLET_CONNECT_V2_INDEXED_DB";
 const BASE_RPC_PROVIDER = createBaseReadProvider();
-const wcWallet = walletConnect();
+let wcWallet: Wallet<"walletConnect"> = walletConnect();
 const thirdwebDisabledMessage =
   "Auth is unavailable because VITE_THIRDWEB_CLIENT_ID is not configured for this deployment.";
 
@@ -341,6 +343,30 @@ const loadWalletSession = (): PersistedWalletSession | null => {
   };
 };
 
+const hasWalletConnectReconnectHint = (): boolean => {
+  if (!hasStorage()) {
+    return false;
+  }
+
+  const rawSession = readStoredJson<Partial<PersistedWalletSession>>(WALLET_SESSION_KEY, "wallet-session");
+  const parsedSession = parseStoredWalletSession(rawSession);
+  if (parsedSession?.walletId === "walletConnect") {
+    return true;
+  }
+
+  const activeWalletId = window.localStorage.getItem(THIRDWEB_ACTIVE_WALLET_ID_KEY);
+  if (activeWalletId === "walletConnect") {
+    return true;
+  }
+
+  try {
+    const connectedWalletIds = JSON.parse(window.localStorage.getItem(THIRDWEB_CONNECTED_WALLET_IDS_KEY) ?? "[]");
+    return Array.isArray(connectedWalletIds) && connectedWalletIds.includes("walletConnect");
+  } catch {
+    return false;
+  }
+};
+
 const saveThirdwebReconnectHints = (walletId: string): void => {
   if (!hasStorage()) {
     return;
@@ -361,6 +387,95 @@ const clearThirdwebReconnectHints = (): void => {
   window.localStorage.removeItem(THIRDWEB_ACTIVE_WALLET_ID_KEY);
   window.localStorage.removeItem(THIRDWEB_LAST_USED_WALLET_ID_KEY);
   window.localStorage.removeItem(THIRDWEB_ACTIVE_CHAIN_KEY);
+  window.localStorage.removeItem(THIRDWEB_CONNECTED_WALLET_PARAMS_KEY);
+};
+
+const isWalletConnectStorageKey = (key: string): boolean => {
+  const normalized = key.toLowerCase();
+  return (
+    normalized.startsWith("wc@") ||
+    normalized.startsWith("wc_") ||
+    normalized.startsWith("tw.wc.") ||
+    normalized.includes("walletconnect") ||
+    normalized.includes("wallet_connect") ||
+    key === THIRDWEB_CONNECTED_WALLET_PARAMS_KEY
+  );
+};
+
+const clearStorageKeys = (storage: Storage | undefined, label: string): string[] => {
+  if (!storage) {
+    return [];
+  }
+
+  const removed: string[] = [];
+  for (let index = storage.length - 1; index >= 0; index -= 1) {
+    const key = storage.key(index);
+    if (!key || !isWalletConnectStorageKey(key)) {
+      continue;
+    }
+    storage.removeItem(key);
+    removed.push(`${label}:${key}`);
+  }
+  return removed;
+};
+
+const deleteWalletConnectIndexedDb = async (): Promise<"deleted" | "blocked" | "unavailable" | "error"> => {
+  if (typeof indexedDB === "undefined") {
+    return "unavailable";
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (status: "deleted" | "blocked" | "error") => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve(status);
+    };
+    const timeout = setTimeout(() => finish("blocked"), 1500);
+    const request = indexedDB.deleteDatabase(WALLETCONNECT_INDEXED_DB_NAME);
+    request.onsuccess = () => finish("deleted");
+    request.onblocked = () => finish("blocked");
+    request.onerror = () => finish("error");
+  });
+};
+
+const clearWalletConnectPersistence = async (reason: string): Promise<void> => {
+  const removedKeys = hasStorage()
+    ? [
+        ...clearStorageKeys(window.localStorage, "localStorage"),
+        ...clearStorageKeys(window.sessionStorage, "sessionStorage")
+      ]
+    : [];
+  const indexedDb = await deleteWalletConnectIndexedDb();
+  appLog.warn("walletconnect: cleared persisted session state", {
+    reason,
+    removedKeys,
+    indexedDb
+  });
+};
+
+const replaceWalletConnectWallet = (): void => {
+  wcWallet = walletConnect();
+};
+
+const resetWalletConnectRuntime = async (
+  reason: string,
+  options: { disconnectWallet?: Wallet; clearPersistence?: boolean } = {}
+): Promise<void> => {
+  if (options.disconnectWallet) {
+    try {
+      await options.disconnectWallet.disconnect();
+    } catch (error) {
+      appLog.warn("walletconnect: disconnect during reset was ignored", { reason, error });
+    }
+  }
+  replaceWalletConnectWallet();
+  if (options.clearPersistence) {
+    await clearWalletConnectPersistence(reason);
+  }
 };
 
 const saveWalletSession = (
@@ -522,11 +637,16 @@ export class ThirdwebAuthController {
     this.emit();
   }
 
-  private async resetActiveWallet(): Promise<void> {
+  private async resetActiveWallet(reason = "active wallet reset", walletOverride?: Wallet): Promise<void> {
+    const wallet = walletOverride ?? this.activeWallet;
     try {
-      await this.activeWallet?.disconnect();
+      await wallet?.disconnect();
     } catch (error) {
       appLog.warn("thirdweb: disconnect during reset was ignored", error);
+    }
+    if (wallet?.id === "walletConnect") {
+      replaceWalletConnectWallet();
+      await clearWalletConnectPersistence(reason);
     }
     this.ensLookupToken += 1;
     this.activeWallet = null;
@@ -643,6 +763,10 @@ export class ThirdwebAuthController {
       this.activeWallet = null;
       clearSiweSession();
       clearWalletSession();
+      if (wallet.id === "walletConnect") {
+        replaceWalletConnectWallet();
+        void clearWalletConnectPersistence("wallet disconnect event");
+      }
       this.session = defaultSessionState();
       this.emit();
     });
@@ -761,6 +885,14 @@ export class ThirdwebAuthController {
       }
     } catch (error) {
       appLog.warn("auth: thirdweb auto-connect failed", error);
+      if (hasWalletConnectReconnectHint()) {
+        await resetWalletConnectRuntime("thirdweb auto-connect failed", {
+          disconnectWallet: wcWallet,
+          clearPersistence: true
+        });
+        clearWalletSession();
+        clearSiweSession();
+      }
       const localIdentity = loadLocalXmtpIdentity();
       if (localIdentity) {
         this.setLocalIdentity(localIdentity);
@@ -818,6 +950,14 @@ export class ThirdwebAuthController {
         address: shortHash(persistedSession.address, 10, 6),
         error
       });
+      if (wallet.id === "walletConnect") {
+        await resetWalletConnectRuntime("persisted WalletConnect reconnect failed", {
+          disconnectWallet: wallet,
+          clearPersistence: true
+        });
+        clearWalletSession();
+        clearSiweSession();
+      }
       return false;
     }
   }
@@ -898,9 +1038,30 @@ export class ThirdwebAuthController {
       });
     } catch (error) {
       appLog.error("auth: thirdweb wallet login failed", { walletId, error });
-      await this.resetActiveWallet();
+      await this.resetActiveWallet("wallet login failed", wallet);
       this.setError(error instanceof Error ? error.message : "Wallet connection failed.");
       throw error;
+    }
+  }
+
+  async resetWalletConnectSession(): Promise<void> {
+    appLog.warn("walletconnect: manual reset requested", {
+      activeWalletId: this.activeWallet?.id ?? null,
+      sessionWalletId: this.session.walletId
+    });
+    await resetWalletConnectRuntime("manual reset", {
+      disconnectWallet: this.activeWallet?.id === "walletConnect" ? this.activeWallet : wcWallet,
+      clearPersistence: true
+    });
+    clearThirdwebReconnectHints();
+    const storedSession = loadWalletSession();
+    if (this.session.walletId === "walletConnect" || storedSession?.walletId === "walletConnect") {
+      clearSiweSession();
+      clearWalletSession();
+      this.ensLookupToken += 1;
+      this.activeWallet = null;
+      this.session = defaultSessionState();
+      this.emit();
     }
   }
 
@@ -1030,6 +1191,10 @@ export class ThirdwebAuthController {
       await this.activeWallet?.disconnect();
     } catch (error) {
       appLog.warn("thirdweb: disconnect was ignored", error);
+    }
+    if (this.activeWallet?.id === "walletConnect") {
+      replaceWalletConnectWallet();
+      await clearWalletConnectPersistence("user disconnect");
     }
     this.ensLookupToken += 1;
     this.activeWallet = null;

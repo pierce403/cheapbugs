@@ -205,6 +205,61 @@ test("offers an embedded wallet when the user has no crypto wallet", async ({ pa
   expect(stored.privateKey).toMatch(/^0x[0-9a-f]{64}$/);
 });
 
+test("resets stale WalletConnect browser state from the connect modal", async ({ page }) => {
+  await mockBaseRpc(page);
+  await mockEnsRpc(page, { ensName: null });
+
+  await page.goto("/");
+  await page.evaluate(async () => {
+    window.localStorage.setItem("wc@2:client:0.3//session", JSON.stringify({ stale: true }));
+    window.localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", "stale");
+    window.localStorage.setItem("tw.wc.requestedChains", "[8453]");
+    window.localStorage.setItem(
+      "tw:connected-wallet-params",
+      JSON.stringify({ walletConnect: { pairingTopic: "stale" } })
+    );
+    window.sessionStorage.setItem("wc@2:pairing", "stale");
+    await new Promise<void>((resolve, reject) => {
+      const request = window.indexedDB.open("WALLET_CONNECT_V2_INDEXED_DB", 1);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore("keyvaluestorage");
+      };
+      request.onerror = () => reject(request.error ?? new Error("Failed to open WalletConnect IndexedDB."));
+      request.onsuccess = () => {
+        request.result.close();
+        resolve();
+      };
+    });
+  });
+
+  await page.getByRole("button", { name: "login" }).click();
+  const connectDialog = page.getByRole("dialog", { name: "connect wallet" });
+  await connectDialog.getByRole("button", { name: "reset WalletConnect" }).click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const walletConnectKey = (key: string) =>
+          key.toLowerCase().includes("walletconnect") ||
+          key.startsWith("wc@") ||
+          key.startsWith("tw.wc.") ||
+          key === "tw:connected-wallet-params";
+
+        return {
+          localStorageKeys: Object.keys(window.localStorage).filter(walletConnectKey),
+          sessionStorageKeys: Object.keys(window.sessionStorage).filter(walletConnectKey)
+        };
+      })
+    )
+    .toEqual({ localStorageKeys: [], sessionStorageKeys: [] });
+
+  const databaseNames = await page.evaluate(async () =>
+    window.indexedDB.databases ? (await window.indexedDB.databases()).map((database) => database.name) : []
+  );
+  expect(databaseNames).not.toContain("WALLET_CONNECT_V2_INDEXED_DB");
+  await expect(page.locator(".notice")).toContainText("WalletConnect session reset");
+});
+
 test("imports an embedded wallet from cheapbugs-key.json", async ({ page }) => {
   await mockBaseRpc(page);
   await mockEnsRpc(page, { ensName: null });
