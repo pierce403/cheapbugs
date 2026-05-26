@@ -203,6 +203,7 @@ cheapbugs/
   - Bonded users can vote up or down before the reveal window closes. Vote weight is snapshotted at vote time from `CheapBugsBondVault.getLevel(voter)`.
   - Bug payouts must be completed in report order. Only an authorized broker can complete payout, and invalid or spam bugs require a zero multiplier.
   - On payout completion, the index reveals the details key if needed, calls `CheapBugsTreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
+  - Index Halt is a known ordered-payout risk in the current deployed index: if the report at `nextPayoutIndex` has an unavailable or mismatched details key, later report payouts remain blocked because there is no skip/quarantine/recovery path in this index version.
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
   - Direct browser-to-index submission is disabled; the only browser-to-index write helper is bonded voting through `submitBondVote`.
   - The frontend defaults to the verified Base contract suite, so new broker-published bugs can be read into index/recent-report views without requiring `VITE_BUG_INDEX_ADDRESS` in local env.
@@ -215,7 +216,8 @@ cheapbugs/
   - Launchers use `BUG_INDEX_DEPLOYER_PRIVATE_KEY` when set; otherwise they deploy from `BROKER_KEY`, seed that broker as the initial broker when no broker list is provided, and transfer ownership to `0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3` by default.
 - **Test Criteria**:
   - [x] `npm run contracts:build` compiles Solidity contracts.
-  - [x] `npm run contracts:test` covers broker publication, reporter signatures, nonce replay, deadline expiry, reveal timing, details-key commitment checks, admin status, bonded voting, ordered payouts, zero-payout invalid bugs, treasury broker removal, role abuse, and treasury transfer integration.
+  - [x] `npm run contracts:test` covers broker publication, reporter signatures, nonce replay, deadline expiry, reveal timing, details-key commitment checks, admin status, bonded voting, ordered payouts, zero-payout invalid bugs, treasury broker removal, role abuse, treasury transfer integration, and Index Halt characterization tests for disappearing brokers and mangled details-key commitments.
+  - [x] `test/CheapBugsBugIndex.t.sol` includes `test_indexHaltDisappearingBrokerWithoutDetailsKeyBlocksLaterPayouts` and `test_indexHaltMangledDetailsKeyCommitmentBlocksPayoutCursor` to document current ordered-payout halt behavior.
   - [x] Forge fuzz tests cover reveal-window rejection, bonded-vote weight math, and payout multiplier math.
   - [x] `npm run launch:bug-index:dry-run` validates the Node launcher and frontend ABI refresh.
   - [x] `npm run launch:bug-index:forge:dry-run` validates the Foundry launcher.
@@ -257,6 +259,7 @@ cheapbugs/
   - Browser XMTP registration skips redundant registration for already-registered installations and surfaces wallet-signature progress before any broker DM is attempted.
   - The submit button remains clickable when disconnected so the form can explain the missing XMTP wallet instead of appearing inert.
   - The broker verifies the BugBundle and publish authorization before pinning: schema, fields, reporter/broker/chain/index binding, EIP-712 signature recovery, key commitment, encrypted details hash, AAD, and successful details decryption.
+  - The broker rejects mangled out-of-bundle details keys before IPFS pinning or index publication; `CommandParsingTest.test_reject_real_authorized_bugbundle_mangled_details_key_before_pin` covers a real signed BugBundle whose supplied key does not match the signed commitment.
   - Accepted submission records use the verified PublishBug reporter. If the verified EIP-712 reporter differs from `reporter_address`, or an available authenticated XMTP sender differs from the verified reporter, the broker rejects the message before credential checks, IPFS pinning, index publication, Signal relay, or payout persistence.
   - In live mode, the broker preflights `revealAfter` before IPFS pinning and rejects bundles that can no longer satisfy the index's 7-day-from-publication minimum.
   - The broker rejects malformed JSON, missing required core fields, unexpected fields, invalid bug type or rating values, invalid or missing publish authorizations, invalid provided target references, and invalid reporter credentials.

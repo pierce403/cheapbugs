@@ -153,6 +153,21 @@ Private details go here.""",
         self.assertEqual(verified.details_key_b64, DETAILS_KEY_B64)
         self.assertEqual(verified.publish_authorization["scheme"], PUBLISH_AUTHORIZATION_SCHEME)
 
+    def test_reject_real_authorized_bugbundle_mangled_details_key_before_pin(self) -> None:
+        try:
+            from eth_account import Account
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        except ImportError:
+            self.skipTest("broker crypto dependencies are only installed in the broker runtime environment")
+
+        account = Account.from_key("0x" + "1" * 64)
+        payload = real_signed_submission_payload(str(account.address).lower(), account, AESGCM)
+        payload["details_key"] = b64url(bytes(reversed(range(32))))
+        command = parse_command(json.dumps(payload))
+
+        with self.assertRaisesRegex(BugBundleError, "details key does not match details_key_commitment"):
+            verify_authorized_bug_bundle(command, chain_id=8453, bug_index_address=WALLET)
+
     def test_reject_altered_publish_authorization_bundle_hash(self) -> None:
         payload = valid_submission_payload()
         assert isinstance(payload["publish_authorization"], dict)

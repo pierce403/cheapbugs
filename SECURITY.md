@@ -72,6 +72,18 @@ Current and required properties:
 - The contract accepts the details key only after the 7-day judgment period and only when it matches the stored key commitment.
 - If contract wallets are supported, the relay path must support EIP-1271 signature validation.
 
+## Index Halt Risk
+
+An **Index Halt** is an ordered-payout failure class where the report at `CheapBugsBugIndex.nextPayoutIndex` cannot be completed, so every later report is blocked from payout even if it is valid, funded, and has a working details key. This is explicitly something CheapBugs is worried about.
+
+Current characterized attack paths:
+
+- Disappearing broker: an authorized broker publishes a reporter-signed bug, then disappears or withholds the only available details key. Because the index requires ordered payout completion and has no skip path, another broker cannot pay a later report out of order and cannot complete the stuck report with a zero or wrong key. This is covered by `test_indexHaltDisappearingBrokerWithoutDetailsKeyBlocksLaterPayouts` in `test/CheapBugsBugIndex.t.sol`.
+- Mangled details key: a report reaches the index with a `detailsKeyCommitment` that does not match the key the broker has available for payout. `completePayout` reverts with `InvalidDetailsKey`, the payout cursor stays pinned to that report, and later payouts remain blocked. This is covered by `test_indexHaltMangledDetailsKeyCommitmentBlocksPayoutCursor` in `test/CheapBugsBugIndex.t.sol`.
+- Broker-side prevention: the Python broker must reject mangled submitter keys before IPFS pinning or index publication. A real signed BugBundle with a mismatched out-of-bundle details key is covered by `CommandParsingTest.test_reject_real_authorized_bugbundle_mangled_details_key_before_pin` in `bots/tests/test_broker_bot.py`.
+
+Current deployment implication: the verified Base `CheapBugsBugIndex` has no owner/admin/broker escape hatch to skip, quarantine, or force-complete an unrevealable report. A protocol-level fix for Index Halt requires an index contract change and redeployment or migration to a compatible successor index.
+
 ## Trust Boundaries
 
 ### Browser
@@ -166,12 +178,13 @@ Current and required properties:
 
 ## Known Gaps
 
-- The broker IPFS pinning path verifies submitter-built encrypted EIP-712-authorized bundles, but dedicated negative tests still need to be expanded for mismatched details keys and undecryptable details.
+- The broker IPFS pinning path verifies submitter-built encrypted EIP-712-authorized bundles, and now has a negative test for mismatched details keys. Dedicated negative tests still need to be expanded for undecryptable details.
 - The broker has not yet been wired to EAS submission attestations for accepted XMTP submissions.
 - EIP-1271 contract-wallet reporter signatures are not implemented.
 - Live XMTP broker smoke tests are manual.
 - Live detail-unlock testing is manual and needs a funded buyer wallet, broker XMTP inbox, Base RPC, and a report whose details key is still unrevealed.
 - Reviewer trust is frontend-enforced through an allowlist and should move to an onchain or resolver-backed trust model.
+- Index Halt is a known ordered-payout risk in the current deployed index. Until a successor index adds a safe skip, quarantine, or recovery path, one unrevealable report at the payout cursor can block later report payouts.
 - Browser bundle integrity depends on the static hosting and deployment pipeline.
 
 ## Non-Goals For The Current MVP

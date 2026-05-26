@@ -484,6 +484,93 @@ contract CheapBugsBugIndexTest is Test {
         assertEq(index.getReport(second).payoutAmount, 0);
     }
 
+    function test_indexHaltDisappearingBrokerWithoutDetailsKeyBlocksLaterPayouts() public {
+        vm.startPrank(owner);
+        index.setBroker(brokerTwo, true);
+        treasury.setBroker(brokerTwo, true);
+        vm.stopPrank();
+
+        bytes32 firstKey = keccak256("disappearing-broker-key");
+        bytes32 first = _publish("index-halt-disappearing-broker", firstKey);
+
+        bytes32 secondKey = keccak256("later-bug-key");
+        CheapBugsBugIndex.BugInput memory secondInput =
+            _bugInput("index-halt-later-bug", secondKey, uint64(block.timestamp + 7 days));
+        uint64 deadline = uint64(block.timestamp + 1 days);
+        bytes memory secondSignature = _sign(secondInput, uint256(secondInput.reportHash), deadline, brokerTwo);
+        vm.prank(brokerTwo);
+        index.publishBug(secondInput, uint256(secondInput.reportHash), deadline, secondSignature);
+        bytes32 second = secondInput.reportHash;
+
+        _fundTreasury(100_000 * BUGZ);
+        vm.prank(admin);
+        index.flagBug(first, CheapBugsBugIndex.BugStatus.Valid);
+        vm.prank(admin);
+        index.flagBug(second, CheapBugsBugIndex.BugStatus.Valid);
+
+        vm.startPrank(owner);
+        index.setBroker(broker, false);
+        treasury.setBroker(broker, false);
+        vm.stopPrank();
+
+        vm.warp(index.getReport(first).revealAfter);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.OutOfOrderPayout.selector, first, second));
+        vm.prank(brokerTwo);
+        index.completePayout(second, 1, secondKey);
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidDetailsKey.selector);
+        vm.prank(brokerTwo);
+        index.completePayout(first, 1, bytes32(0));
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidDetailsKey.selector);
+        vm.prank(brokerTwo);
+        index.completePayout(first, 1, keccak256("wrong-key"));
+
+        assertEq(index.nextPayoutIndex(), 0);
+        assertEq(index.nextPayoutReportHash(), first);
+        assertFalse(index.getReport(first).payoutCompleted);
+        assertFalse(index.getReport(second).payoutCompleted);
+    }
+
+    function test_indexHaltMangledDetailsKeyCommitmentBlocksPayoutCursor() public {
+        bytes32 brokerHeldKey = keccak256("broker-held-details-key");
+        bytes32 unavailableSignedKey = keccak256("unavailable-signed-key");
+        CheapBugsBugIndex.BugInput memory mangledInput =
+            _bugInput("index-halt-mangled-key", brokerHeldKey, uint64(block.timestamp + 7 days));
+        mangledInput.detailsKeyCommitment = sha256(abi.encodePacked(unavailableSignedKey));
+        uint64 deadline = uint64(block.timestamp + 1 days);
+        bytes memory mangledSignature = _sign(mangledInput, uint256(mangledInput.reportHash), deadline, broker);
+
+        vm.prank(broker);
+        index.publishBug(mangledInput, uint256(mangledInput.reportHash), deadline, mangledSignature);
+        bytes32 mangled = mangledInput.reportHash;
+
+        bytes32 laterKey = keccak256("later-valid-key");
+        bytes32 later = _publish("index-halt-after-mangled", laterKey);
+        _fundTreasury(100_000 * BUGZ);
+
+        vm.prank(admin);
+        index.flagBug(mangled, CheapBugsBugIndex.BugStatus.Valid);
+        vm.prank(admin);
+        index.flagBug(later, CheapBugsBugIndex.BugStatus.Valid);
+
+        vm.warp(index.getReport(mangled).revealAfter);
+
+        vm.expectRevert(CheapBugsBugIndex.InvalidDetailsKey.selector);
+        vm.prank(broker);
+        index.completePayout(mangled, 1, brokerHeldKey);
+
+        vm.expectRevert(abi.encodeWithSelector(CheapBugsBugIndex.OutOfOrderPayout.selector, mangled, later));
+        vm.prank(broker);
+        index.completePayout(later, 1, laterKey);
+
+        assertEq(index.nextPayoutIndex(), 0);
+        assertEq(index.nextPayoutReportHash(), mangled);
+        assertFalse(index.getReport(mangled).payoutCompleted);
+        assertFalse(index.getReport(later).payoutCompleted);
+    }
+
     function test_completePayoutRequiresAdminStatus() public {
         bytes32 detailsKey = keccak256("details-key");
         bytes32 reportHash = _publish("payout-admin-required", detailsKey);
