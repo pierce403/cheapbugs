@@ -117,6 +117,57 @@ const walletConnectOptions = (options: { showQrModal?: boolean } = {}) => ({
   ...(env.walletConnectProjectId ? { projectId: env.walletConnectProjectId } : {})
 });
 
+const errorRecord = (error: unknown): Record<string, unknown> | null =>
+  typeof error === "object" && error !== null ? (error as Record<string, unknown>) : null;
+
+const errorCode = (error: unknown): number | string | null => {
+  const code = errorRecord(error)?.code;
+  return typeof code === "number" || typeof code === "string" ? code : null;
+};
+
+const errorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  const record = errorRecord(error);
+  for (const key of ["message", "shortMessage", "reason", "details"]) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return fallback;
+};
+
+const isUserRejectedWalletError = (error: unknown): boolean => {
+  const code = errorCode(error);
+  const message = errorMessage(error, "");
+  return code === 4001 || code === 5000 || /user rejected|user denied|request rejected/i.test(message);
+};
+
+const walletConnectionErrorMessage = (error: unknown, walletId: string): string => {
+  if (isUserRejectedWalletError(error)) {
+    return walletId === "walletConnect"
+      ? "WalletConnect request was rejected in the wallet."
+      : "Wallet request was rejected.";
+  }
+  return errorMessage(error, "Wallet connection failed.");
+};
+
+const asError = (message: string, cause: unknown): Error => {
+  const normalized = new Error(message);
+  const code = errorCode(cause);
+  if (code !== null) {
+    (normalized as Error & { code?: number | string }).code = code;
+  }
+  (normalized as Error & { cause?: unknown }).cause = cause;
+  return normalized;
+};
+
 const createNonce = (): string => {
   const bytes = new Uint8Array(16);
   const cryptoApi = globalThis.crypto;
@@ -456,11 +507,16 @@ const clearWalletConnectPersistence = async (reason: string): Promise<void> => {
       ]
     : [];
   const indexedDb = await deleteWalletConnectIndexedDb();
-  appLog.warn("walletconnect: cleared persisted session state", {
-    reason,
-    removedKeys,
-    indexedDb
-  });
+  appLog.warn(
+    indexedDb === "blocked"
+      ? "walletconnect: cleared storage keys; IndexedDB is still open"
+      : "walletconnect: cleared persisted session state",
+    {
+      reason,
+      removedKeys,
+      indexedDb
+    }
+  );
 };
 
 const replaceWalletConnectWallet = (): void => {
@@ -632,8 +688,12 @@ export class ThirdwebAuthController {
     this.emit();
   }
 
-  private setError(message: string): void {
-    appLog.error("auth: session error", { message });
+  private setError(message: string, options: { expected?: boolean } = {}): void {
+    if (options.expected) {
+      appLog.warn("auth: session error", { message });
+    } else {
+      appLog.error("auth: session error", { message });
+    }
     this.ensLookupToken += 1;
     this.session = {
       ...defaultSessionState(),
@@ -643,7 +703,11 @@ export class ThirdwebAuthController {
     this.emit();
   }
 
-  private async resetActiveWallet(reason = "active wallet reset", walletOverride?: Wallet): Promise<void> {
+  private async resetActiveWallet(
+    reason = "active wallet reset",
+    walletOverride?: Wallet,
+    options: { clearWalletConnectPersistence?: boolean } = {}
+  ): Promise<void> {
     const wallet = walletOverride ?? this.activeWallet;
     try {
       await wallet?.disconnect();
@@ -652,7 +716,9 @@ export class ThirdwebAuthController {
     }
     if (wallet?.id === "walletConnect") {
       replaceWalletConnectWallet();
-      await clearWalletConnectPersistence(reason);
+      if (options.clearWalletConnectPersistence ?? true) {
+        await clearWalletConnectPersistence(reason);
+      }
     }
     this.ensLookupToken += 1;
     this.activeWallet = null;
@@ -1044,10 +1110,19 @@ export class ThirdwebAuthController {
         siweIssuedAt: this.session.siweIssuedAt
       });
     } catch (error) {
-      appLog.error("auth: thirdweb wallet login failed", { walletId, error });
-      await this.resetActiveWallet("wallet login failed", wallet);
-      this.setError(error instanceof Error ? error.message : "Wallet connection failed.");
-      throw error;
+      const rejected = isUserRejectedWalletError(error);
+      const message = walletConnectionErrorMessage(error, wallet.id);
+      appLog[rejected ? "warn" : "error"]("auth: thirdweb wallet login failed", {
+        walletId,
+        code: errorCode(error),
+        message: errorMessage(error, message),
+        error
+      });
+      await this.resetActiveWallet("wallet login failed", wallet, {
+        clearWalletConnectPersistence: !rejected
+      });
+      this.setError(message, { expected: rejected });
+      throw asError(message, error);
     }
   }
 

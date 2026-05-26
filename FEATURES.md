@@ -87,6 +87,7 @@ cheapbugs/
   - Embedded CheapBugs wallets are stored in `cheapbugs.localXmtpIdentity.v1` and can sign XMTP messages, `PublishBug` authorizations, and Base smart-contract transactions.
   - When login would otherwise open a WalletConnect QR path, the app first shows a CheapBugs modal with `connect with WalletConnect`, `reset WalletConnect`, and `I don't have a crypto wallet` options.
   - Failed or disconnected WalletConnect sessions replace the in-memory WalletConnect wallet object and can clear this origin's stale WalletConnect transport state from localStorage, sessionStorage, and `WALLET_CONNECT_V2_INDEXED_DB`; the modal reset button exposes the same recovery path for stuck browser sessions.
+  - Wallet rejection errors such as WalletConnect code `5000` preserve the wallet's rejection message for the UI and skip stale-storage deletion so ordinary cancel/reject flows do not produce misleading IndexedDB cleanup warnings.
   - The frontend filters the known harmless Thirdweb/WalletConnect `session_request ... without any listeners` console-noise case unless debug logs are enabled.
   - The no-crypto-wallet path opens an embedded-wallet modal that can generate a new browser-stored wallet or import `cheapbugs-key.json`.
   - Embedded-wallet profiles expose an `export cheapbugs-key.json` action. The exported JSON contains the embedded wallet address, private key, optional mnemonic, derivation path, and metadata, and must be treated as private key material.
