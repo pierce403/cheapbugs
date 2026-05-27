@@ -1336,9 +1336,15 @@ button:disabled,
     gap: 8px;
   }
 
+  .banner-guest {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
   .brand-block {
     align-items: start;
     gap: 8px;
+    min-width: 0;
   }
 
   .brand-mark {
@@ -1375,6 +1381,24 @@ button:disabled,
   .auth-actions,
   .auth-actions .button {
     width: 100%;
+  }
+
+  .banner-guest .auth-panel,
+  .banner-guest .auth-actions,
+  .banner-guest .auth-actions .button {
+    width: auto;
+  }
+
+  .banner-guest .auth-panel {
+    justify-items: end;
+  }
+
+  .banner-guest .auth-actions {
+    justify-content: flex-end;
+  }
+
+  .banner-guest .auth-actions .button {
+    white-space: nowrap;
   }
 
   .nav-row {

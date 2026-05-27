@@ -71,7 +71,7 @@ cheapbugs/
   - The `bond` and `treasury` navigation items are always available; `bond` routes to canonical `/bond` while legacy `/stake` remains readable for old links. The `manage` navigation item appears only after the connected wallet is recognized as the owner of at least one CheapBugs contract.
   - Index admin authority does not grant `manage` navigation; admins use `/review` for report status flagging.
   - The `about` navigation item stays at the end of the nav, after the owner-only `manage` item when it is visible.
-  - On mobile widths, the shell stacks the banner/header content, keeps auth controls full-width, and renders navigation as stable equal-width two-column tap targets.
+  - On mobile widths, the shell keeps the logged-out `login` button compact in the top-right brand row, allows connected auth/session controls to stack when needed, and renders navigation as stable equal-width two-column tap targets.
 - **Test Criteria**:
   - [x] `npm run build` compiles the static app.
   - [x] `npm run test:e2e` covers the development banner text, submit XMTP ready/success orange status styling, GitHub brand icon, build metadata, mobile navigation layout, the about route, header BUGZ status states, owner-only manage navigation, and that ordinary routes do not trigger treasury dashboard reads.

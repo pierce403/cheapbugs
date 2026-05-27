@@ -626,7 +626,7 @@ export class CheapBugsApp {
           </span>
         </aside>
         <header class="header panel">
-          <div class="banner">
+          <div class="${session.address ? "banner banner-connected" : "banner banner-guest"}">
             <div class="brand-block">
               <img class="brand-mark" src="/cheapbugs-mark.png" alt="" aria-hidden="true" />
               <div>

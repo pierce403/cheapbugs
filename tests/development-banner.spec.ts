@@ -96,14 +96,23 @@ test("shows the GitHub repository icon link beside the brand", async ({ page }) 
 });
 
 test("mobile header keeps navigation as stable tap targets", async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 812 });
+  await page.setViewportSize({ width: 320, height: 812 });
   await page.goto("/");
 
   const nav = page.locator(".nav-row");
   const links = nav.locator(".nav-link");
+  const headerBox = await page.locator(".header").boundingBox();
+  const brandBox = await page.locator(".brand-block").boundingBox();
+  const loginBox = await page.getByRole("button", { name: "login" }).boundingBox();
+  expect(headerBox).not.toBeNull();
+  expect(brandBox).not.toBeNull();
+  expect(loginBox).not.toBeNull();
   await expect(nav).toHaveCSS("display", "grid");
   await expect(links).toHaveCount(8);
   await expect(page.locator(".brand")).toHaveText("cheapbugs");
+  expect((loginBox?.x ?? 0) + (loginBox?.width ?? 0)).toBeGreaterThan((headerBox?.x ?? 0) + (headerBox?.width ?? 0) - 24);
+  expect(loginBox?.y ?? 0).toBeLessThan((brandBox?.y ?? 0) + (brandBox?.height ?? 0));
+  expect(loginBox?.width ?? 0).toBeLessThan(120);
 
   const boxes = await links.evaluateAll((nodes) =>
     nodes.map((node) => {
