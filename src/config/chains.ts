@@ -24,6 +24,8 @@ export const chainConfig = {
   name: env.chainName,
   rpcUrl: env.chainRpcUrl,
   nativeSymbol: env.nativeSymbol,
+  enableThirdwebBuyWidget: env.enableThirdwebBuyWidget,
+  enableThirdwebSwapWidget: env.enableThirdwebSwapWidget,
   explorerUrl: env.blockExplorerUrl,
   easContractAddress: env.easContractAddress,
   easSchemaRegistryAddress: env.easSchemaRegistryAddress,

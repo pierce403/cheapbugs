@@ -178,6 +178,12 @@ Current deployment implication: the verified Base `CheapBugsBugIndex` has no own
 - Reputation blocklists are local broker policy and should be auditable.
 - Signal reactions are social support signals only. They are not sybil-resistant votes.
 
+### BUGZ Trading
+
+- The `/token` Easy Buy path uses thirdweb Bridge APIs in the browser to prepare non-custodial checkout links for BUGZ or Base ETH. It must not collect private keys, introduce server-side secrets, or point users at a BUGZ address other than the configured Base token.
+- thirdweb routing is treated as convenience, not a liquidity guarantee. If direct BUGZ routing or BUGZ sell routing is unavailable, the page falls back to Base ETH funding plus the direct Clanker / Uniswap v4 advanced controls.
+- Advanced Clanker Trading remains the authoritative custom path for BUGZ buys and sells: users sign wallet transactions against Base, the v4 Quoter, Permit2 where needed, and Universal Router 2.1.1. The frontend should continue surfacing approvals and router errors rather than masking them behind thirdweb status copy.
+
 ## Known Gaps
 
 - The broker IPFS pinning path verifies submitter-built encrypted EIP-712-authorized bundles, and now has a negative test for mismatched details keys. Dedicated negative tests still need to be expanded for undecryptable details.

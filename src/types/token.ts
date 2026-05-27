@@ -10,6 +10,7 @@ export type TokenDashboard = {
   decimals: number;
   totalSupply: bigint | null;
   connectedBalance: bigint | null;
+  connectedNativeBalance: bigint | null;
   treasuryTokenBalance: bigint | null;
   treasuryNativeBalance: bigint | null;
   marketUrl: string;

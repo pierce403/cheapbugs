@@ -1,6 +1,15 @@
 import { chainConfig } from "../config/chains";
 import { buyBugzOnchain, quoteBugzTrade, sellBugzOnchain, type BugzTradeQuote } from "../contracts/bugzTrade";
 import { loadTokenDashboard } from "../lib/token";
+import {
+  checkThirdwebBugzBuyRoute,
+  MIN_BASE_ETH_FOR_GAS,
+  prepareThirdwebBaseEthOnramp,
+  prepareThirdwebBugzOnramp,
+  shouldShowThirdwebSellExperiment,
+  thirdwebTradingCapabilities,
+  type ThirdwebOnrampLink
+} from "../lib/thirdwebTrading";
 import { escapeHtml, formatTokenAmount, shortHash, textOrDash } from "../lib/utils";
 import { isWalletActionCancelled } from "../lib/walletAction";
 
@@ -29,7 +38,12 @@ const quoteHtml = (quote: BugzTradeQuote): string => `
 `;
 
 export const renderTokenView = async (context: AppViewContext): Promise<ViewResult> => {
-  const dashboard = await loadTokenDashboard(context.session.address);
+  const dashboard = await loadTokenDashboard(context.session.address, {
+    includeTreasury: false,
+    includeNativeBalance: true
+  });
+  const capabilities = thirdwebTradingCapabilities();
+  const isConnected = Boolean(context.session.address);
   const warnings = [
     !dashboard.isConfigured ? "BUGZ is not configured in this build." : "",
     dashboard.errorMessage ?? ""
@@ -42,38 +56,50 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
     ? tokenAmount(dashboard.connectedBalance, dashboard.decimals, dashboard.symbol)
     : `<a href="${context.router.href("/login")}" data-nav>connect at /login</a>`;
 
-  const treasuryRows = dashboard.treasuryAddress
+  const connectedNativeBalance = context.session.address
+    ? tokenAmount(dashboard.connectedNativeBalance, 18, chainConfig.nativeSymbol)
+    : `<a href="${context.router.href("/login")}" data-nav>connect at /login</a>`;
+  const gasThreshold = `${escapeHtml(formatTokenAmount(MIN_BASE_ETH_FOR_GAS, 18))} ${escapeHtml(
+    chainConfig.nativeSymbol
+  )}`;
+  const needsGas =
+    context.session.address && dashboard.connectedNativeBalance !== null && dashboard.connectedNativeBalance < MIN_BASE_ETH_FOR_GAS;
+  const gasWarning = needsGas
     ? `
-            <tr><th>treasury vault</th><td>${escapeHtml(textOrDash(dashboard.treasuryAddress))}</td></tr>
-            <tr><th>treasury vault bugz</th><td>${tokenAmount(dashboard.treasuryTokenBalance, dashboard.decimals, dashboard.symbol)}</td></tr>
-            <tr><th>treasury vault ${escapeHtml(chainConfig.nativeSymbol)}</th><td>${
-              dashboard.treasuryNativeBalance !== null
-                ? `${escapeHtml(formatTokenAmount(dashboard.treasuryNativeBalance, 18))} ${escapeHtml(
-                    chainConfig.nativeSymbol
-                  )}`
-                : "-"
-            }</td></tr>
+      <div class="notice notice-error gas-helper-warning">
+        <strong>Need gas?</strong>
+        <span>You need a little ETH on Base for transaction fees. Keep at least ${gasThreshold} available before buying, selling, bonding, or unlocking details.</span>
+      </div>
     `
     : "";
+  const easyButtonsDisabled = isConnected ? "" : "disabled";
+  const widgetNote =
+    capabilities.buyWidgetRequested || capabilities.swapWidgetRequested
+      ? `<p class="helper-copy">thirdweb widget flags are enabled, but this static page uses thirdweb Bridge checkout actions and keeps Advanced Trading below as the reliable route.</p>`
+      : "";
+  const thirdwebSellNote = shouldShowThirdwebSellExperiment()
+    ? ""
+    : `<p class="helper-copy">thirdweb BUGZ sell routing is not shown in this release. Use the direct Clanker sell form below; it remains the default sell path.</p>`;
 
   return {
     title: "Token",
     html: `
       <section class="panel">
-        <div class="panel-title">[ bugz token manager ]</div>
+        <div class="panel-title">[ bugz ]</div>
         ${warnings}
         <p class="lede">
-          BUGZ is live on Base. Balances are read directly from the token contract, and buy/sell actions are browser-signed
-          transactions against the Base Uniswap v4 pool created by Clanker.
+          BUGZ is the CheapBugs token used for bonding, buyer access, patron signals, and bug-market incentives.
+          You need a little Base ETH for transaction fees even when you already hold BUGZ.
         </p>
         <table class="data-table compact-table">
           <tbody>
             <tr><th>token</th><td>${escapeHtml(textOrDash(dashboard.tokenAddress))}</td></tr>
             <tr><th>name</th><td>${escapeHtml(dashboard.name)}</td></tr>
             <tr><th>symbol</th><td>${escapeHtml(dashboard.symbol)}</td></tr>
+            <tr><th>your BUGZ</th><td>${connectedBalance}</td></tr>
+            <tr><th>your Base ${escapeHtml(chainConfig.nativeSymbol)}</th><td>${connectedNativeBalance}</td></tr>
+            <tr><th>gas target</th><td>${gasThreshold}</td></tr>
             <tr><th>total supply</th><td>${tokenAmount(dashboard.totalSupply, dashboard.decimals, dashboard.symbol)}</td></tr>
-            <tr><th>your balance</th><td>${connectedBalance}</td></tr>
-            ${treasuryRows}
             <tr><th>holder scan</th><td>${escapeHtml(dashboard.patronScanStatus)}</td></tr>
             <tr><th>basescan holders</th><td><a href="${escapeHtml(dashboard.holdersUrl)}" target="_blank" rel="noreferrer">view holder distribution</a></td></tr>
             <tr><th>clanker</th><td><a href="${escapeHtml(dashboard.marketUrl)}" target="_blank" rel="noreferrer">view market</a></td></tr>
@@ -81,12 +107,50 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
         </table>
       </section>
 
-      <section class="panel">
-        <div class="panel-title">[ onchain trade ]</div>
+      <section class="panel" id="easy-buy">
+        <div class="panel-title">[ buy bugz ]</div>
+        ${gasWarning}
+        <p class="lede">Easy mode: fund your wallet or buy BUGZ through thirdweb.</p>
         <p class="helper-copy">
-          These controls do not call a backend. Quotes use public Base RPC reads; trades are signed by your connected wallet
-          and sent to Uniswap v4 Universal Router on Base. Sells may first ask for ERC20 and Permit2 approvals.
+          thirdweb may be able to route directly into BUGZ on Base. If routing is unavailable, add Base ETH for gas and use
+          Advanced Trading below.
         </p>
+        ${widgetNote}
+        <div class="easy-buy-grid">
+          <div class="easy-buy-card">
+            <div class="panel-title">[ easy buy ]</div>
+            <p>Try thirdweb first. This opens a thirdweb checkout flow when a provider can route to BUGZ.</p>
+            <div class="button-row">
+              <button id="thirdweb-buy-bugz" class="button" type="button" ${easyButtonsDisabled}>easy buy BUGZ</button>
+              <button id="thirdweb-check-bugz-route" class="button secondary" type="button">check thirdweb route</button>
+            </div>
+          </div>
+          <div class="easy-buy-card">
+            <div class="panel-title">[ need gas? ]</div>
+            <p>You need ETH on Base to pay transaction fees for buys, sells, bonds, and unlocks.</p>
+            <div class="button-row">
+              <button id="thirdweb-add-base-eth" class="button" type="button" ${easyButtonsDisabled}>add Base ETH</button>
+              <a class="button secondary" href="#advanced-clanker-trading">advanced trading</a>
+            </div>
+          </div>
+        </div>
+        <div id="thirdweb-buy-status" class="buy-preview easy-buy-status">
+          ${
+            isConnected
+              ? "Easy Buy checks thirdweb routing only when you ask. If it cannot route to BUGZ, use Advanced Trading."
+              : `Connect a wallet to open thirdweb checkout or add Base ETH.`
+          }
+        </div>
+      </section>
+
+      <section class="panel" id="advanced-clanker-trading">
+        <div class="panel-title">[ advanced clanker trading ]</div>
+        <p class="helper-copy">
+          Advanced Trading uses the direct Clanker / Uniswap v4 market. These controls do not call a backend. Quotes use
+          public Base RPC reads; trades are signed by your connected wallet and sent to Universal Router 2.1.1 on Base.
+          Sells may first ask for ERC20 and Permit2 approvals.
+        </p>
+        ${thirdwebSellNote}
         <div class="trade-grid">
           <form id="bugz-buy-form" class="stack-form trade-form">
             <div class="panel-title">[ buy bugz ]</div>
@@ -125,6 +189,92 @@ export const renderTokenView = async (context: AppViewContext): Promise<ViewResu
       </section>
     `,
     afterRender: (root, appContext) => {
+      const easyStatus = root.querySelector<HTMLElement>("#thirdweb-buy-status");
+      const easyBuyButton = root.querySelector<HTMLButtonElement>("#thirdweb-buy-bugz");
+      const addGasButton = root.querySelector<HTMLButtonElement>("#thirdweb-add-base-eth");
+      const checkRouteButton = root.querySelector<HTMLButtonElement>("#thirdweb-check-bugz-route");
+
+      const checkoutLinkHtml = (result: ThirdwebOnrampLink): string =>
+        `<a href="${escapeHtml(result.link)}" target="_blank" rel="noreferrer">open thirdweb ${escapeHtml(
+          result.destination
+        )} checkout</a>`;
+
+      const setEasyStatus = (message: string, result?: ThirdwebOnrampLink) => {
+        if (!easyStatus) {
+          return;
+        }
+        easyStatus.innerHTML = result ? `${escapeHtml(message)}<br />${checkoutLinkHtml(result)}` : escapeHtml(message);
+      };
+
+      const connectedWallet = (): `0x${string}` | null => {
+        if (appContext.session.address) {
+          return appContext.session.address;
+        }
+        appContext.notify("error", "Connect a wallet before using thirdweb checkout.");
+        appContext.router.navigate("/login");
+        return null;
+      };
+
+      const openCheckout = (result: ThirdwebOnrampLink) => {
+        const opened = window.open(result.link, "_blank", "noopener,noreferrer");
+        setEasyStatus(
+          opened
+            ? `Opened thirdweb ${result.destination} checkout through ${result.provider}.`
+            : `thirdweb ${result.destination} checkout is ready; use the link below if your browser blocked the popup.`,
+          result
+        );
+      };
+
+      checkRouteButton?.addEventListener("click", async () => {
+        checkRouteButton.disabled = true;
+        setEasyStatus("Checking thirdweb BUGZ routing...");
+        const status = await checkThirdwebBugzBuyRoute();
+        setEasyStatus(status.message);
+        checkRouteButton.disabled = false;
+      });
+
+      easyBuyButton?.addEventListener("click", async () => {
+        const wallet = connectedWallet();
+        if (!wallet) {
+          return;
+        }
+        easyBuyButton.disabled = true;
+        setEasyStatus("Preparing thirdweb BUGZ checkout...");
+        try {
+          openCheckout(await prepareThirdwebBugzOnramp(wallet));
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? `${error.message} Use Add Base ETH, then Advanced Trading below.`
+              : "thirdweb BUGZ checkout is unavailable. Use Add Base ETH, then Advanced Trading below.";
+          setEasyStatus(message);
+          appContext.notify("error", message);
+        } finally {
+          easyBuyButton.disabled = false;
+        }
+      });
+
+      addGasButton?.addEventListener("click", async () => {
+        const wallet = connectedWallet();
+        if (!wallet) {
+          return;
+        }
+        addGasButton.disabled = true;
+        setEasyStatus("Preparing thirdweb Base ETH checkout...");
+        try {
+          openCheckout(await prepareThirdwebBaseEthOnramp(wallet));
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "thirdweb Base ETH checkout is unavailable. You can still use another Base onramp, then return here.";
+          setEasyStatus(message);
+          appContext.notify("error", message);
+        } finally {
+          addGasButton.disabled = false;
+        }
+      });
+
       const setupTradeForm = (side: "buy" | "sell") => {
         const form = root.querySelector<HTMLFormElement>(`#bugz-${side}-form`);
         const preview = root.querySelector<HTMLElement>(`#bugz-${side}-preview`);

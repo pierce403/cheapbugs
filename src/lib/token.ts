@@ -1,6 +1,7 @@
 import { chainConfig } from "../config/chains";
 import {
   clearBugzPatronCache,
+  getBaseNativeBalance,
   getCachedBugzTokenMetadata,
   getBugzPatronBalances,
   getBugzTokenBalance,
@@ -112,9 +113,10 @@ export const loadBugzHeaderBalance = async (connectedAddress: `0x${string}`): Pr
 
 export const loadTokenDashboard = async (
   connectedAddress: `0x${string}` | null,
-  options: { includeTreasury?: boolean } = {}
+  options: { includeTreasury?: boolean; includeNativeBalance?: boolean } = {}
 ): Promise<TokenDashboard> => {
   const includeTreasury = options.includeTreasury ?? true;
+  const includeNativeBalance = options.includeNativeBalance ?? false;
   const patronScanStatus = !chainConfig.bugzTokenAddress
     ? "waiting for BUGZ deployment"
     : chainConfig.etherscanApiKey
@@ -133,6 +135,7 @@ export const loadTokenDashboard = async (
       decimals: 18,
       totalSupply: null,
       connectedBalance: null,
+      connectedNativeBalance: null,
       treasuryTokenBalance: null,
       treasuryNativeBalance: null,
       marketUrl: chainConfig.bugzMarketUrl,
@@ -143,10 +146,13 @@ export const loadTokenDashboard = async (
     };
   }
 
-  const [metadataRead, connectedBalanceRead, treasuryRead] = await Promise.all([
+  const [metadataRead, connectedBalanceRead, connectedNativeBalanceRead, treasuryRead] = await Promise.all([
     readDashboardValue("BUGZ metadata read", getBugzTokenMetadata),
     connectedAddress
       ? readDashboardValue("BUGZ balance read", () => getBugzTokenBalance(connectedAddress))
+      : Promise.resolve({ value: null, errorMessage: null }),
+    connectedAddress && includeNativeBalance
+      ? readDashboardValue("Base ETH balance read", () => getBaseNativeBalance(connectedAddress))
       : Promise.resolve({ value: null, errorMessage: null }),
     includeTreasury && chainConfig.bugzTreasuryAddress
       ? readDashboardValue("BUGZ treasury read", getBugzTreasurySnapshot)
@@ -158,6 +164,7 @@ export const loadTokenDashboard = async (
   const errorMessages = [
     metadataRead.errorMessage,
     connectedBalanceRead.errorMessage,
+    connectedNativeBalanceRead.errorMessage,
     treasuryRead.errorMessage
   ].filter(Boolean);
 
@@ -170,6 +177,7 @@ export const loadTokenDashboard = async (
     decimals: metadata?.decimals ?? 18,
     totalSupply: metadata?.totalSupply ?? null,
     connectedBalance: connectedBalanceRead.value,
+    connectedNativeBalance: connectedNativeBalanceRead.value,
     treasuryTokenBalance: treasury?.tokenBalance ?? null,
     treasuryNativeBalance: treasury?.nativeBalance ?? null,
     marketUrl: chainConfig.bugzMarketUrl,

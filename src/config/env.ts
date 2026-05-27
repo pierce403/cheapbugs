@@ -9,6 +9,13 @@ const optionalNumber = (value: string | undefined, fallback = 0): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const optionalBoolean = (value: string | undefined, fallback = false): boolean => {
+  if (value === undefined || value === "") {
+    return fallback;
+  }
+  return /^(1|true|yes)$/i.test(value);
+};
+
 const defaultBugzTokenAddress = "0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07";
 const defaultBugIndexAddress = "0x515FDbc9876aC26870794E26605c7DD04c18679b";
 const defaultBugBondVaultAddress = "0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3";
@@ -38,6 +45,8 @@ export const env = {
   appName: import.meta.env.VITE_APP_NAME || "CheapBugs",
   thirdwebClientId: import.meta.env.VITE_THIRDWEB_CLIENT_ID || "fabb9529082a9638fe2636bac941fb29",
   walletConnectProjectId: (import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "").trim(),
+  enableThirdwebBuyWidget: optionalBoolean(import.meta.env.VITE_ENABLE_THIRDWEB_BUY_WIDGET),
+  enableThirdwebSwapWidget: optionalBoolean(import.meta.env.VITE_ENABLE_THIRDWEB_SWAP_WIDGET),
   chainId: Number(import.meta.env.VITE_CHAIN_ID || 8453),
   chainName: import.meta.env.VITE_CHAIN_NAME || "Base Mainnet",
   chainRpcUrl: import.meta.env.VITE_CHAIN_RPC_URL || "https://mainnet.base.org",

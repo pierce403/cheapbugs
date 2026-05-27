@@ -129,6 +129,13 @@ export const getBugzTokenBalance = async (address: `0x${string}`): Promise<bigin
   );
 };
 
+export const getBaseNativeBalance = async (address: `0x${string}`): Promise<bigint> => {
+  const key = `native-balance:${chainConfig.id}:${address}`;
+  return readCache.getOrLoad(key, TTL_MS, async () =>
+    scheduleBaseRpcRead("connected wallet native balance", () => readProvider.getBalance(address))
+  );
+};
+
 export const getBugzTreasurySnapshot = async (): Promise<TreasurySnapshot | null> => {
   if (!isBugzTokenConfigured() || !chainConfig.bugzTreasuryAddress) {
     return null;

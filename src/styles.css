@@ -1081,6 +1081,45 @@ button:disabled,
   padding: 8px;
 }
 
+.easy-buy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.easy-buy-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(255, 106, 0, 0.22);
+  background: #080808;
+  padding: 8px;
+}
+
+.easy-buy-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.easy-buy-status {
+  min-height: 38px;
+  overflow-wrap: anywhere;
+}
+
+.gas-helper-warning {
+  align-items: flex-start;
+  justify-content: flex-start;
+  margin-bottom: 8px;
+}
+
+.gas-helper-warning strong {
+  color: var(--danger);
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
 .action-status {
   min-height: 20px;
   color: var(--warning);
@@ -1322,6 +1361,7 @@ button:disabled,
   .profile-page-header,
   .stake-hero,
   .two-column,
+  .easy-buy-grid,
   .trade-grid,
   .manage-action-grid,
   .metric-grid,

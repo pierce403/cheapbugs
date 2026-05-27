@@ -41,7 +41,7 @@ const receiptHash = "0x111111111111111111111111111111111111111111111111111111111
 
 const mockBaseRpc = async (
   page: Page,
-  options: { holdRawTransactions?: boolean } = {}
+  options: { holdRawTransactions?: boolean; nativeBalance?: bigint } = {}
 ): Promise<{ quoteCalls: () => number; releaseTransactions: () => void }> => {
   let quoteCount = 0;
   let releaseTransactions: () => void = () => {};
@@ -60,7 +60,7 @@ const mockBaseRpc = async (
         case "net_version":
           return { id: request.id, jsonrpc: "2.0", result: "8453" };
         case "eth_getBalance":
-          return { id: request.id, jsonrpc: "2.0", result: quantity(parseEther("10")) };
+          return { id: request.id, jsonrpc: "2.0", result: quantity(options.nativeBalance ?? parseEther("10")) };
         case "eth_getTransactionCount":
           return { id: request.id, jsonrpc: "2.0", result: "0x1" };
         case "eth_blockNumber":
@@ -182,6 +182,44 @@ const mockBaseRpc = async (
 
   return { quoteCalls: () => quoteCount, releaseTransactions };
 };
+
+test("token page puts easy buy before advanced Clanker trading", async ({ page }) => {
+  await mockBaseRpc(page);
+
+  await page.goto("/token");
+
+  await expect(page.locator("#easy-buy")).toBeVisible();
+  const sectionTitles = (await page.locator("section > .panel-title").allTextContents()).map((title) => title.trim());
+  expect(sectionTitles.indexOf("[ bugz ]")).toBeLessThan(sectionTitles.indexOf("[ buy bugz ]"));
+  expect(sectionTitles.indexOf("[ buy bugz ]")).toBeLessThan(sectionTitles.indexOf("[ advanced clanker trading ]"));
+
+  await expect(page.locator("section").filter({ hasText: "[ bugz ]" })).toContainText("your Base ETH");
+  await expect(page.locator("section").filter({ hasText: "[ bugz ]" })).toContainText("gas target");
+  await expect(page.locator("#easy-buy")).toContainText("Easy mode: fund your wallet or buy BUGZ through thirdweb.");
+  await expect(page.locator("#easy-buy")).toContainText("If routing is unavailable");
+  await expect(page.getByRole("button", { name: "easy buy BUGZ" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "add Base ETH" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "check thirdweb route" })).toBeEnabled();
+
+  const advanced = page.locator("#advanced-clanker-trading");
+  await expect(advanced).toContainText("direct Clanker / Uniswap v4 market");
+  await expect(advanced).toContainText("Universal Router 2.1.1");
+  await expect(advanced.getByRole("button", { name: "buy onchain" })).toBeDisabled();
+  await expect(advanced.getByRole("button", { name: "sell onchain" })).toBeDisabled();
+});
+
+test("token page shows a non-blocking Base ETH gas helper", async ({ page }) => {
+  await seedLocalIdentity(page);
+  await mockBaseRpc(page, { nativeBalance: parseEther("0.0001") });
+
+  await page.goto("/token");
+
+  await expect(page.locator(".gas-helper-warning")).toContainText("You need a little ETH on Base for transaction fees.");
+  await expect(page.locator("#easy-buy")).toContainText("0.0005 ETH");
+  await expect(page.getByRole("button", { name: "add Base ETH" })).toBeEnabled();
+  await expect(page.locator("#advanced-clanker-trading").getByRole("button", { name: "buy onchain" })).toBeEnabled();
+  await expect(page.locator("#advanced-clanker-trading").getByRole("button", { name: "sell onchain" })).toBeEnabled();
+});
 
 test("token trade quotes update automatically after the user pauses typing", async ({ page }) => {
   const rpc = await mockBaseRpc(page);

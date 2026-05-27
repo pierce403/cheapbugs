@@ -390,17 +390,24 @@ cheapbugs/
 ### BUGZ Token And Trading
 
 - **Stability**: in-progress
-- **Description**: The `/token` route reads BUGZ balances and performs browser-signed Uniswap v4 buy/sell swaps on Base.
+- **Description**: The `/token` route shows BUGZ/Base ETH balances, offers a thirdweb Bridge easy-buy/funding path, and preserves browser-signed Uniswap v4 buy/sell swaps on Base as Advanced Clanker Trading.
 - **Properties**:
   - BUGZ defaults to Base token `0x60Df4a0C9A5050c337010cb29C9694cE4d8fbb07`.
   - Base contract read providers disable JSON-RPC batching and use a static network so public Base RPC endpoints do not reject oversized batches during concurrent header/token reads.
+  - The top token section shows the committed token address, connected-wallet BUGZ balance, connected-wallet Base ETH balance, and a gas target.
+  - The Easy Buy section uses thirdweb Bridge APIs from the browser to probe direct BUGZ routing and prepare onramp links for BUGZ or Base ETH. If thirdweb routing is unavailable, the page points users to fund Base ETH and use Advanced Clanker Trading.
+  - `VITE_ENABLE_THIRDWEB_BUY_WIDGET` and `VITE_ENABLE_THIRDWEB_SWAP_WIDGET` are safe-default flags for future widget work; the static app currently uses thirdweb Bridge checkout actions rather than mounting React widgets.
+  - A non-blocking gas helper warns connected wallets below `0.0005` Base ETH and keeps advanced trade controls usable.
   - Buy/sell uses the Clanker-created Uniswap v4 WETH/BUGZ pool key, v4 Quoter, and Universal Router 2.1.1.
   - Buy/sell quote previews refresh automatically after a short pause in amount or slippage edits. Quote reads do not require a connected wallet; submitting trades still requires a connected wallet and re-quotes before sending.
   - Buy wraps ETH through the router; sell requires ERC20 plus Permit2 approvals.
+  - thirdweb BUGZ selling remains hidden until CheapBugs deliberately ships an experimental sell UX; the direct Clanker sell form is the default sell path even when thirdweb route probes return quotes.
   - Buy/sell and other onchain write flows show a shared wallet-request modal while CheapBugs is waiting for wallet approval and Base confirmation. The modal has a cancel button that stops the app from waiting; users still need to reject any open wallet prompt to cancel the wallet request itself.
   - Trading does not depend on `VITE_BUGZ_TREASURY_ADDRESS`.
 - **Test Criteria**:
   - [x] `npm run build` type-checks trade adapters.
+  - [x] Playwright covers `/token` ordering with Easy Buy before Advanced Clanker Trading, connected Base ETH balance display, and disabled easy-buy buttons before login.
+  - [x] Playwright covers the low-Base-ETH gas helper and verifies it does not block the existing advanced trade controls.
   - [x] Playwright covers debounced automatic quote refresh for the token trade form with mocked Base RPC.
   - [x] Playwright covers the token buy transaction opening the shared wallet-request modal and local cancel behavior with mocked Base RPC.
 
