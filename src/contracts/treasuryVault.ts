@@ -3,7 +3,7 @@ import { Contract, type ContractRunner } from "ethers";
 import { chainConfig } from "../config/chains";
 import { authController } from "../services";
 import { RpcReadCache, scheduleBaseRpcRead } from "../lib/rpcReadCache";
-import { normalizeAddress } from "../lib/utils";
+import { normalizeAddress, timestampToIso } from "../lib/utils";
 import type { HexString } from "../types/domain";
 
 import { bugzTokenAbi } from "./bugzTokenAbi";
@@ -17,10 +17,19 @@ export type TreasuryPayoutSnapshot = {
   maxReward: bigint;
 };
 
+export type DetailKeyBuyer = {
+  buyer: HexString;
+  totalPaid: bigint;
+  purchaseCount: number;
+  latestPurchasedAt: string;
+};
+
 const treasuryVaultAbi = [
   "function standardPayoutDivisor() view returns (uint256)",
   "function calculateRewardAmount(uint8 multiplier) view returns (uint256)",
   "function detailKeyPayments(bytes32 reportHash,address buyer) view returns (uint256)",
+  "function detailKeyPurchaseCount() view returns (uint256)",
+  "function detailKeyPurchaseAt(uint256 purchaseIndex) view returns (tuple(bytes32 reportHash,address buyer,uint256 amount,uint256 totalPaid,uint64 createdAt))",
   "function purchaseDetailKey(bytes32 reportHash,uint256 amount)",
   "error InvalidAmount()",
   "error SafeERC20FailedOperation(address token)",
@@ -80,6 +89,16 @@ const errorText = (error: unknown): string => {
   };
   visit(error);
   return parts.filter(Boolean).join(" ");
+};
+
+const toBigInt = (value: unknown): bigint => {
+  if (typeof value === "bigint") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "string") {
+    return BigInt(value);
+  }
+  return BigInt(String(value ?? 0));
 };
 
 const detailPaymentError = (label: string, error: unknown): Error => {
@@ -183,6 +202,74 @@ export const getDetailKeyPayment = async (reportHash: HexString, buyer: HexStrin
       readVault().detailKeyPayments(reportHash, normalizedBuyer) as Promise<bigint>
     )
   );
+};
+
+export const getReportDetailKeyBuyers = async (reportHash: HexString): Promise<DetailKeyBuyer[]> => {
+  if (!chainConfig.bugTreasuryVaultAddress) {
+    return [];
+  }
+
+  const address = treasuryVaultAddress();
+  const normalizedReportHash = reportHash.toLowerCase() as HexString;
+  const key = `detail-buyers:${chainConfig.id}:${address}:${normalizedReportHash}`;
+
+  return readCache.getOrLoad(key, TTL_MS, async () => {
+    const vault = readVault();
+    const count = await scheduleBaseRpcRead(
+      "detail key purchase count",
+      () => vault.detailKeyPurchaseCount() as Promise<bigint>
+    );
+    const buyers = new Map<
+      HexString,
+      {
+        buyer: HexString;
+        totalPaid: bigint;
+        purchaseCount: number;
+        latestPurchasedAt: number;
+      }
+    >();
+
+    for (let index = 0n; index < count; index += 1n) {
+      const raw = (await scheduleBaseRpcRead("detail key purchase record", () =>
+        vault.detailKeyPurchaseAt(index) as Promise<readonly unknown[] & Record<string, unknown>>
+      )) as readonly unknown[] & Record<string, unknown>;
+      const purchaseReportHash = String(raw.reportHash ?? raw[0] ?? "").toLowerCase();
+      if (purchaseReportHash !== normalizedReportHash) {
+        continue;
+      }
+
+      const buyer = normalizeAddress(String(raw.buyer ?? raw[1] ?? ""));
+      const totalPaid = toBigInt(raw.totalPaid ?? raw[3]);
+      const createdAt = Number(toBigInt(raw.createdAt ?? raw[4]));
+      const existing = buyers.get(buyer);
+      if (!existing) {
+        buyers.set(buyer, {
+          buyer,
+          totalPaid,
+          purchaseCount: 1,
+          latestPurchasedAt: createdAt
+        });
+        continue;
+      }
+
+      existing.purchaseCount += 1;
+      if (createdAt >= existing.latestPurchasedAt) {
+        existing.latestPurchasedAt = createdAt;
+        existing.totalPaid = totalPaid;
+      } else if (totalPaid > existing.totalPaid) {
+        existing.totalPaid = totalPaid;
+      }
+    }
+
+    return [...buyers.values()]
+      .sort((left, right) => right.latestPurchasedAt - left.latestPurchasedAt)
+      .map((buyer) => ({
+        buyer: buyer.buyer,
+        totalPaid: buyer.totalPaid,
+        purchaseCount: buyer.purchaseCount,
+        latestPurchasedAt: timestampToIso(buyer.latestPurchasedAt)
+      }));
+  });
 };
 
 export const approveTreasuryForDetailKeyPayment = async (

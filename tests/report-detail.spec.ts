@@ -13,9 +13,19 @@ const reportHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 const reviewSchemaUid = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 const zeroBytes32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
 const zeroAddress = "0x0000000000000000000000000000000000000000";
+const buyerOneAddress = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+const buyerTwoAddress = "0x2222222222222222222222222222222222222222";
+const buyerOtherAddress = "0x3333333333333333333333333333333333333333";
+const otherReportHash = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const bugIndexInterface = new Interface(bugIndexAbi);
+const treasuryVaultInterface = new Interface([
+  "function detailKeyPurchaseCount() view returns (uint256)",
+  "function detailKeyPurchaseAt(uint256 purchaseIndex) view returns (tuple(bytes32 reportHash,address buyer,uint256 amount,uint256 totalPaid,uint64 createdAt))"
+]);
 const abiCoder = AbiCoder.defaultAbiCoder();
 const getReportSelector = bugIndexInterface.getFunction("getReport")?.selector;
+const detailKeyPurchaseCountSelector = treasuryVaultInterface.getFunction("detailKeyPurchaseCount")?.selector;
+const detailKeyPurchaseAtSelector = treasuryVaultInterface.getFunction("detailKeyPurchaseAt")?.selector;
 const reverseSelector = id("reverseWithGateways(bytes,uint256,string[])").slice(0, 10);
 const resolveSelector = id("resolveWithGateways(bytes,bytes,string[])").slice(0, 10);
 const revealedDetailsKeyBytes = Buffer.from("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", "hex");
@@ -121,6 +131,38 @@ const reportTuple = (options: ReportTupleOptions = {}) => [
   0
 ];
 
+const bugz = 10n ** 18n;
+const detailKeyPurchaseRecords = [
+  {
+    reportHash,
+    buyer: buyerOneAddress,
+    amount: 100n * bugz,
+    totalPaid: 100n * bugz,
+    createdAt: 1_779_300_000n
+  },
+  {
+    reportHash: otherReportHash,
+    buyer: buyerOtherAddress,
+    amount: 10n * bugz,
+    totalPaid: 10n * bugz,
+    createdAt: 1_779_350_000n
+  },
+  {
+    reportHash,
+    buyer: buyerTwoAddress,
+    amount: 50n * bugz,
+    totalPaid: 50n * bugz,
+    createdAt: 1_779_400_000n
+  },
+  {
+    reportHash,
+    buyer: buyerOneAddress,
+    amount: 25n * bugz,
+    totalPaid: 125n * bugz,
+    createdAt: 1_779_500_000n
+  }
+];
+
 const seedReviewSchema = async (page: Page): Promise<void> => {
   await page.addInitScript((schemaUid) => {
     window.localStorage.setItem("cheapbugs.cache:schema-uids", JSON.stringify({ ReviewVerdict: schemaUid }));
@@ -147,6 +189,24 @@ const mockBaseRpc = async (page: Page, options: ReportTupleOptions = {}): Promis
             id: request.id,
             jsonrpc: "2.0",
             result: bugIndexInterface.encodeFunctionResult("getReport", [reportTuple(options)])
+          };
+        }
+        if (target === treasuryVaultAddress.toLowerCase() && selector === detailKeyPurchaseCountSelector) {
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            result: treasuryVaultInterface.encodeFunctionResult("detailKeyPurchaseCount", [detailKeyPurchaseRecords.length])
+          };
+        }
+        if (target === treasuryVaultAddress.toLowerCase() && selector === detailKeyPurchaseAtSelector) {
+          const [purchaseIndex] = treasuryVaultInterface.decodeFunctionData("detailKeyPurchaseAt", call.data ?? "0x");
+          const purchase = detailKeyPurchaseRecords[Number(purchaseIndex)];
+          return {
+            id: request.id,
+            jsonrpc: "2.0",
+            result: treasuryVaultInterface.encodeFunctionResult("detailKeyPurchaseAt", [
+              [purchase.reportHash, purchase.buyer, purchase.amount, purchase.totalPaid, purchase.createdAt]
+            ])
           };
         }
       }
@@ -287,7 +347,18 @@ test("report detail hides contract addresses and renders EAS review rows", async
   await expect(page.getByText(bondVaultAddress)).toHaveCount(0);
   await expect(page.getByText(treasuryVaultAddress)).toHaveCount(0);
   const panelTitles = await page.locator("section > .panel-title").allTextContents();
-  expect(panelTitles.indexOf("[ private details ]")).toBeLessThan(panelTitles.indexOf("[ trusted review state ]"));
+  expect(panelTitles.indexOf("[ private details ]")).toBeLessThan(panelTitles.indexOf("[ early access buyers ]"));
+  expect(panelTitles.indexOf("[ early access buyers ]")).toBeLessThan(panelTitles.indexOf("[ trusted review state ]"));
+
+  const buyerSection = page.locator("section").filter({ hasText: "[ early access buyers ]" });
+  await expect(buyerSection.locator("thead th")).toHaveText(["buyer", "paid", "purchases", "latest"]);
+  await expect(buyerSection.locator("tbody tr")).toHaveCount(2);
+  const buyerOneRow = buyerSection.getByRole("row").filter({ hasText: "125 BUGZ" });
+  await expect(buyerOneRow.locator("td").nth(2)).toHaveText("2");
+  await expect(buyerOneRow.getByRole("link")).toHaveAttribute("href", `/profile/${buyerOneAddress}`);
+  const buyerTwoRow = buyerSection.getByRole("row").filter({ hasText: "50 BUGZ" });
+  await expect(buyerTwoRow.locator("td").nth(2)).toHaveText("1");
+  await expect(buyerTwoRow.getByRole("link")).toHaveAttribute("href", `/profile/${buyerTwoAddress}`);
 
   const reviewSection = page.locator("section").filter({ hasText: "[ trusted review state ]" });
   await expect(reviewSection.locator("thead th")).toHaveText([

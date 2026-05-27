@@ -164,6 +164,7 @@ Current deployment implication: the verified Base `CheapBugsBugIndex` has no own
 ### CheapBugsTreasuryVault
 
 - Detail-key purchases are onchain payment records for broker verification; the broker still decides whether and when to deliver a key offchain.
+- The report page displays early-access buyers from the public treasury purchase ledger. This is transparency only; the browser view is not a key-delivery authority and can be stale or unavailable if public Base RPC reads fail.
 - Early-access quote amounts are broker policy, not an onchain invariant. The current broker calculates price from treasury base reward times days remaining, but key release is gated by the onchain purchase ledger rather than by buyer-provided amount fields.
 - Rewards can only be paid by the configured index and only for brokers also authorized by the treasury.
 - A bad treasury/index configuration can block payouts or pay from an unintended treasury. The launcher checks the deployed wiring, and operators should still record the verified addresses before funding the treasury.

@@ -178,8 +178,10 @@ cheapbugs/
   - Before payment, the browser verifies the transaction signer matches the connected buyer session and decodes BUGZ custom errors such as `ERC20InsufficientAllowance` into user-facing approval guidance. After a confirmed approval transaction in the same unlock flow, the payment skips the immediate allowance re-read so lagging Base RPC state does not block a valid purchase.
   - The broker does not trust buyer-supplied amounts. It verifies the stored quote, report hash, buyer, expiry, transaction receipt success, transaction sender, transaction recipient, and `detailKeyPayments(reportHash, buyer) >= quoted price` before sending the details key.
   - After receiving the key, the browser stores it through the existing per-report access-key localStorage path and decrypts the encrypted BugBundle details locally.
+  - The report page lists early-access buyers from the treasury vault's append-only `detailKeyPurchaseAt` ledger, aggregates repeated purchases by buyer, links each buyer to their profile route, and shows total paid, purchase count, and latest purchase time.
 - **Test Criteria**:
   - [x] Python unit tests cover quote parsing, spoofed buyer rejection, quote pricing, payment verification, key release, and underpayment rejection.
+  - [x] Playwright report-detail coverage verifies the early-access buyer list filters by report hash, aggregates repeated buyer purchases, keeps buyer profile links, and keeps raw contract-suite addresses hidden.
   - [x] `npm run build` type-checks the browser quote/payment/key-storage flow.
   - [ ] Live XMTP and Base payment testing is still manual because it requires a funded buyer wallet and the production broker inbox.
 

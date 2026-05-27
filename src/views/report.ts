@@ -1,4 +1,5 @@
 import { getSchemaUid } from "../lib/schema-overrides";
+import { getReportDetailKeyBuyers } from "../contracts/treasuryVault";
 import { loadAuthorDisplay } from "../lib/authors";
 import { computeReviewDisplayState } from "../lib/eas";
 import { decryptPrivateSubmission, getStoredAccessKey, loadReviewVerdicts, loadSubmissionBundle, submitReviewVerdict } from "../lib/reports";
@@ -6,7 +7,7 @@ import { detailsKeyHexToAccessKey, saveReportAccessKey } from "../lib/report-acc
 import { toGatewayUrl } from "../lib/ipfs";
 import { bindMarkdownCodeCopy, renderMarkdown } from "../lib/markdown";
 import { reportDisplayTarget, reportDisplayTitle } from "../lib/reportDisplay";
-import { escapeHtml, formatDate, shortHash } from "../lib/utils";
+import { escapeHtml, formatDate, formatTokenAmount, shortHash } from "../lib/utils";
 import { isWalletActionCancelled } from "../lib/walletAction";
 import type { ReviewVerdict } from "../types/review";
 
@@ -47,6 +48,11 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
   } catch (error) {
     reviewLoadError = error instanceof Error ? error.message : "Review verdicts could not be loaded.";
   }
+  let buyerLoadError: string | null = null;
+  const detailKeyBuyers = await getReportDetailKeyBuyers(reportHash).catch((error) => {
+    buyerLoadError = error instanceof Error ? error.message : "Buyer records could not be loaded.";
+    return [];
+  });
   const reviewState = computeReviewDisplayState(reviews);
   const revealedAccessKey = detailsKeyHexToAccessKey(bundle.publicSubmission.detailsKey);
   const storedAccessKey = getStoredAccessKey(reportHash);
@@ -107,12 +113,30 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
         )
         .join("")
     : `<tr><td colspan="7" class="muted-cell">No verdicts yet.</td></tr>`;
+  const buyerRows = detailKeyBuyers.length
+    ? detailKeyBuyers
+        .map((buyer) => {
+          const buyerHref = context.router.href(`/profile/${buyer.buyer}`);
+          return `
+            <tr>
+              <td><a href="${buyerHref}" data-nav>${escapeHtml(shortHash(buyer.buyer, 12, 8))}</a></td>
+              <td>${escapeHtml(formatTokenAmount(buyer.totalPaid, 18))} BUGZ</td>
+              <td>${escapeHtml(String(buyer.purchaseCount))}</td>
+              <td>${escapeHtml(formatDate(buyer.latestPurchasedAt))}</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="4" class="muted-cell">No buyers yet.</td></tr>`;
 
   const schemaWarning = !getSchemaUid("ReviewVerdict")
     ? `<p class="warning-copy">Review verdict schema UID is unset. EAS reviews cannot be loaded or submitted until the schema is configured.</p>`
     : "";
   const reviewLoadWarning = reviewLoadError
     ? `<p class="warning-copy">Review verdicts are unavailable: ${escapeHtml(reviewLoadError)}</p>`
+    : "";
+  const buyerLoadWarning = buyerLoadError
+    ? `<p class="warning-copy">Early access buyer records are unavailable: ${escapeHtml(buyerLoadError)}</p>`
     : "";
 
   return {
@@ -152,6 +176,22 @@ export const renderReportView = async (context: AppViewContext): Promise<ViewRes
           <button class="button secondary" type="submit">unlock details</button>
         </form>
         <div class="private-view">${privateView}</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">[ early access buyers ]</div>
+        ${buyerLoadWarning}
+        <table class="data-table compact-table">
+          <thead>
+            <tr>
+              <th>buyer</th>
+              <th>paid</th>
+              <th>purchases</th>
+              <th>latest</th>
+            </tr>
+          </thead>
+          <tbody>${buyerRows}</tbody>
+        </table>
       </section>
 
       <section class="panel">
