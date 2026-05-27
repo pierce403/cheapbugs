@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import re
 import time
 from typing import Any
@@ -291,6 +292,10 @@ class BugIndexClient:
         report = self.contract.functions.getReport(report_hash).call()
         return int(report[14])
 
+    def report_details_key_commitment(self, report_hash: str) -> str:
+        report = self.contract.functions.getReport(report_hash).call()
+        return _bytes32_hex(report[13], "detailsKeyCommitment")
+
     def complete_payout(self, report_hash: str, multiplier: int, details_key: bytes) -> str:
         if not self.index_address:
             raise BugIndexPublishError("BROKER_BUG_INDEX_ADDRESS or VITE_BUG_INDEX_ADDRESS is required for payout completion.")
@@ -308,6 +313,15 @@ class BugIndexClient:
             raise BugIndexPublishError(f"Could not read Base chain id from RPC {self.rpc_url}: {_rpc_error(exc)}") from exc
         if chain_id != self.chain_id:
             raise BugIndexPublishError(f"RPC chain id mismatch: expected {self.chain_id}, got {chain_id}. Check BASE_RPC_URL.")
+
+        try:
+            _verify_details_key_commitment(report_hash, details_key, self.report_details_key_commitment(report_hash))
+        except BugIndexPublishError:
+            raise
+        except Exception as exc:
+            raise BugIndexPublishError(
+                f"Could not verify details key commitment for report {report_hash} before completePayout: {_rpc_error(exc)}"
+            ) from exc
 
         broker_address = self.web3.to_checksum_address(account.address)
         function = self.contract.functions.completePayout(report_hash, multiplier, details_key)
@@ -424,6 +438,20 @@ def _preflight_reveal_after(bug_input: tuple[Any, ...]) -> None:
         )
 
 
+def _details_key_commitment(details_key: bytes) -> str:
+    return f"0x{hashlib.sha256(details_key).hexdigest()}"
+
+
+def _verify_details_key_commitment(report_hash: str, details_key: bytes, expected_commitment: str) -> None:
+    expected = expected_commitment.lower()
+    actual = _details_key_commitment(details_key)
+    if actual != expected:
+        raise BugIndexPublishError(
+            "completePayout details key does not match CheapBugsBugIndex detailsKeyCommitment for "
+            f"report {report_hash}; refusing to submit transaction. expected={expected} actual={actual}"
+        )
+
+
 def _report_id(report_hash: str) -> str:
     return f"cb-{report_hash[2:10]}"
 
@@ -466,6 +494,28 @@ def _hex32(data: dict[str, Any], name: str) -> str:
     except ValueError as exc:
         raise BugIndexPublishError(f"{name} must be a 32-byte hex value before bug-index publishing.") from exc
     return value
+
+
+def _bytes32_hex(value: Any, name: str) -> str:
+    if isinstance(value, (bytes, bytearray)):
+        result = "0x" + bytes(value).hex()
+    elif hasattr(value, "hex"):
+        result = str(value.hex())
+        if not result.startswith("0x"):
+            result = f"0x{result}"
+    elif isinstance(value, str):
+        result = value
+    else:
+        raise BugIndexPublishError(f"{name} from CheapBugsBugIndex must be bytes32.")
+
+    result = result.lower()
+    if not result.startswith("0x") or len(result) != 66:
+        raise BugIndexPublishError(f"{name} from CheapBugsBugIndex must be a 32-byte hex value.")
+    try:
+        int(result[2:], 16)
+    except ValueError as exc:
+        raise BugIndexPublishError(f"{name} from CheapBugsBugIndex must be a 32-byte hex value.") from exc
+    return result
 
 
 def _address(data: dict[str, Any], name: str) -> str:

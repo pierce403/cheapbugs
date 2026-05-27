@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import math
@@ -801,10 +802,25 @@ class BrokerBot:
                         continue
                     multiplier = self._settlement_multiplier(support_score, status=status)
                     amount_wei = int(self.treasury.reward_amount(multiplier))
+                    details_key = _decode_details_key(str(submission.details_key_b64 or ""))
+                    _verify_details_key_commitment(
+                        details_key,
+                        submission.details_key_commitment,
+                        "stored submission details_key_commitment",
+                    )
+                    if (
+                        hasattr(self.bug_index, "report_details_key_commitment")
+                        and not bool(getattr(self.bug_index, "dry_run", False))
+                    ):
+                        _verify_details_key_commitment(
+                            details_key,
+                            str(self.bug_index.report_details_key_commitment(report_hash)),
+                            "onchain CheapBugsBugIndex detailsKeyCommitment",
+                        )
                     tx_hash = self.bug_index.complete_payout(
                         report_hash,
                         multiplier,
-                        _decode_details_key(str(submission.details_key_b64 or "")),
+                        details_key,
                     )
                 else:
                     tx_hash = self.token.transfer(submission.reporter_address, amount_wei)
@@ -925,6 +941,28 @@ def _decode_details_key(value: str) -> bytes:
     if len(key) != 32:
         raise CommandError("submission details key is not 32 bytes.")
     return key
+
+
+def _details_key_commitment(details_key: bytes) -> str:
+    return f"0x{hashlib.sha256(details_key).hexdigest()}"
+
+
+def _verify_details_key_commitment(details_key: bytes, expected_commitment: str | None, source: str) -> None:
+    if not expected_commitment:
+        raise CommandError(f"submission is missing {source} for payout completion.")
+    expected = expected_commitment.lower()
+    if not expected.startswith("0x") or len(expected) != 66:
+        raise CommandError(f"{source} is not a 32-byte hex value.")
+    try:
+        int(expected[2:], 16)
+    except ValueError as exc:
+        raise CommandError(f"{source} is not a 32-byte hex value.") from exc
+    actual = _details_key_commitment(details_key)
+    if actual != expected:
+        raise CommandError(
+            "submission details key does not match "
+            f"{source}; refusing to submit completePayout. expected={expected} actual={actual}"
+        )
 
 
 def _publish_progress_message(result: BugIndexPublishResult) -> str:

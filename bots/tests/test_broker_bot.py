@@ -562,6 +562,97 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(updated.payout_amount_wei, str(123 * 10**18))
             self.assertEqual(updated.payout_tx_hash, "0x" + "b" * 64)
 
+    def test_settlement_refuses_index_payout_when_stored_details_key_commitment_mismatches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            pinned = fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json"))
+            pinned.details_key_commitment = "0x" + "9" * 64
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=pinned,
+                report_hash="0x" + "7" * 64,
+                now=100,
+            )
+            bug_index = FakeBugIndex()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=0),
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 0)
+            self.assertEqual(bug_index.completed_payouts, [])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "failed")
+            self.assertIn("stored submission details_key_commitment", str(updated.error))
+            self.assertIn("refusing to submit completePayout", str(updated.error))
+
+    def test_settlement_refuses_index_payout_when_onchain_details_key_commitment_mismatches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "7" * 64,
+                now=100,
+            )
+            bug_index = FakeBugIndex(details_key_commitment="0x" + "9" * 64)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=0),
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 0)
+            self.assertEqual(bug_index.completed_payouts, [])
+            self.assertEqual(bug_index.last_details_key_commitment_report_hash, "0x" + "7" * 64)
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "failed")
+            self.assertIn("onchain CheapBugsBugIndex detailsKeyCommitment", str(updated.error))
+            self.assertIn("refusing to submit completePayout", str(updated.error))
+
     def test_settlement_uses_zero_multiplier_for_invalid_index_reports(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")
@@ -2068,11 +2159,13 @@ class FakeBugIndex:
         error: Exception | None = None,
         report_status: int = 1,
         reveal_after: int = 0,
+        details_key_commitment: str | None = None,
     ):
         self.dry_run = dry_run
         self.error = error
         self._report_status = report_status
         self._reveal_after = reveal_after
+        self._details_key_commitment = details_key_commitment or f"0x{hashlib.sha256(DETAILS_KEY).hexdigest()}"
         self.last_command: SubmissionCommand | None = None
         self.last_bundle: object | None = None
         self.completed_payouts: list[tuple[str, int, bytes]] = []
@@ -2107,6 +2200,12 @@ class FakeBugIndex:
             raise self.error
         self.last_reveal_after_report_hash = report_hash
         return self._reveal_after
+
+    def report_details_key_commitment(self, report_hash: str) -> str:
+        if self.error is not None:
+            raise self.error
+        self.last_details_key_commitment_report_hash = report_hash
+        return self._details_key_commitment
 
 
 class FakeTreasury:

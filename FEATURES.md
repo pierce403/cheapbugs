@@ -203,6 +203,7 @@ cheapbugs/
   - Bonded users can vote up or down before the reveal window closes. Vote weight is snapshotted at vote time from `CheapBugsBondVault.getLevel(voter)`.
   - Bug payouts must be completed in report order. Only an authorized broker can complete payout, and invalid or spam bugs require a zero multiplier.
   - On payout completion, the index reveals the details key if needed, calls `CheapBugsTreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
+  - Before calling `completePayout`, the broker decodes the stored raw details key and verifies `sha256(rawKey)` against both the SQLite-stored details-key commitment and the current onchain `CheapBugsBugIndex.getReport(reportHash).detailsKeyCommitment` when a live index adapter is available.
   - Index Halt is a known ordered-payout risk in the current deployed index: if the report at `nextPayoutIndex` has an unavailable or mismatched details key, later report payouts remain blocked because there is no skip/quarantine/recovery path in this index version.
   - Contract-specific values stay behind `src/config/chains.ts`, `src/config/env.ts`, and `src/contracts/bugIndex.ts`.
   - Direct browser-to-index submission is disabled; the only browser-to-index write helper is bonded voting through `submitBondVote`.
@@ -303,7 +304,7 @@ cheapbugs/
   - [x] Broker tests prove the broker rejects altered bundle authorization hashes and invalid BugBundle validation results.
   - [x] Playwright covers cached BugBundle and bug-index detail rendering across reloads and when Base/IPFS providers return 429.
   - [ ] Browser tests cover submitter-side bundle construction, details encryption, and key commitment generation against deterministic vectors.
-  - [ ] Broker tests add dedicated cases for bad recovered signatures, mismatched details keys, and unintelligible decrypted details.
+  - [ ] Broker tests add dedicated cases for bad recovered signatures and unintelligible decrypted details.
   - [x] Contract tests prove keys cannot be revealed before the judgment window and revealed keys must match the stored commitment.
   - [x] Read-path tests cover automatic post-reveal IPFS fetch, local key storage, browser decryption, markdown rendering, raw HTML escaping, unsafe-link rejection, and code-block copy buttons.
 
