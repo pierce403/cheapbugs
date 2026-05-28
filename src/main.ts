@@ -1,5 +1,9 @@
 import "./styles.css";
 import { CheapBugsApp } from "./app";
+import { initMatrixRain } from "./lib/matrixRain";
+
+// Start background matrix rain animation
+initMatrixRain();
 
 const app = document.querySelector<HTMLDivElement>("#app");
 

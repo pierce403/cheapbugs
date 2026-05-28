@@ -19,8 +19,7 @@
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   margin: 0;
   min-height: 100%;
   background:
@@ -29,10 +28,24 @@ body {
 }
 
 body {
+  margin: 0;
+  min-height: 100%;
+  background: transparent;
   min-width: 320px;
   color: var(--text);
   font-size: 13px;
   line-height: 1.45;
+}
+
+#bg-matrix-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.78;
 }
 
 a {
