@@ -252,6 +252,10 @@ signal: u:alice.01
         with self.assertRaisesRegex(CommandError, "authenticated XMTP sender"):
             parse_command(json.dumps(payload), fallback_sender_address=WALLET)
 
+    def test_parse_detail_unlock_requires_authenticated_sender(self) -> None:
+        with self.assertRaisesRegex(CommandError, "authenticated XMTP sender"):
+            parse_command(json.dumps(detail_unlock_payload()))
+
     def test_parse_detail_unlock_paid_requires_tx_hash(self) -> None:
         payload = detail_unlock_payload(type="detail_unlock_paid")
 
@@ -1518,6 +1522,74 @@ class BrokerServiceTest(unittest.TestCase):
             self.assertIsNotNone(quote)
             assert quote is not None
             self.assertEqual(quote.price_wei, 700)
+
+    def test_detail_unlock_quote_returns_key_when_authenticated_buyer_already_paid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            report_hash = "0x" + "4" * 64
+            store.create_submission(
+                command=SubmissionCommand(
+                    reporter_address=WALLET,
+                    signal_recipient="broker-managed",
+                    bug_type="web",
+                    title="Title",
+                    summary="Public summary",
+                    severity="high",
+                    target_interest="high",
+                    body="Details",
+                ),
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="submission-message",
+                signal_group_id="signal-disabled",
+                signal_message_timestamp=0,
+                review_window_seconds=0,
+                status="published",
+                bug_bundle=fake_pinned_bundle(
+                    IpfsAddResult(
+                        cid="bafyfakebugbundle",
+                        uri="ipfs://bafyfakebugbundle",
+                        name="bugbundle",
+                        size=1,
+                        sha256="0x" + "2" * 64,
+                        gateway_url="https://ipfs.io/ipfs/bafyfakebugbundle",
+                    )
+                ),
+                report_hash=report_hash,
+                index_tx_hash="0x" + "a" * 64,
+                index_published_at=1_000,
+                now=1_000,
+            )
+            replies: list[str] = []
+            treasury = FakeTreasury(base_reward=100, paid_total=700)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite", signal_enabled=False),
+                store=store,
+                signal=None,
+                token=FakeToken(balance=0),
+                ipfs=FakeIpfs(),
+                bug_index=FakeBugIndex(),
+                treasury=treasury,
+            )
+
+            async def reply(message: str) -> None:
+                replies.append(message)
+
+            with patch("cheapbugs_broker.service.time.time", return_value=1_000):
+                asyncio.run(
+                    bot.handle_xmtp_text(
+                        json.dumps(detail_unlock_payload(report_hash=report_hash)),
+                        sender_address=WALLET,
+                        conversation_id="conversation",
+                        message_id="unlock-already-paid",
+                        reply=reply,
+                    )
+                )
+
+            self.assertEqual(treasury.payment_lookup, (report_hash, WALLET))
+            self.assertIn(f"key {DETAILS_KEY_B64}", replies[-1])
+            self.assertTrue(store.message_seen("unlock-already-paid"))
+            self.assertIsNone(store.get_detail_unlock_quote("0x" + "3" * 32))
 
     def test_detail_unlock_paid_verifies_onchain_total_before_releasing_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

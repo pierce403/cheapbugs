@@ -38,6 +38,10 @@ const BROKER_DETAIL_UNLOCK_QUOTE_PATTERN =
   /Detail unlock quote:\s*report\s+0x[a-fA-F0-9]{64}\s+request\s+0x[a-fA-F0-9]{32}\s+price_wei\s+\d+/i;
 const BROKER_DETAIL_UNLOCK_KEY_PATTERN =
   /Detail key:\s*report\s+0x[a-fA-F0-9]{64}\s+request\s+0x[a-fA-F0-9]{32}\s+key\s+[A-Za-z0-9_-]{43}/i;
+const BROKER_DETAIL_UNLOCK_QUOTE_OR_KEY_PATTERN = new RegExp(
+  `(?:${BROKER_DETAIL_UNLOCK_QUOTE_PATTERN.source})|(?:${BROKER_DETAIL_UNLOCK_KEY_PATTERN.source})`,
+  "i"
+);
 const BROKER_DETAIL_UNLOCK_FAILURE_PATTERN = /Detail unlock (?:rejected|failed|unavailable)|Invalid JSON command|Missing required field|Unexpected/i;
 const BUG_BUNDLE_REVEAL_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 const BUG_BUNDLE_REVEAL_PUBLISH_BUFFER_MS = 60 * 60 * 1000;
@@ -557,18 +561,30 @@ export const requestDetailUnlockQuote = async (
     }
   });
   const result = await sendXmtpDm(identity, env.brokerXmtpAddress, message, onProgress, {
-    completionPattern: BROKER_DETAIL_UNLOCK_QUOTE_PATTERN,
+    completionPattern: BROKER_DETAIL_UNLOCK_QUOTE_OR_KEY_PATTERN,
     failurePattern: BROKER_DETAIL_UNLOCK_FAILURE_PATTERN,
     timeoutMs: BROKER_UNLOCK_QUOTE_TIMEOUT_MS,
     waitingMessage: "waiting for broker detail-unlock quote",
     onReply: (message) => onProgress?.(`broker: ${message}`)
   });
+  const directKey = extractDetailKey(result.completionText);
+  if (directKey) {
+    if (directKey.requestId !== requestId || directKey.reportHash !== reportHash.toLowerCase()) {
+      throw new Error("Broker returned an invalid detail key response.");
+    }
+    return {
+      ...result,
+      kind: "key" as const,
+      ...directKey
+    };
+  }
   const quote = extractUnlockQuote(result.completionText);
   if (!quote || quote.requestId !== requestId || quote.reportHash !== reportHash.toLowerCase()) {
     throw new Error("Broker returned an invalid detail-unlock quote.");
   }
   return {
     ...result,
+    kind: "quote" as const,
     ...quote
   };
 };

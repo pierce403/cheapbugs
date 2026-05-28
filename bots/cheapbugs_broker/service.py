@@ -198,6 +198,26 @@ class BrokerBot:
         price_wei = base_reward * days_remaining
         if price_wei <= 0:
             raise CommandError("treasury base detail price is currently zero.")
+
+        paid_total = int(self.treasury.detail_key_payment_total(command.report_hash, command.buyer_address))
+        if paid_total >= price_wei:
+            self.store.mark_message_processed(message_id, "detail_unlock_already_paid")
+            self.logger.info(
+                "detail unlock already paid message_id=%s buyer=%s report_hash=%s paid_wei=%s required_wei=%s",
+                message_id,
+                command.buyer_address,
+                command.report_hash,
+                paid_total,
+                price_wei,
+            )
+            await self._reply(
+                reply,
+                message_id,
+                "detail_unlock_already_paid",
+                f"Detail key: report {command.report_hash} request {command.request_id} key {submission.details_key_b64}",
+            )
+            return
+
         expires_at = now + DETAIL_UNLOCK_QUOTE_TTL_SECONDS
         self.store.create_detail_unlock_quote(
             request_id=command.request_id,

@@ -243,15 +243,21 @@ def _strict_chain_id(data: dict[str, Any]) -> int:
     return chain_id
 
 
-def _access_wallet_from_sender(claimed_wallet: str, fallback_sender_address: str | None) -> str:
+def _wallet_from_authenticated_sender(
+    claimed_wallet: str,
+    fallback_sender_address: str | None,
+    *,
+    flow_label: str,
+) -> str:
     if not fallback_sender_address:
-        raise CommandError("Access requests require an authenticated XMTP sender address.")
+        raise CommandError(f"{flow_label} requires an authenticated XMTP sender address.")
 
+    # XMTP sender context is the authority. Message wallet fields are only anti-confusion checks.
     sender_wallet = normalize_address(fallback_sender_address)
     if claimed_wallet:
         claimed = normalize_address(claimed_wallet)
         if claimed != sender_wallet:
-            raise CommandError("Access request wallet must match the authenticated XMTP sender address.")
+            raise CommandError(f"{flow_label} wallet must match the authenticated XMTP sender address.")
     return sender_wallet
 
 
@@ -269,9 +275,10 @@ def _parse_json_command(text: str, fallback_sender_address: str | None) -> Incom
 
     command_type = _coerce_type(_string_field(data, "type", "command"))
     if command_type == "access":
-        wallet = _access_wallet_from_sender(
+        wallet = _wallet_from_authenticated_sender(
             _string_field(data, "wallet", "wallet_address", required=False),
             fallback_sender_address,
+            flow_label="Access request",
         )
         return AccessCommand(
             wallet_address=wallet,
@@ -310,7 +317,11 @@ def _parse_detail_unlock_json(
     if parsed_type != command_type:
         raise CommandError("Detail unlock type does not match the requested action.")
 
-    buyer = _access_wallet_from_sender(_strict_string(data, "buyer_address", max_length=42), fallback_sender_address)
+    buyer = _wallet_from_authenticated_sender(
+        _strict_string(data, "buyer_address", max_length=42),
+        fallback_sender_address,
+        flow_label="Detail unlock buyer",
+    )
     tx_hash = (
         _strict_hex(data, "tx_hash", BYTES32_RE, "32-byte transaction hash")
         if command_type == "detail_unlock_paid"
@@ -427,9 +438,10 @@ def parse_command(text: str, fallback_sender_address: str | None = None) -> Inco
     if command_type in {"detail_unlock_quote", "detail_unlock_paid"}:
         raise CommandError("Detail unlock requests must use the strict CheapBugs JSON schema.")
 
-    wallet = _access_wallet_from_sender(
+    wallet = _wallet_from_authenticated_sender(
         fields.get("wallet") or fields.get("wallet_address") or "",
         fallback_sender_address,
+        flow_label="Access request",
     )
     signal = fields.get("signal") or fields.get("signal_recipient") or fields.get("phone") or fields.get("username")
     if not signal:

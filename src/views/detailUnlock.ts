@@ -98,9 +98,18 @@ export const bindDetailUnlockFlow = (root: HTMLElement, appContext: AppViewConte
 
       setUnlockStatus("detail unlock", "asking the broker for a report-specific price.");
       try {
-        const quote = await requestDetailUnlockQuote(identity, reportHash, (message) =>
+        const unlockReply = await requestDetailUnlockQuote(identity, reportHash, (message) =>
           setUnlockStatus("detail unlock", message)
         );
+        if (unlockReply.kind === "key") {
+          saveReportAccessKey(reportHash, unlockReply.detailsKey);
+          appContext.notify("success", "Detail key saved locally for this report.");
+          closeUnlockModal();
+          await appContext.rerender();
+          return;
+        }
+
+        const quote = unlockReply;
         const priceLabel = `${formatTokenAmount(quote.priceWei, 18)} BUGZ`;
         setUnlockStatus(
           "detail unlock quote",
