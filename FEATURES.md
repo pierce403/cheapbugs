@@ -40,6 +40,7 @@ cheapbugs/
 ## System Boundaries
 
 - The hosted app is static assets from `dist/`; do not add SSR or an app-owned backend database.
+- Routine completed work lands on `origin/main`, which is the Git-connected Cloudflare Pages production branch. Non-main Pages previews are manual diagnostics only and should not require pushing topic branches unless explicitly requested.
 - Public-safe report metadata is stored on Base in `CheapBugsBugIndex`, which now accepts broker-published records only when backed by a reporter EIP-712 signature.
 - The verified Base deployment is `CheapBugsBugIndex` `0x515FDbc9876aC26870794E26605c7DD04c18679b`, `CheapBugsBondVault` `0x2Eab99B6d6F1FBDa4fa78a00662E0cf9aBd9f3d3`, and `CheapBugsTreasuryVault` `0x4A080668d9848928dc6D48921cbDc4273fe27A9d`.
 - BUGZ bonds are held in `CheapBugsBondVault`; pending withdrawals remain slashable through the 7-day delay.

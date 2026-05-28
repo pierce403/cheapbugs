@@ -21,10 +21,10 @@ After every completed task:
 3. Update `FEATURES.md` if the task changed feature behavior, system boundaries, integrations, deployment assumptions, milestones, tests, or the recommended code-navigation map.
 4. Stage the completed work.
 5. Commit it with a clear message.
-6. Push it to the current branch on `origin`.
+6. Push completed work to `origin/main`.
 7. Only then send the final completion message to the user, including the commit SHA or a clear push failure note.
 
-Default rule: do not leave completed work uncommitted or unpushed, and do not report a task as done before the push attempt has happened.
+Default rule: do not leave completed work uncommitted or unpushed to `main`, and do not report a task as done before the push attempt has happened. If work is accidentally done on a topic branch, merge or cherry-pick it onto `main` and push `main`; do not push topic branches unless the user explicitly asks for a branch preview or branch push.
 
 Allowed exceptions:
 
