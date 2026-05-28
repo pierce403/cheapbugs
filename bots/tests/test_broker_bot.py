@@ -657,6 +657,49 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertIn("onchain CheapBugsBugIndex detailsKeyCommitment", str(updated.error))
             self.assertIn("refusing to submit completePayout", str(updated.error))
 
+    def test_settlement_keeps_transient_rpc_errors_retryable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "7" * 64,
+                now=100,
+            )
+            bug_index = FakeBugIndex(error=RuntimeError("429 Client Error: Too Many Requests"))
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=0),
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 0)
+            self.assertEqual(bug_index.completed_payouts, [])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "relayed")
+            self.assertIsNone(updated.error)
+
     def test_settlement_uses_zero_multiplier_for_invalid_index_reports(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")

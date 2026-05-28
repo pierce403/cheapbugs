@@ -44,6 +44,27 @@ BUG_INDEX_STATUS_INVALID = 2
 BUG_INDEX_STATUS_SPAM = 3
 
 
+def _is_transient_settlement_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in (
+            "429",
+            "too many requests",
+            "rate limit",
+            "timeout",
+            "timed out",
+            "temporarily unavailable",
+            "connection aborted",
+            "connection reset",
+            "max retries exceeded",
+            "502 bad gateway",
+            "503 service unavailable",
+            "504 gateway timeout",
+        )
+    )
+
+
 class BrokerBot:
     def __init__(
         self,
@@ -845,6 +866,12 @@ class BrokerBot:
                 else:
                     tx_hash = self.token.transfer(submission.reporter_address, amount_wei)
             except Exception as exc:
+                if _is_transient_settlement_error(exc):
+                    self.logger.exception(
+                        "Transient settlement error for submission %s; leaving payout retryable",
+                        submission.id,
+                    )
+                    continue
                 self.store.mark_failed(submission.id, support_score, str(exc))
                 self.logger.exception("Failed to pay submission %s", submission.id)
                 continue
