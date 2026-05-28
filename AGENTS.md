@@ -251,6 +251,7 @@ npm run launch:bug-index
 - The live BUGZ v4 pool was validated from Clanker `TokenCreated` block `46093316`: hook `0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC`, pool id `0x4c360c12ee8063e7170c344eba74f28ab0d3879c797ed46269202c3966234657`, dynamic fee flag `8388608`, tick spacing `200`, paired WETH.
 - The default BUGZ holder scan starts from Base block `46093316`; if the holder API is not configured, expect `patrons` to issue chunked 10,000-block `eth_getLogs` reads and rely on the 24-hour localStorage cache. If a public RPC refuses the scan, the UI should point users at the Etherscan API key dashboard and `tokenholderlist` docs instead of showing raw ethers errors.
 - `ffmpeg` is available in the local environment and was used to derive favicon/OpenGraph PNG assets from `cheapbugs.png`.
+- High-performance canvas backgrounds (e.g., Matrix rain) should use `position: fixed` with a `z-index: -1`, set the `body` background to `transparent`, and place the original page gradients on the `html` selector. Throttling the animation loop to a lower frame rate (e.g., 18 FPS) preserves CPU resources and keeps the background slow, subtle, and atmospheric without distracting from the interactive elements.
 - Signal reactions are social support signals only; they are not sybil-resistant votes.
 - Real onchain submission requires `VITE_BUG_INDEX_ADDRESS` to be set.
 - Real XMTP submission requires the default or overridden broker address to point at an already registered broker XMTP inbox.
