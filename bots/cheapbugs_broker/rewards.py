@@ -21,6 +21,8 @@ def wei_to_tokens(wei: int, decimals: int = 18) -> Decimal:
 def reward_tokens(base: Decimal, per_reaction: Decimal, max_reward: Decimal, support_score: int) -> Decimal:
     if support_score < 0:
         support_score = 0
+    if support_score > 0 and max_reward > 0:
+        return max_reward
     total = base + (per_reaction * Decimal(support_score))
     if max_reward > 0:
         return min(total, max_reward)

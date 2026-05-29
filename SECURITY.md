@@ -34,6 +34,7 @@ The browser and Python broker now produce and verify that EIP-712 publish envelo
 - The broker verifies the BugBundle and publish authorization before target validation, credential validation, or IPFS pinning. Invalid signatures, wrong reporter/broker/chain/index bindings, key-commitment mismatches, ciphertext-hash mismatches, AAD mismatches, and decryption failures stop the submission flow.
 - The broker stores and pays only a verified submission reporter: the verified EIP-712 PublishBug reporter must match `reporter_address`, and when XMTP sender context is available it must also match the authenticated XMTP sender before credential checks, IPFS pinning, index publication, Signal relay, or payout persistence.
 - Before a broker settlement calls `CheapBugsBugIndex.completePayout`, it verifies the decoded raw details key against the SQLite-stored details-key commitment and, for live index adapters, the onchain `detailsKeyCommitment` returned by `getReport(reportHash)`. Mismatches mark the local settlement failed without submitting a transaction.
+- For valid index-treasury settlements, the broker reads the onchain bonded vote score as `upvoteWeight - downvoteWeight` and uses the maximum 10x multiplier whenever that score is positive; positive legacy Signal support also triggers the maximum multiplier. Invalid and spam reports still require a zero multiplier.
 - In live mode, the broker preflights the signed reveal time before IPFS pinning so a too-short, signature-bound `revealAfter` is rejected before creating another durable CID.
 - The browser sends broker submissions as XMTP DMs to the configured broker wallet.
 - The broker parser rejects malformed JSON, missing required fields, unexpected fields, invalid target references, and blocked reporters. Submission BUGZ-balance gating is configurable and currently defaults to zero BUGZ for open submissions.
@@ -149,6 +150,7 @@ Current deployment implication: the verified Base `CheapBugsBugIndex` has no own
 - Private details must be represented onchain only by CIDs, hashes, commitments, or other non-plaintext references until the 7-day judgment period has ended.
 - After the judgment period, the index may store the raw 32-byte details key so browsers can fetch the encrypted IPFS bundle and decrypt details locally.
 - Admin status flags are trusted guidance for payout completion; only brokers can complete payout in report order.
+- Broker-selected payout multipliers are policy decisions constrained by the index and treasury caps. The current broker policy pays the 10x cap for valid reports with a positive bonded vote score or positive legacy Signal support, and pays zero for invalid or spam reports.
 - Browser review access has two distinct paths: frontend reviewer allowlist access for EAS review UX, and onchain index admin access for `flagBug`. Only the onchain admin role can set payout status.
 
 ### CheapBugsBondVault

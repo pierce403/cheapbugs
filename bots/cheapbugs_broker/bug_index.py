@@ -39,6 +39,20 @@ BUG_INDEX_ABI = [
         "outputs": [],
     },
     {
+        "name": "upvoteWeight",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [{"name": "", "type": "bytes32"}],
+        "outputs": [{"name": "", "type": "uint256"}],
+    },
+    {
+        "name": "downvoteWeight",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [{"name": "", "type": "bytes32"}],
+        "outputs": [{"name": "", "type": "uint256"}],
+    },
+    {
         "name": "getReport",
         "type": "function",
         "stateMutability": "view",
@@ -295,6 +309,11 @@ class BugIndexClient:
     def report_details_key_commitment(self, report_hash: str) -> str:
         report = self.contract.functions.getReport(report_hash).call()
         return _bytes32_hex(report[13], "detailsKeyCommitment")
+
+    def report_vote_score(self, report_hash: str) -> int:
+        upvote_weight = int(self.contract.functions.upvoteWeight(report_hash).call())
+        downvote_weight = int(self.contract.functions.downvoteWeight(report_hash).call())
+        return upvote_weight - downvote_weight
 
     def complete_payout(self, report_hash: str, multiplier: int, details_key: bytes) -> str:
         if not self.index_address:

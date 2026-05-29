@@ -205,6 +205,7 @@ cheapbugs/
   - The review queue has a local pending-only checkbox that filters the table to unreviewed reports.
   - Bonded users can vote up or down before the reveal window closes. Vote weight is snapshotted at vote time from `CheapBugsBondVault.getLevel(voter)`.
   - Bug payouts must be completed in report order. Only an authorized broker can complete payout, and invalid or spam bugs require a zero multiplier.
+  - During Python broker settlement, a valid report with a positive onchain bonded vote score (`upvoteWeight - downvoteWeight`) uses the maximum 10x treasury multiplier. If there is no positive onchain score, a positive legacy Signal support score also uses the maximum payout; valid reports with no positive score use the base 1x multiplier.
   - On payout completion, the index reveals the details key if needed, calls `CheapBugsTreasuryVault.payRewardFromIndex`, stores the paid amount/multiplier, and advances the payout cursor.
   - Before calling `completePayout`, the broker decodes the stored raw details key and verifies `sha256(rawKey)` against both the SQLite-stored details-key commitment and the current onchain `CheapBugsBugIndex.getReport(reportHash).detailsKeyCommitment` when a live index adapter is available.
   - Index Halt is a known ordered-payout risk in the current deployed index: if the report at `nextPayoutIndex` has an unavailable or mismatched details key, later report payouts remain blocked because there is no skip/quarantine/recovery path in this index version.
@@ -275,7 +276,7 @@ cheapbugs/
   - After sending the submission DM, the browser waits for broker plain text replies in the same XMTP conversation. `Submission complete: Bug published onchain...`, `Submission complete: Bug already exists onchain...`, or `Submission complete: Bug index dry-run complete...` is treated as terminal success; target, credential, JSON, IPFS, or bug-index publish failure replies are terminal errors.
   - Submission credential checks use `BROKER_REPUTATION_BLOCKLIST`; `BROKER_SUBMISSION_MIN_BUGZ` defaults to `0` for open submissions and can be raised later to require a BUGZ balance.
 - **Test Criteria**:
-  - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, credential failure, authenticated XMTP sender/reporter mismatch rejection, live reveal-window preflight, bug-index publish call shaping, decoded publish failures, and dry-run handling.
+  - [x] Python unit tests cover strict JSON parsing, required fields, publish-authorization bundle-hash validation, BugBundle failure handling, real encrypted bundle verification in the broker venv, target validation, staged status messages, credential failure, authenticated XMTP sender/reporter mismatch rejection, live reveal-window preflight, bug-index publish call shaping, positive vote/support max-payout settlement, decoded publish failures, and dry-run handling.
   - [x] Python unit tests cover `hello.` liveness replies for unrecognized XMTP text and JSON flow types.
   - [x] Playwright covers the default broker wallet, inline XMTP status, broker field-size validation before wallet checks, disconnected submit feedback, title/target field ordering, private-details warning copy, PublishBug-signature wait modal, and structured XMTP submit UI including IPFS-progress and onchain-completion modal states.
   - [x] Browser and broker code create and verify the EIP-712 `PublishBug` envelope required by the bug index.
@@ -364,9 +365,10 @@ cheapbugs/
   - SQLite tracks processed XMTP message IDs, relayed submissions, BugBundle CIDs and details keys, Signal message timestamps, active reactions, settlement status, reward amounts, and payout transaction hashes.
   - SQLite also tracks detail-unlock quotes by request id, report hash, buyer, quoted price, expiry, and fulfilled transaction hash so payment confirmation cannot be faked with buyer-supplied amounts.
   - Signal access requests are gated by `BROKER_ACCESS_MIN_BUGZ` for the authenticated XMTP sender wallet. Optional `wallet` fields must match that sender, and spoofed wallet claims are rejected before BUGZ balance checks or Signal invites.
-  - Live payouts spend from the broker wallet and should run only from an intentionally funded wallet.
+  - When the index and treasury adapters are available and `BROKER_BUGZ_BASE_REWARD` is not explicitly set, settlement uses ordered `CheapBugsBugIndex.completePayout` treasury payouts. Valid reports with a positive onchain vote score or positive legacy Signal support score use the 10x maximum multiplier; invalid and spam reports use zero.
+  - The legacy direct wallet-funded payout path is still used when `BROKER_BUGZ_BASE_REWARD` is explicitly configured, and positive support scores use `BROKER_BUGZ_MAX_REWARD` when that cap is nonzero.
 - **Test Criteria**:
-  - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, access wallet/sender binding, detail-unlock quote/payment verification, SQLite maturity, reaction parsing, and reward math.
+  - [x] `python3 -m unittest discover -s bots/tests -t bots` covers command parsing, staged broker validation, access wallet/sender binding, detail-unlock quote/payment verification, SQLite maturity, reaction parsing, reward math, and max-payout settlement for positive vote/support scores.
   - [x] Broker tests cover XMTP installation pruning, inactive local installation detection, and maxed-installation recovery.
   - [x] `python3 -m compileall bots scripts/broker-bot.py` checks Python syntax.
   - [x] `bash -n run-broker.sh` checks the root launcher syntax.

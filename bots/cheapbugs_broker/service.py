@@ -841,6 +841,11 @@ class BrokerBot:
                             submission.report_hash,
                         )
                         continue
+                    if status not in (BUG_INDEX_STATUS_INVALID, BUG_INDEX_STATUS_SPAM) and hasattr(
+                        self.bug_index,
+                        "report_vote_score",
+                    ):
+                        support_score = max(support_score, int(self.bug_index.report_vote_score(report_hash)))
                     multiplier = self._settlement_multiplier(support_score, status=status)
                     amount_wei = int(self.treasury.reward_amount(multiplier))
                     details_key = _decode_details_key(str(submission.details_key_b64 or ""))
@@ -916,7 +921,9 @@ class BrokerBot:
     def _settlement_multiplier(self, support_score: int, *, status: int | None = None) -> int:
         if status in (BUG_INDEX_STATUS_INVALID, BUG_INDEX_STATUS_SPAM):
             return 0
-        return max(1, min(10, 1 + max(0, support_score)))
+        if support_score > 0:
+            return 10
+        return 1
 
     async def poll_signal_forever(self) -> None:
         while True:

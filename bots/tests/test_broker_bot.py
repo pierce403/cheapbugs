@@ -264,6 +264,11 @@ signal: u:alice.01
 
 
 class RewardTest(unittest.TestCase):
+    def test_positive_support_score_uses_reward_cap(self) -> None:
+        reward = reward_tokens(Decimal("10"), Decimal("7.5"), Decimal("25"), 1)
+
+        self.assertEqual(reward, Decimal("25"))
+
     def test_reward_cap(self) -> None:
         reward = reward_tokens(Decimal("10"), Decimal("7.5"), Decimal("25"), 4)
 
@@ -565,6 +570,102 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(updated.status, "paid")
             self.assertEqual(updated.payout_amount_wei, str(123 * 10**18))
             self.assertEqual(updated.payout_tx_hash, "0x" + "b" * 64)
+
+    def test_settlement_uses_max_index_treasury_payout_for_positive_support_score(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "7" * 64,
+                now=100,
+            )
+            store.upsert_reaction(
+                SignalReactionEvent(
+                    group_id="group",
+                    target_sent_timestamp=1760000000123,
+                    reactor_id="reactor",
+                    emoji="\U0001f44d",
+                    is_remove=False,
+                    observed_at=101,
+                )
+            )
+            bug_index = FakeBugIndex()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=0),
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 1)
+            self.assertEqual(bug_index.completed_payouts, [("0x" + "7" * 64, 10, DETAILS_KEY)])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.support_score, 1)
+            self.assertEqual(updated.payout_amount_wei, str(1230 * 10**18))
+
+    def test_settlement_uses_max_index_treasury_payout_for_positive_onchain_vote_score(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "7" * 64,
+                now=100,
+            )
+            bug_index = FakeBugIndex(vote_score=1)
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=0),
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 1)
+            self.assertEqual(bug_index.completed_payouts, [("0x" + "7" * 64, 10, DETAILS_KEY)])
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.support_score, 1)
+            self.assertEqual(updated.payout_amount_wei, str(1230 * 10**18))
 
     def test_settlement_refuses_index_payout_when_stored_details_key_commitment_mismatches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2275,12 +2376,14 @@ class FakeBugIndex:
         report_status: int = 1,
         reveal_after: int = 0,
         details_key_commitment: str | None = None,
+        vote_score: int = 0,
     ):
         self.dry_run = dry_run
         self.error = error
         self._report_status = report_status
         self._reveal_after = reveal_after
         self._details_key_commitment = details_key_commitment or f"0x{hashlib.sha256(DETAILS_KEY).hexdigest()}"
+        self._vote_score = vote_score
         self.last_command: SubmissionCommand | None = None
         self.last_bundle: object | None = None
         self.completed_payouts: list[tuple[str, int, bytes]] = []
@@ -2321,6 +2424,12 @@ class FakeBugIndex:
             raise self.error
         self.last_details_key_commitment_report_hash = report_hash
         return self._details_key_commitment
+
+    def report_vote_score(self, report_hash: str) -> int:
+        if self.error is not None:
+            raise self.error
+        self.last_vote_score_report_hash = report_hash
+        return self._vote_score
 
 
 class FakeTreasury:
