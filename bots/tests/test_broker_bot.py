@@ -667,6 +667,46 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(updated.support_score, 1)
             self.assertEqual(updated.payout_amount_wei, str(1230 * 10**18))
 
+    def test_settlement_honors_manual_payout_multiplier_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+15551234567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                bug_bundle=fake_pinned_bundle(FakeIpfs().add_json({"ok": True}, "bundle.json")),
+                report_hash="0x" + "8" * 64,
+                now=100,
+            )
+            store.set_payout_multiplier_override(record.id, 10)
+            bug_index = FakeBugIndex()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=0),
+                bug_index=bug_index,
+                treasury=FakeTreasury(base_reward=123 * 10**18),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 1)
+            self.assertEqual(bug_index.completed_payouts, [("0x" + "8" * 64, 10, DETAILS_KEY)])
+
+
     def test_settlement_refuses_index_payout_when_stored_details_key_commitment_mismatches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")

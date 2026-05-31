@@ -846,7 +846,11 @@ class BrokerBot:
                         "report_vote_score",
                     ):
                         support_score = max(support_score, int(self.bug_index.report_vote_score(report_hash)))
-                    multiplier = self._settlement_multiplier(support_score, status=status)
+                    multiplier = self._settlement_multiplier(
+                        support_score,
+                        status=status,
+                        override=submission.payout_multiplier_override,
+                    )
                     amount_wei = int(self.treasury.reward_amount(multiplier))
                     details_key = _decode_details_key(str(submission.details_key_b64 or ""))
                     _verify_details_key_commitment(
@@ -918,9 +922,17 @@ class BrokerBot:
             and hasattr(self.treasury, "reward_amount")
         )
 
-    def _settlement_multiplier(self, support_score: int, *, status: int | None = None) -> int:
+    def _settlement_multiplier(
+        self,
+        support_score: int,
+        *,
+        status: int | None = None,
+        override: int | None = None,
+    ) -> int:
         if status in (BUG_INDEX_STATUS_INVALID, BUG_INDEX_STATUS_SPAM):
             return 0
+        if override is not None:
+            return max(0, min(10, override))
         if support_score > 0:
             return 10
         return 1

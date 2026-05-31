@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   created_at INTEGER NOT NULL,
   matures_at INTEGER NOT NULL,
   support_score INTEGER NOT NULL DEFAULT 0,
+  payout_multiplier_override INTEGER,
   payout_amount_wei TEXT,
   payout_tx_hash TEXT,
   bundle_cid TEXT,
@@ -329,6 +330,20 @@ class BrokerStore:
             ).fetchone()
         return int(row["support_score"] if row is not None else 0)
 
+    def set_payout_multiplier_override(self, record_id: str, multiplier: int | None) -> None:
+        if multiplier is not None and (multiplier < 0 or multiplier > 10):
+            raise ValueError("Payout multiplier override must be between 0 and 10.")
+        now = int(time.time())
+        with self.session() as conn:
+            conn.execute(
+                """
+                UPDATE submissions
+                SET payout_multiplier_override = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (multiplier, now, record_id),
+            )
+
     def mature_unpaid_submissions(self, now: int | None = None) -> list[SubmissionRecord]:
         cutoff = now or int(time.time())
         with self.session() as conn:
@@ -423,6 +438,9 @@ def _record_from_row(row: sqlite3.Row) -> SubmissionRecord:
         created_at=int(row["created_at"]),
         matures_at=int(row["matures_at"]),
         support_score=int(row["support_score"]),
+        payout_multiplier_override=int(row["payout_multiplier_override"])
+        if row["payout_multiplier_override"] is not None
+        else None,
         payout_amount_wei=str(row["payout_amount_wei"]) if row["payout_amount_wei"] is not None else None,
         payout_tx_hash=str(row["payout_tx_hash"]) if row["payout_tx_hash"] is not None else None,
         bundle_cid=str(row["bundle_cid"]) if row["bundle_cid"] is not None else None,
@@ -484,3 +502,5 @@ def _ensure_submission_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE submissions ADD COLUMN index_published_at INTEGER")
     if "flag_alert_sent_at" not in columns:
         conn.execute("ALTER TABLE submissions ADD COLUMN flag_alert_sent_at INTEGER")
+    if "payout_multiplier_override" not in columns:
+        conn.execute("ALTER TABLE submissions ADD COLUMN payout_multiplier_override INTEGER")

@@ -96,6 +96,7 @@ class SubmissionRecord:
     created_at: int
     matures_at: int
     support_score: int
+    payout_multiplier_override: int | None
     payout_amount_wei: str | None
     payout_tx_hash: str | None
     bundle_cid: str | None
