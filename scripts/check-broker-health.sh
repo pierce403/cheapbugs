@@ -106,9 +106,22 @@ if ! curl -fsS --max-time 5 'http://127.0.0.1:8080/api/v1/check' >/dev/null 2>&1
   exit 2
 fi
 
-recent_errors="$(tail -200 "$REPO_DIR/broker.log" 2>/dev/null | grep -E 'Traceback|ERROR|CRITICAL' | tail -5 || true)"
-if [[ -n "$recent_errors" ]]; then
-  log "recent broker errors: ${recent_errors//$'\n'/ | }"
+BROKER_LOG="$REPO_DIR/broker.log"
+BROKER_LOG_OFFSET="$REPO_DIR/.broker/broker-log.offset"
+broker_log_size="$(stat -c%s "$BROKER_LOG" 2>/dev/null || printf '0')"
+last_broker_log_offset="$(cat "$BROKER_LOG_OFFSET" 2>/dev/null || printf '%s' "$broker_log_size")"
+if ! [[ "$last_broker_log_offset" =~ ^[0-9]+$ ]]; then
+  last_broker_log_offset="$broker_log_size"
+elif (( last_broker_log_offset > broker_log_size )); then
+  last_broker_log_offset=0
 fi
+
+if (( broker_log_size > last_broker_log_offset )); then
+  recent_errors="$(dd if="$BROKER_LOG" bs=1 skip="$last_broker_log_offset" count="$((broker_log_size - last_broker_log_offset))" status=none 2>/dev/null | grep -E 'Traceback|ERROR|CRITICAL' | tail -5 || true)"
+  if [[ -n "$recent_errors" ]]; then
+    log "new broker errors: ${recent_errors//$'\n'/ | }"
+  fi
+fi
+printf '%s\n' "$broker_log_size" > "$BROKER_LOG_OFFSET"
 
 log "healthy broker_pid=$(pgrep -f 'python scripts/broker-bot.py run' | head -1) ipfs_pid=$(pgrep -f 'ipfs daemon' | head -1)"

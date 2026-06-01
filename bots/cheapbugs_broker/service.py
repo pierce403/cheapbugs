@@ -804,9 +804,22 @@ class BrokerBot:
             self.logger.warning("Signal is not configured; skipping reward settlement.")
             return 0
         paid = 0
-        decimals = self.token.decimals()
-        base_reward_tokens = self._settlement_base_reward_tokens(decimals)
-        for submission in self.store.mature_unpaid_submissions():
+        submissions = self.store.mature_unpaid_submissions()
+        if not submissions:
+            return 0
+        try:
+            decimals = self.token.decimals()
+            base_reward_tokens = self._settlement_base_reward_tokens(decimals)
+        except Exception as exc:
+            if _is_transient_settlement_error(exc):
+                self.logger.warning(
+                    "Transient settlement setup error; leaving matured payouts retryable: %s",
+                    exc,
+                    exc_info=True,
+                )
+                return 0
+            raise
+        for submission in submissions:
             support_score = self.store.support_score(
                 submission.signal_group_id,
                 submission.signal_message_timestamp,

@@ -477,6 +477,58 @@ class SettlementRewardTest(unittest.TestCase):
             self.assertEqual(bot.alert_unflagged_payouts_once(), 0)
             self.assertEqual(signal.messages, [])
 
+    def test_settlement_skips_reward_preflight_when_no_mature_submissions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=ExplodingToken(RuntimeError("decimals should not be read without mature submissions")),
+                treasury=ExplodingTreasury(RuntimeError("base reward should not be read without mature submissions")),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 0)
+
+    def test_settlement_keeps_transient_reward_preflight_errors_retryable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = BrokerStore(Path(tmp) / "broker.sqlite")
+            store.init()
+            command = SubmissionCommand(
+                reporter_address=WALLET,
+                signal_recipient="+155****4567",
+                bug_type="0day",
+                title="Title",
+                summary="Summary",
+                severity="high",
+                target_interest="critical",
+                body="Details",
+            )
+            record = store.create_submission(
+                command=command,
+                xmtp_conversation_id="conversation",
+                xmtp_message_id="message",
+                signal_group_id="group",
+                signal_message_timestamp=1760000000123,
+                review_window_seconds=1,
+                now=100,
+            )
+            bot = BrokerBot(
+                config=test_config(Path(tmp) / "broker.sqlite"),
+                store=store,
+                signal=FakeSignal(),
+                token=FakeToken(balance=0),
+                treasury=ExplodingTreasury(RuntimeError("Connection aborted by RPC")),
+            )
+
+            self.assertEqual(bot.settle_matured_once(), 0)
+            updated = store.get_submission(record.id)
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, "relayed")
+            self.assertIsNone(updated.error)
+
     def test_settlement_uses_treasury_base_reward_when_no_env_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = BrokerStore(Path(tmp) / "broker.sqlite")
@@ -2346,6 +2398,15 @@ class FakeToken:
         return f"dry-run:transfer:{to_address}:{amount_wei}"
 
 
+class ExplodingToken(FakeToken):
+    def __init__(self, exc: Exception):
+        super().__init__(balance=0)
+        self.exc = exc
+
+    def decimals(self) -> int:
+        raise self.exc
+
+
 @dataclass(frozen=True)
 class FakeSentMessage:
     sent_timestamp: int
@@ -2492,6 +2553,15 @@ class FakeTreasury:
     def detail_key_payment_total(self, report_hash: str, buyer_address: str) -> int:
         self.payment_lookup = (report_hash, buyer_address)
         return self._paid_total
+
+
+class ExplodingTreasury(FakeTreasury):
+    def __init__(self, exc: Exception):
+        super().__init__(base_reward=0)
+        self.exc = exc
+
+    def reward_amount(self, multiplier: int) -> int:
+        raise self.exc
 
 
 class FakeWeb3:
