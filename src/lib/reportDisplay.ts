@@ -26,6 +26,13 @@ export const reportDisplayTarget = (bundle: SubmissionBundle): string => {
 export const reportDisplayTargetKind = (bundle: SubmissionBundle): string =>
   bundle.publicMetadata.targetKind ?? bundle.publicSubmission.targetKind;
 
+const formatLocalUnlockTime = (revealAt: number): string =>
+  new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short"
+  }).format(new Date(revealAt));
+
 export const reportDetailsUnlockText = (bundle: SubmissionBundle): string => {
   if (bundle.publicSubmission.detailsKeyRevealed) {
     return "unlocked";
@@ -53,9 +60,6 @@ export const reportDetailsUnlockText = (bundle: SubmissionBundle): string => {
     return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
   }
 
-  if (hours > 0) {
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  }
-
-  return `${Math.max(1, minutes)}m`;
+  const relative = hours > 0 ? (minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`) : `${Math.max(1, minutes)}m`;
+  return `unlock at ${formatLocalUnlockTime(revealAt)} in ${relative}`;
 };
