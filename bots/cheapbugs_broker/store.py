@@ -374,14 +374,13 @@ class BrokerStore:
                 (support_score, str(payout_amount_wei), tx_hash, now, record_id),
             )
 
-    def mark_failed(self, record_id: str, support_score: int, error: str) -> None:
+    def mark_settlement_error(self, record_id: str, support_score: int, error: str) -> None:
         now = int(time.time())
         with self.session() as conn:
             conn.execute(
                 """
                 UPDATE submissions
-                SET status = 'failed',
-                    support_score = ?,
+                SET support_score = ?,
                     error = ?,
                     updated_at = ?
                 WHERE id = ?

@@ -894,8 +894,11 @@ class BrokerBot:
                         submission.id,
                     )
                     continue
-                self.store.mark_failed(submission.id, support_score, str(exc))
-                self.logger.exception("Failed to pay submission %s", submission.id)
+                self.store.mark_settlement_error(submission.id, support_score, str(exc))
+                self.logger.exception(
+                    "Settlement error for submission %s; leaving payout retryable",
+                    submission.id,
+                )
                 continue
             self.store.mark_paid(submission.id, support_score, amount_wei, tx_hash)
             try:

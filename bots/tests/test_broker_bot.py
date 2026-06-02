@@ -801,7 +801,7 @@ class SettlementRewardTest(unittest.TestCase):
             updated = store.get_submission(record.id)
             self.assertIsNotNone(updated)
             assert updated is not None
-            self.assertEqual(updated.status, "failed")
+            self.assertEqual(updated.status, "relayed")
             self.assertIn("stored submission details_key_commitment", str(updated.error))
             self.assertIn("refusing to submit completePayout", str(updated.error))
 
@@ -846,7 +846,7 @@ class SettlementRewardTest(unittest.TestCase):
             updated = store.get_submission(record.id)
             self.assertIsNotNone(updated)
             assert updated is not None
-            self.assertEqual(updated.status, "failed")
+            self.assertEqual(updated.status, "relayed")
             self.assertIn("onchain CheapBugsBugIndex detailsKeyCommitment", str(updated.error))
             self.assertIn("refusing to submit completePayout", str(updated.error))
 
