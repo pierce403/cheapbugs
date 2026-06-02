@@ -1118,6 +1118,22 @@ class BugIndexPublishTest(unittest.TestCase):
 
         self.assertEqual(checked[2], "0x7ab874Eeef0169ADA0d225E9801A3FfFfa26aAC3")
 
+    def test_report_vote_score_reads_contract_public_weight_mappings(self) -> None:
+        client = BugIndexClient(
+            rpc_url="https://base.example",
+            index_address=WALLET,
+            broker_key="0x" + "1" * 64,
+            chain_id=8453,
+        )
+        contract = FakeBugIndexContract()
+        contract.up_vote_weight = 7
+        contract.down_vote_weight = 2
+        client._contract = contract
+
+        self.assertEqual(client.report_vote_score("0x" + "7" * 64), 5)
+        self.assertEqual(contract.functions.up_vote_weight_report_hash, "0x" + "7" * 64)
+        self.assertEqual(contract.functions.down_vote_weight_report_hash, "0x" + "7" * 64)
+
     def test_publish_bug_checksums_reporter_before_gas_estimation(self) -> None:
         reporter = "0x7ab874eeef0169ada0d225e9801a3ffffa26aac3"
         bug_bundle_payload = fake_bug_bundle(
@@ -2619,18 +2635,30 @@ class FakeBugIndexContract:
     def __init__(self, gas_error: Exception | None = None) -> None:
         self.gas_error = gas_error
         self.publish_function: FakePublishFunction | None = None
+        self.up_vote_weight = 0
+        self.down_vote_weight = 0
         self.functions = FakeBugIndexFunctions(self)
 
 
 class FakeBugIndexFunctions:
     def __init__(self, contract: FakeBugIndexContract) -> None:
         self.contract = contract
+        self.up_vote_weight_report_hash: str | None = None
+        self.down_vote_weight_report_hash: str | None = None
 
     def exists(self, report_hash: str) -> object:
         return FakeCall(False)
 
     def brokers(self, broker_address: str) -> object:
         return FakeCall(True)
+
+    def upVoteWeight(self, report_hash: str) -> object:
+        self.up_vote_weight_report_hash = report_hash
+        return FakeCall(self.contract.up_vote_weight)
+
+    def downVoteWeight(self, report_hash: str) -> object:
+        self.down_vote_weight_report_hash = report_hash
+        return FakeCall(self.contract.down_vote_weight)
 
     def publishBug(self, bug_input: tuple[object, ...], nonce: int, deadline: int, signature: str) -> object:
         self.contract.publish_function = FakePublishFunction(
